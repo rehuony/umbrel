@@ -1,13 +1,17 @@
+import {Plus} from 'lucide-react'
 import {useLayoutEffect, useRef} from 'react'
+import {useTranslation} from 'react-i18next'
 import {TbLoader} from 'react-icons/tb'
 import {useNavigate} from 'react-router-dom'
 
+import {PillButton} from '@/components/ui/edge-controls'
 import {AlbumCard} from '@/features/photos/components/albums/album-card'
 import {FadedScroller} from '@/features/photos/components/listing/faded-scroller'
-import {ListingSurface} from '@/features/photos/components/listing/surface'
+import {GhostGrid, ListingSurface} from '@/features/photos/components/listing/surface'
 import {BASE_ROUTE_PATH} from '@/features/photos/constants'
 import {useAlbums} from '@/features/photos/hooks/use-library'
 import {DockSpacer} from '@/modules/desktop/dock'
+import {useLinkToDialog} from '@/utils/dialog'
 
 // The listing unmounts whenever an album is opened (the routes swap the
 // whole view), so its scroll position is kept here for the session and put
@@ -22,13 +26,15 @@ const scrollPositions = new Map<string, number>()
 // lived here too (kind: 'people' | 'locations'); restore it from git when
 // face/geo clustering ships.
 export function CollectionsListing({kind}: {kind: 'albums'}) {
+	const {t} = useTranslation()
 	const navigate = useNavigate()
+	const linkToDialog = useLinkToDialog()
 	const albums = useAlbums({enabled: kind === 'albums'})
-	// The scroller only exists once the albums have loaded, so the restore
-	// waits for that render; the card grid's height is pure CSS (aspect-ratio
+	// The scroller only exists when there are albums, so the restore waits
+	// for that render; the card grid's height is pure CSS (aspect-ratio
 	// tiles), already laid out when this runs
 	const scrollerRef = useRef<HTMLDivElement>(null)
-	const loaded = !albums.isLoading
+	const showGrid = !albums.isLoading && (albums.data?.length ?? 0) > 0
 	useLayoutEffect(() => {
 		const el = scrollerRef.current
 		if (!el) return
@@ -36,14 +42,34 @@ export function CollectionsListing({kind}: {kind: 'albums'}) {
 		return () => {
 			scrollPositions.set(kind, el.scrollTop)
 		}
-	}, [kind, loaded])
+	}, [kind, showGrid])
+	if (albums.error && !albums.data) throw albums.error
 
 	return (
 		<ListingSurface>
 			{(frame) =>
 				albums.isLoading ? (
-					<div className='flex h-full items-center justify-center' style={{paddingTop: frame.inset}}>
+					<div className='relative isolate flex h-full items-center justify-center' style={{paddingTop: frame.inset}}>
+						<GhostGrid />
 						<TbLoader className='size-6 animate-spin opacity-50 shadow-xs' />
+					</div>
+				) : albums.data?.length === 0 ? (
+					<div
+						className='relative isolate flex h-full flex-col items-center justify-center gap-1 p-6 text-center'
+						style={{paddingTop: frame.inset}}
+					>
+						<GhostGrid />
+						<p className='text-15 font-medium text-white/80'>{t('photos-actions.album-count-none')}</p>
+						<p className='max-w-sm text-13 text-white/50'>{t('photos-album.create-description')}</p>
+						<div className='mt-3 flex items-center gap-2'>
+							<PillButton
+								icon={Plus}
+								className='backdrop-blur-sm'
+								onClick={() => navigate(linkToDialog('photos-create-album'))}
+							>
+								{t('photos-actions.create-album')}
+							</PillButton>
+						</div>
 					</div>
 				) : (
 					<FadedScroller ref={scrollerRef} frame={frame}>

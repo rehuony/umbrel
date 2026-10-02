@@ -2,6 +2,18 @@
 
 Applications use the original project's app-store configuration and runtime. Official and community repositories are supported. The repository does not contain an `examples/` directory.
 
+The official [Umbrel App Store repository](https://github.com/getumbrel/umbrel-apps) is enabled by default on new installations. Repository management shows its address, a copy action, and the number of available apps alongside added community stores. The configured default repository cannot be removed through the panel. Adding a repository makes its catalog available; it does not install its applications.
+
+## Local discovery content
+
+Discover uses project-owned editorial content in `packages/frontend/src/features/app-store/data/storefront.json`. Its banners and category artwork are bundled in `packages/frontend/public/assets/app-store/storefront/`. The dashboard does not request the upstream storefront API at runtime. The initial content and artwork were imported from the [Umbrel storefront](https://apps.umbrel.com/api/v3/umbrelos/app-store/storefront) on October 2, 2026; subsequent changes are reviewed and shipped with this project. Original artwork came from the storefront's `/images/redesign/banners/` and `/images/redesign/feature-cards/` paths. Upstream names and artwork remain attributed to their respective owners.
+
+Edit the JSON to change section order, featured application IDs, text, and category picks. Artwork paths must point to local WebP files in the bundled directory. Storefront tests validate the configuration and referenced assets. Recommendations only resolve against the current local catalog: missing apps are omitted, duplicate entries are removed, and empty sections disappear. A recommendation never overrides an installable version. The bundled application dates are a snapshot, not live upstream rankings or statistics; update dates only apply when the recorded version matches the local manifest. The complete catalog remains available even when no recommendations match.
+
+Application repositories still supply app manifests, icons, and screenshots. Those images retain their repository-defined URLs; they are separate from the locally bundled discovery banners. Optional per-app release history remains separate from Discover, with current manifest release notes as its fallback.
+
+The community-store warning is shown on the first opening in each browser profile for this system. Later openings omit it; clearing browser storage resets this preference.
+
 ## Configuration structure
 
 Each application has a directory containing at least two files:

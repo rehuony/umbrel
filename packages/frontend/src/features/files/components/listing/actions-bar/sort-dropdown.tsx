@@ -14,12 +14,11 @@ export function SortDropdown() {
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant='default' size='default'>
+				<Button variant='default' size='default' aria-label={t('files-view.sort-by')}>
 					<ArrowUpDown className='h-3 w-3' />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align='end' className='w-24'>
-				<span className='block px-2 pb-2 text-13 text-white/40'>Sort by</span>
 				{SORT_BY_OPTIONS.map((option) => (
 					<DropdownMenuItem
 						key={option.sortBy}

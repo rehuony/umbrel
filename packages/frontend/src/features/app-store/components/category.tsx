@@ -48,16 +48,14 @@ function CategoryContent() {
 	const isSmallMobile = useIsSmallMobile()
 
 	if (!categoryId) return null
-	// Category data is local truth; optional editorial metadata can enhance it
-	// later but must never hold this route behind a network request.
+	// The local catalog determines which apps can be displayed.
 	if (isLoading) return null
 
 	// 'all' is the pseudo-category for the complete catalog
 	const isAll = categoryId === 'all'
 	const categoryApps = isAll ? (apps ?? []) : (appsGroupedByCategory?.[categoryId] ?? [])
 
-	// Empty named categories return to Discover. The complete catalog must stay
-	// here when empty because offline Discover redirects back to this page.
+	// Empty named categories return to Discover; the complete catalog may be empty.
 	if (!isAll && categoryApps.length === 0) return <Navigate to={DISCOVER_PATH} replace />
 
 	const sortedApps = sortApps(categoryApps, sort, storefront.dates)

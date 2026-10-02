@@ -131,18 +131,6 @@ export function ListViewFileItem({
 				</div>
 			</div>
 
-			<div className={cn(`flex-[2] ${tableStyles} text-white/60`, fadedContent && 'opacity-50')}>
-				{item.isDisconnected ? (
-					t('files-network-storage.disconnected')
-				) : isUploading ? (
-					<Progress value={uploadingProgress} />
-				) : item.modified ? (
-					formatFilesystemDate(item.modified, languageCode)
-				) : (
-					'—'
-				)}
-			</div>
-
 			<div className={cn(`flex-1 ${tableStyles} text-white/60`, fadedContent && 'opacity-50')}>
 				{isUploading
 					? `${formatFilesystemSize(
@@ -150,11 +138,6 @@ export function ListViewFileItem({
 						)} / ${formatFilesystemSize(item.size ?? null)}`
 					: formatFilesystemSize(item.size ?? null)}
 			</div>
-
-			{/* TODO: Add this back in when we have a file system index in umbreld. The name header was previously flex-[3] */}
-			{/* <div className={`flex-[2] lg:hidden xl:flex ${tableStyles} text-white/60`}>
-				{isUploading ? `${formatFilesystemSize(item.speed ?? 0)}/s` : formatFilesystemDate(item.created, languageCode)}
-			</div> */}
 
 			<div className={cn(`flex-[2] ${tableStyles} text-white/60`, fadedContent && 'opacity-50')}>
 				{isUploading
@@ -168,6 +151,18 @@ export function ListViewFileItem({
 							: isDirectoryAnUmbrelBackup(item.name)
 								? t('files-type.umbrel-backup')
 								: translatedFileType}
+			</div>
+
+			<div className={cn(`flex-[2] ${tableStyles} text-white/60`, fadedContent && 'opacity-50')}>
+				{item.isDisconnected ? (
+					t('files-network-storage.disconnected')
+				) : isUploading ? (
+					<Progress value={uploadingProgress} />
+				) : item.modified ? (
+					formatFilesystemDate(item.modified, languageCode)
+				) : (
+					'—'
+				)}
 			</div>
 		</div>
 	)

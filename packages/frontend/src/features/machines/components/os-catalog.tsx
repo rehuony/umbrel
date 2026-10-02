@@ -135,7 +135,7 @@ export default function OsCatalog({intro: introRequested = false}: {intro?: bool
 	}
 
 	return (
-		<div className='flex flex-col gap-8 px-4 py-6 md:p-12'>
+		<div className='flex flex-col gap-8 py-6'>
 			{isLoading ? (
 				<>
 					{/* Placeholder groups mirror the amd64 catalog — the fullest — with

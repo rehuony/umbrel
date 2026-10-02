@@ -19,20 +19,9 @@ import {formatNumberI18n} from '@/utils/number'
 
 // An album as a cover with its name set in the album's own face and tinted
 // with the cover's own colour, and when its photos were taken beneath. Sizes
-// itself from its container (the grid and the sidebar share it), so the
-// caller only picks an aspect ratio. The caption appears together with the
-// cover, once its font and colour are settled, so nothing swaps in view.
-export function AlbumCard({
-	album,
-	className,
-	isActive,
-	onClick,
-}: {
-	album: Album
-	className?: string
-	isActive?: boolean
-	onClick: () => void
-}) {
+// itself from its grid container; the caller picks the aspect ratio. The
+// caption appears with the cover once its font and colour are settled.
+export function AlbumCard({album, className, onClick}: {album: Album; className?: string; onClick: () => void}) {
 	const {t, i18n} = useTranslation()
 	const navigate = useNavigate()
 	const {pathname} = useLocation()
@@ -72,7 +61,6 @@ export function AlbumCard({
 				type='button'
 				onClick={onClick}
 				aria-label={[album.name, dates, count].filter(Boolean).join(', ')}
-				aria-current={isActive ? 'page' : undefined}
 				className={cn(
 					// Clipped with clip-path on the card's own layer, not overflow-hidden:
 					// an antialiased overflow clip is applied to the cover and the scrim
@@ -82,7 +70,6 @@ export function AlbumCard({
 					'focus-visible:ring-2 focus-visible:ring-white/60',
 					// Lifts a touch on hover, gives under the pointer while pressed
 					'motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out motion-safe:group-hover:scale-[1.02] motion-safe:active:scale-[0.99] motion-safe:active:duration-100',
-					isActive && 'ring-white/40',
 					className,
 				)}
 			>

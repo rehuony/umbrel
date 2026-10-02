@@ -1,14 +1,8 @@
-// Schema and resolution for the optional apps.umbrel.com storefront feed.
-//
-// The feed can only ever decorate the store: every app id is resolved against
-// the local registry and silently dropped when unknown, unknown section types
-// are ignored for forwards compatibility, and any malformed payload is treated
-// exactly like having no remote data at all. No remote response can create an
-// installable app, override a local version, or block a local route.
+// Project-owned editorial content, resolved against the installed repository catalog.
+// Recommendations cannot create apps or override their installable versions.
 
 import {z} from 'zod'
 
-import {APP_STORE_REMOTE_API_BASE} from '@/features/app-store/constants'
 import {buildAppDates, type AppDates} from '@/features/app-store/data/catalog'
 import type {RegistryApp} from '@/trpc/trpc'
 
@@ -18,8 +12,7 @@ import type {RegistryApp} from '@/trpc/trpc'
 
 const boundedString = (max: number) => z.string().trim().min(1).max(max)
 
-// Comfortably above the production catalog/editorial layout while keeping a
-// malformed feed from multiplying work during validation and reconciliation.
+// Bound editorial configuration size before reconciling it with the catalog.
 export const STOREFRONT_LIMITS = {
 	sections: 32,
 	sectionAppIds: 512,
@@ -37,21 +30,8 @@ const appIdSchema = z
 
 const appIdsSchema = z.array(appIdSchema).max(STOREFRONT_LIMITS.sectionAppIds)
 
-// Artwork must come from the same origin as the API itself (apps.umbrel.com in
-// production) so a bad feed can't turn devices into requesters of arbitrary
-// third-party URLs.
-const artworkUrlSchema = z
-	.string()
-	.max(1024)
-	.refine((value) => {
-		try {
-			const url = new URL(value)
-			const apiOrigin = new URL(APP_STORE_REMOTE_API_BASE).origin
-			return url.origin === apiOrigin && (url.protocol === 'https:' || apiOrigin.startsWith('http://localhost'))
-		} catch {
-			return false
-		}
-	}, 'artwork must be hosted alongside the storefront API')
+// Banners ship with the dashboard and must never point to a remote feed.
+const artworkUrlSchema = z.string().regex(/^\/assets\/app-store\/storefront\/[a-z0-9-]+\.webp$/)
 
 // umbrelOS is dark-only, so artwork is a single image
 const artworkSchema = z.object({
@@ -131,8 +111,8 @@ export type Storefront = {
 }
 
 /**
- * Parses the raw `data` payload of the storefront endpoint. Throws when the
- * envelope is malformed (the caller treats that as "no remote data");
+ * Validates the bundled storefront configuration. Throws when the
+ * envelope is malformed;
  * individual sections that are malformed or of an unknown future type are
  * dropped silently.
  */

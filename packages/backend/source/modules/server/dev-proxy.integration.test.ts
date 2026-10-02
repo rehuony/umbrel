@@ -31,7 +31,14 @@ afterAll(async () => {
 
 test('development UI and app-auth proxies leave authenticated tRPC sockets to the server', async () => {
 	const origin = `http://127.0.0.1:${host.instance.server.port}`
-	expect(await (await fetch(origin)).text()).toBe('development UI')
+	const document = await fetch(origin)
+	expect(await document.text()).toBe('development UI')
+	expect(
+		document.headers
+			.get('content-security-policy')
+			?.split(';')
+			.find((rule) => rule.startsWith('connect-src')),
+	).toBe("connect-src 'self'")
 	await fetch(`${origin}/app-auth/`)
 	const ticket = await host.client.user.createWebSocketTicket.mutate({target: 'trpc'})
 	const socket = new WebSocket(`${origin.replace('http:', 'ws:')}/trpc?ticket=${ticket}`)

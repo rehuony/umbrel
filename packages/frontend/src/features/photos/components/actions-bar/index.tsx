@@ -303,17 +303,33 @@ function SelectionCount({count}: {count: number}) {
 	)
 }
 
-// "7 albums" — nothing until the list is known. (People and Locations counts
-// — photos-actions.people-count / location-count — return with those pages.)
+// Match the timeline's view line; keep the count absent until the list is known.
 function CollectionCount({kind}: {kind: CollectionSection}) {
 	const {t, i18n} = useTranslation()
 	const albums = useAlbums({enabled: kind === 'albums'})
 	const count = albums.data?.length
-	if (count === undefined) return null
-	const formattedCount = formatNumberI18n({n: count, showDecimals: false, locale: i18n.language})
-	const label =
-		count === 0 ? t('photos-actions.album-count-none') : t('photos-actions.album-count', {count, formattedCount})
-	return <h2 className={countClass}>{label}</h2>
+	const formattedCount =
+		count === undefined ? '' : formatNumberI18n({n: count, showDecimals: false, locale: i18n.language})
+	return (
+		<p
+			className={cn(
+				'flex min-w-0 items-center gap-2 self-end text-12 leading-tight -tracking-2 text-white/50',
+				titleShadowClass,
+			)}
+		>
+			<span className='truncate'>{t('photos-sidebar.albums')}</span>
+			{count !== undefined && (
+				<>
+					<span aria-hidden className='shrink-0 text-white/25'>
+						/
+					</span>
+					<span className='shrink-0'>
+						<CountText text={t('photos-actions.item-count', {count, formattedCount})} number={formattedCount} />
+					</span>
+				</>
+			)}
+		</p>
+	)
 }
 
 // "5 sources"

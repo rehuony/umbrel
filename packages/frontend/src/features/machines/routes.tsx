@@ -5,41 +5,34 @@ import {ErrorBoundaryCardFallback} from '@/components/ui/error-boundary-card-fal
 import {ErrorBoundaryPageFallback} from '@/components/ui/error-boundary-page-fallback'
 import {EnsureLoggedIn} from '@/modules/auth/ensure-logged-in'
 
-const MachinesLayout = React.lazy(() => import('@/features/machines'))
-const MachinesIndex = React.lazy(() => import('@/features/machines/components/machines-index'))
-const OsCatalog = React.lazy(() => import('@/features/machines/components/os-catalog'))
-const CreateMachine = React.lazy(() => import('@/features/machines/components/create-machine'))
-const MachineWindow = React.lazy(() => import('@/features/machines/components/machine-window'))
-const MachineSettings = React.lazy(() => import('@/features/machines/components/machine-settings'))
 const FullscreenConsole = React.lazy(() => import('@/features/machines/components/fullscreen-console'))
 
-// Mounted inside the desktop layout (outside SheetLayout) so the Machines
-// feature renders as an immersive overlay with the dock still visible
+// Resolve page chunks before entering the shared window, including direct console links.
 export const machinesRoutes: RouteObject[] = [
 	{
 		path: 'machines',
-		element: <MachinesLayout />,
+		lazy: async () => ({Component: (await import('@/features/machines')).default}),
 		ErrorBoundary: ErrorBoundaryCardFallback,
 		children: [
 			{
 				index: true,
-				element: <MachinesIndex />,
+				lazy: async () => ({Component: (await import('@/features/machines/components/machines-index')).default}),
 			},
 			{
 				path: 'new',
-				element: <OsCatalog />,
+				lazy: async () => ({Component: (await import('@/features/machines/components/os-catalog')).default}),
 			},
 			{
 				path: 'new/configure',
-				element: <CreateMachine />,
+				lazy: async () => ({Component: (await import('@/features/machines/components/create-machine')).default}),
 			},
 			{
 				path: ':machineId',
-				element: <MachineWindow />,
+				lazy: async () => ({Component: (await import('@/features/machines/components/machine-window')).default}),
 			},
 			{
 				path: ':machineId/settings',
-				element: <MachineSettings />,
+				lazy: async () => ({Component: (await import('@/features/machines/components/machine-settings')).default}),
 			},
 		],
 	},

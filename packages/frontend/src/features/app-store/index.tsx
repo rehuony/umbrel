@@ -27,8 +27,7 @@ export default function AppStoreLayout() {
 				<StoreHeader search={search} isOwner={isOwner} />
 				<div className='flex flex-col gap-4 md:gap-5'>
 					{/* Maintenance before discovery: updates lead the two landing pages,
-					    Discover and All apps (Discover's stand-in when the feed is
-					    unavailable) — category pages get straight to their grid; the
+					    Discover and All apps — category pages get straight to their grid; the
 					    header's updates chip keeps updates reachable everywhere */}
 					{!search.deferredQuery && [DISCOVER_PATH, categoryPath('all')].includes(location.pathname) && (
 						<UpdatesShelf />

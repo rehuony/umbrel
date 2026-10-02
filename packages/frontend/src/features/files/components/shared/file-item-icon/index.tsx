@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from 'react'
 import {useTranslation} from 'react-i18next'
-import {BsTrash2} from 'react-icons/bs'
 import {IoPlay} from 'react-icons/io5'
 import {RiAlertFill} from 'react-icons/ri'
 
@@ -15,6 +14,7 @@ import nasIconInactive from '@/features/files/assets/nas-icon-inactive.png'
 import networkIcon from '@/features/files/assets/network-icon.png'
 import {RecentsIcon} from '@/features/files/assets/recents-icon'
 import {SharedFolderBadge} from '@/features/files/assets/shared-folder-badge'
+import {TrashIcon} from '@/features/files/assets/trash-icon'
 import umbrelDeviceActive from '@/features/files/assets/umbrel-device-icon-active.png'
 import umbrelDeviceInactive from '@/features/files/assets/umbrel-device-icon-inactive.png'
 import {AnimatedFolderIcon} from '@/features/files/components/shared/file-item-icon/animated-folder-icon'
@@ -279,7 +279,7 @@ const FolderIcon = ({
 		return <HomeIcon className={className} />
 	}
 	if (path === TRASH_PATH || path === memberTrash) {
-		return <BsTrash2 className={className} />
+		return <TrashIcon className={className} />
 	}
 	if (path === RECENTS_PATH) {
 		return <RecentsIcon className={className} />

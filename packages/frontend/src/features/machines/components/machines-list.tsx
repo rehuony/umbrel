@@ -25,7 +25,7 @@ export default function MachinesList({machines}: {machines: Machine[]}) {
 	const running = machines.filter((machine) => machine.state === 'running').length
 
 	return (
-		<div className='flex flex-col gap-3 p-6 md:p-12'>
+		<div className='flex flex-col gap-3 py-6'>
 			<div className='flex items-baseline justify-between'>
 				<h2 className='text-17 font-semibold -tracking-2 text-white/85'>{t('machines.all-machines')}</h2>
 				<span className='text-13 -tracking-2 text-white/35 tabular-nums'>

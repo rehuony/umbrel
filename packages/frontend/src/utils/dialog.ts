@@ -7,7 +7,7 @@ import {sleep} from '@/utils/misc'
 
 export const EXIT_DURATION_MS = 100
 
-export type GlobalDialogKey = 'logout' | 'live-usage' | 'add-shortcut' | 'app-share-users' | 'troubleshoot' | 'terminal'
+export type GlobalDialogKey = 'logout' | 'add-shortcut' | 'app-share-users' | 'troubleshoot' | 'terminal'
 export type AppStoreDialogKey = 'updates' | 'add-community-store' | 'app-launch' | 'app-settings' | 'import-compose'
 export type FilesDialogKey =
 	| 'files-share-info'

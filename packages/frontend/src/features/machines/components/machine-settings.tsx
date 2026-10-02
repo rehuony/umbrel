@@ -201,7 +201,7 @@ export default function MachineSettings() {
 			initial={{opacity: 0}}
 			animate={{opacity: 1}}
 			transition={{duration: 0.2, ease: 'easeOut'}}
-			className='flex flex-col gap-8 px-4 py-6 md:p-12'
+			className='flex flex-col gap-8 py-6'
 		>
 			<div className='flex flex-col gap-10 md:flex-row md:gap-10 lg:gap-14'>
 				{/* Identity: the machine is the hero, its name editable in place */}

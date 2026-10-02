@@ -1,4 +1,3 @@
-import {DialogPortal} from '@radix-ui/react-dialog'
 import {useMutationState} from '@tanstack/react-query'
 import {getMutationKey} from '@trpc/react-query'
 import {MoreHorizontal} from 'lucide-react'
@@ -13,13 +12,8 @@ import {AppIcon} from '@/components/app-icon'
 import {DarkTooltip} from '@/components/ui/dark-tooltip'
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@/components/ui/dropdown-menu'
 import {ErrorBoundaryCardFallback} from '@/components/ui/error-boundary-card-fallback'
-import {
-	ImmersiveDialog,
-	ImmersiveDialogContent,
-	ImmersiveDialogOverlay,
-	immersiveDialogTitleClass,
-} from '@/components/ui/immersive-dialog'
 import {SegmentedControl} from '@/components/ui/segmented-control'
+import {SheetHeader, SheetTitle} from '@/components/ui/sheet'
 import {LOADING_DASH} from '@/constants'
 import {MachineAppIcon} from '@/features/machines/components/machine-app-icon'
 import {useUninstallMachine} from '@/features/machines/components/machines-list'
@@ -37,29 +31,22 @@ import {cn} from '@/lib/utils'
 import {useAppUninstall} from '@/modules/apps/use-app-uninstall'
 import {AppT, systemAppsKeyed, useApps} from '@/providers/apps'
 import {trpcReact, type RouterOutput} from '@/trpc/trpc'
-import {useDialogOpenProps} from '@/utils/dialog'
 import {cleanGpuName, gpuVendorShortName} from '@/utils/gpu'
 import {formatNumberI18n} from '@/utils/number'
 import {maybePrettyBytes} from '@/utils/pretty-bytes'
 import {tw} from '@/utils/tw'
 
-export default function LiveUsageDialog() {
+export default function LiveUsage() {
 	const {t} = useTranslation()
-	const title = t('live-usage')
-	const dialogProps = useDialogOpenProps('live-usage')
-
 	return (
-		<ImmersiveDialog {...dialogProps}>
-			<DialogPortal>
-				<ImmersiveDialogOverlay />
-				<ImmersiveDialogContent size='md' showScroll>
-					<h1 className={immersiveDialogTitleClass}>{title}</h1>
-					<ErrorBoundary FallbackComponent={ErrorBoundaryCardFallback}>
-						<LiveUsageContent />
-					</ErrorBoundary>
-				</ImmersiveDialogContent>
-			</DialogPortal>
-		</ImmersiveDialog>
+		<>
+			<SheetHeader>
+				<SheetTitle>{t('live-usage')}</SheetTitle>
+			</SheetHeader>
+			<ErrorBoundary FallbackComponent={ErrorBoundaryCardFallback}>
+				<LiveUsageContent />
+			</ErrorBoundary>
+		</>
 	)
 }
 
@@ -134,13 +121,11 @@ function LiveUsageContent() {
 	const {search} = useLocation()
 	const navigate = useNavigate()
 	const queryParams = new URLSearchParams(search)
-	// Prefixed with the dialog key so useDialogOpenProps sweeps it away when
-	// the dialog closes, like every other dialog-owned param
-	const tabParam = queryParams.get('live-usage-tab')
+	const tabParam = queryParams.get('tab')
 	const requestedTab: SelectedTab = SELECTED_TABS.includes(tabParam as SelectedTab) ? (tabParam as SelectedTab) : 'cpu'
 
 	const setSelectedTab = (tab: SelectedTab) => {
-		queryParams.set('live-usage-tab', tab)
+		queryParams.set('tab', tab)
 		navigate({search: queryParams.toString()})
 	}
 
@@ -669,7 +654,7 @@ type BarSegment = {id: string; label: string; color: string; start: number; widt
  * extractable, otherwise a palette color assigned by first appearance.
  * Machines use the palette because their icon is a composed React element.
  * Every item keeps one color in every bar and list for the lifetime of the
- * dialog.
+ * page.
  */
 function useUsageColors(items: UsageListItem[]) {
 	const resolveItem = useResolveUsageItem()

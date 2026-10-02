@@ -19,8 +19,8 @@ const MachineAgentDialog = lazy(() =>
 	import('./agent-access/machine-agent-dialog').then((module) => ({default: module.MachineAgentDialog})),
 )
 
-// Floating control rail next to the machine screen (power/restart/fullscreen/pin/menu/close)
-export function MachineRail({machine, onClose}: {machine: Machine; onClose?: () => void}) {
+// Floating control rail next to the machine screen (power/restart/fullscreen/pin/menu)
+export function MachineRail({machine}: {machine: Machine}) {
 	const {start, stop, restart, retryInstall, setPinned} = useMachineActions()
 	const {muted, setMuted} = useMachineAudioPreference(machine.id)
 	const cancelInstall = useUninstallMachine(machine)
@@ -161,13 +161,6 @@ export function MachineRail({machine, onClose}: {machine: Machine; onClose?: () 
 				</DarkTooltip>
 			)}
 			<MachineMenu machine={machine} buttonClassName={machineRailButtonClass} tooltipSide='left' />
-			{onClose && (
-				<DarkTooltip label={t('close')} side='left'>
-					<button className={cn(machineRailButtonClass, 'hidden md:flex')} onClick={onClose} aria-label={t('close')}>
-						<X className='size-5' />
-					</button>
-				</DarkTooltip>
-			)}
 		</div>
 	)
 }

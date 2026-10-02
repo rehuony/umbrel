@@ -25,39 +25,43 @@ export function WidgetSelector({open, onOpenChange}: {open: boolean; onOpenChang
 
 	return (
 		<>
-			{open && (
-				<div
-					className='pointer-events-none absolute inset-x-0 top-0 z-50 flex flex-col items-center overflow-x-clip'
-					inert
-				>
+			<AnimatePresence>
+				{open && (
 					<motion.div
-						initial={reduceMotion ? false : {opacity: 0, y: 40}}
+						className='pointer-events-none absolute inset-x-0 top-0 z-50 flex flex-col items-center overflow-x-clip'
+						inert
+						initial={reduceMotion ? false : {opacity: 0, y: 20}}
 						animate={{opacity: 1, y: 0}}
+						exit={{opacity: 0, y: reduceMotion ? 0 : -10, transition: {duration: reduceMotion ? 0 : 0.1}}}
 						transition={{duration: reduceMotion ? 0 : 0.2, ease: 'easeOut'}}
-						className={cn('flex flex-col items-center justify-center gap-5', selectedTooMany && 'animate-shake')}
-						style={{height: selectedH}}
 					>
-						{/* The three-widget limit keeps the preview on one row without
+						<div
+							className={cn('flex flex-col items-center justify-center gap-5', selectedTooMany && 'animate-shake')}
+							style={{height: selectedH}}
+						>
+							{/* The three-widget limit keeps the preview on one row without
 						    carousel measurement or animation-frame polling. */}
-						<div className='flex h-[var(--widget-h,150px)] w-screen max-w-[1040px] items-center justify-center gap-[var(--app-x-gap,30px)]'>
-							<AnimatePresence>
-								{selected.map((widget) => (
-									<motion.div
-										key={widget.id}
-										layout={reduceMotion ? false : 'position'}
-										initial={reduceMotion ? false : {opacity: 1, y: -20}}
-										animate={{opacity: 1, y: 0}}
-										exit={{opacity: 0, y: reduceMotion ? 0 : 20}}
-										transition={reduceMotion ? {duration: 0} : {type: 'spring', stiffness: 500, damping: 30}}
-									>
-										<Widget appId={widget.app.id} config={widget} />
-									</motion.div>
-								))}
-							</AnimatePresence>
+							<div className='flex h-[var(--widget-h,150px)] w-screen max-w-[1040px] items-center justify-center gap-[var(--app-x-gap,30px)]'>
+								{/* The row enters once; only subsequent additions bounce. */}
+								<AnimatePresence initial={false}>
+									{selected.map((widget) => (
+										<motion.div
+											key={widget.id}
+											layout={reduceMotion ? false : 'position'}
+											initial={reduceMotion ? false : {opacity: 1, y: -20}}
+											animate={{opacity: 1, y: 0}}
+											exit={{opacity: 0, y: reduceMotion ? 0 : 20}}
+											transition={reduceMotion ? {duration: 0} : {type: 'spring', stiffness: 500, damping: 30}}
+										>
+											<Widget appId={widget.app.id} config={widget} />
+										</motion.div>
+									))}
+								</AnimatePresence>
+							</div>
 						</div>
 					</motion.div>
-				</div>
-			)}
+				)}
+			</AnimatePresence>
 			<WidgetSheet open={open} onOpenChange={onOpenChange} selectedCssHeight={selectedH}>
 				<div className='flex flex-col items-start gap-5 md:gap-8' aria-busy={isSaving}>
 					{availableWidgets.map(({appId, icon, name, widgets}) => (
@@ -98,6 +102,7 @@ function WidgetSheet({
 			<Sheet open={open} onOpenChange={onOpenChange} modal={false}>
 				<SheetContent
 					className='mx-auto max-w-[1040px] transition-[height] motion-reduce:transition-none'
+					aria-describedby={undefined}
 					onInteractOutside={(e) => e.preventDefault()}
 					style={{
 						height: `calc(100dvh - ${selectedCssHeight})`,
@@ -106,12 +111,7 @@ function WidgetSheet({
 					closeButton={<DialogCloseButton className='absolute top-3 right-3 z-[60] sm:top-5 sm:right-5' />}
 				>
 					<ScrollArea className='umbrel-window-surface-top h-full'>
-						<div
-							className={cn(
-								'flex h-full flex-col items-start gap-5 px-4 pt-6 opacity-0 md:gap-8 md:px-[80px] md:pt-12',
-								'animate-in opacity-100 duration-100 fade-in',
-							)}
-						>
+						<div className='flex h-full flex-col items-start gap-5 px-4 pt-6 md:gap-8 md:px-[80px] md:pt-12'>
 							<SheetHeader>
 								<SheetTitle>{t('widgets.edit.select-up-to-3-widgets')}</SheetTitle>
 							</SheetHeader>

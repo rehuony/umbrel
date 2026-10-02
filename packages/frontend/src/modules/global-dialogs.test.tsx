@@ -16,7 +16,7 @@ vi.mock('@/routes/settings/troubleshoot', () => {
 	fixtures.loaded.push('troubleshoot')
 	return {default: () => <div data-dialog='troubleshoot' />}
 })
-vi.mock('@/routes/live-usage', () => ({default: () => <div data-dialog='live-usage' />}))
+vi.mock('@/modules/desktop/logout-dialog', () => ({default: () => <div data-dialog='logout' />}))
 vi.mock('@/routes/settings/terminal', () => {
 	fixtures.loaded.push('terminal')
 	return {default: () => <div data-dialog='terminal' />}
@@ -73,6 +73,6 @@ describe('GlobalDialogs', () => {
 
 		expect(await renderAt('/?dialog=terminal')).toEqual([])
 		expect(await renderAt('/?dialog=troubleshoot&app=bitcoin')).toEqual([])
-		expect(await renderAt('/?dialog=live-usage')).toEqual(['live-usage'])
+		expect(await renderAt('/?dialog=logout')).toEqual(['logout'])
 	})
 })

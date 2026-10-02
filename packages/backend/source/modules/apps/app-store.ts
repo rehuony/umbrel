@@ -196,6 +196,7 @@ export default class AppStore {
 			.filter(({url}) => url !== '')
 			.map(({url, meta}) => ({
 				url,
+				isDefault: url === this.defaultAppStoreRepo,
 				meta: {id: meta.id, name: meta.name},
 			}))
 	}

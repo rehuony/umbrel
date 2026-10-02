@@ -24,16 +24,28 @@ export interface SidebarItemProps {
 	isActive: boolean
 	onClick: () => void
 	disabled?: boolean
+	disableDrop?: boolean
+	navigateToPath?: boolean
 	// Replaces the default file-type icon (e.g. the owner's avatar on a member's shared home)
 	icon?: React.ReactNode
 	machine?: Machine | null
 }
 
-export function SidebarItem({item, isActive, onClick, disabled = false, icon, machine}: SidebarItemProps) {
+export function SidebarItem({
+	item,
+	isActive,
+	onClick,
+	disabled = false,
+	disableDrop = false,
+	navigateToPath = true,
+	icon,
+	machine,
+}: SidebarItemProps) {
 	return (
 		<Droppable
 			id={`sidebar-${item.path}`}
 			path={item.path}
+			navigateToPath={navigateToPath}
 			className={cn(
 				'flex w-full rounded-lg border border-transparent from-white/[0.04] to-white/[0.08] text-12',
 				disabled ? 'cursor-default opacity-50' : 'hover:bg-linear-to-b',
@@ -45,7 +57,7 @@ export function SidebarItem({item, isActive, onClick, disabled = false, icon, ma
 			)}
 			// Disable dropping when disabled, on Recents (not a real directory) and on
 			// system-managed roots (/Apps, /Machines) that Files never writes into
-			disabled={disabled || item.path === RECENTS_PATH || SYSTEM_MANAGED_ROOT_PATHS.has(item.path)}
+			disabled={disabled || disableDrop || item.path === RECENTS_PATH || SYSTEM_MANAGED_ROOT_PATHS.has(item.path)}
 		>
 			<button
 				onClick={() => {

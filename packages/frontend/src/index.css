@@ -232,7 +232,6 @@ html {
 		transform: scale(1.2);
 		filter: blur(var(--window-background-blur)) saturate(var(--window-background-saturation))
 			brightness(var(--window-background-brightness));
-		animation: fade-in 700ms ease-out 200ms both;
 		background-position: center;
 		background-size: cover;
 	}
@@ -267,7 +266,9 @@ html {
 	   sits on the bottom edge and the travel is a rise/sink, so the sheet grows
 	   out of the dock that opened it and settles back toward it. The ease-out
 	   quint's punchy start keeps the response feeling instant; its long tail is
-	   what reads as the settle. The close duration must match
+	   what reads as the settle. Keep entry opaque: fading the whole sheet exposes
+	   the sharp desktop through its material while Photos replaces loading content.
+	   The close duration must match
 	   SHEET_EXIT_DURATION_MS in layouts/sheet.tsx, which navigates away
 	   (unmounting the route) once the animation lands. */
 	.umbrel-sheet-zoom {
@@ -280,6 +281,16 @@ html {
 
 	.umbrel-sheet-zoom[data-state='closed'] {
 		animation: umbrel-sheet-out 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
+	}
+
+	/* The widget and wallpaper sheets keep their larger upward travel. Only
+	   transform and opacity animate; no full-window filter runs per frame. */
+	.umbrel-sheet-slide[data-state='open'] {
+		animation: umbrel-sheet-slide-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+	}
+
+	.umbrel-sheet-slide[data-state='closed'] {
+		animation: umbrel-sheet-slide-out 100ms ease-in both;
 	}
 
 	/* Compositor-driven so it can't stutter while the sheet's route mounts on the
@@ -409,6 +420,8 @@ html {
 
 	.umbrel-sheet-zoom[data-state='open'],
 	.umbrel-sheet-zoom[data-state='closed'],
+	.umbrel-sheet-slide[data-state='open'],
+	.umbrel-sheet-slide[data-state='closed'],
 	.umbrel-dock-bounce {
 		animation: none;
 	}
@@ -946,11 +959,19 @@ html {
 @keyframes umbrel-sheet-in {
 	from {
 		transform: translateY(28px) scale(0.94);
-		opacity: 0;
 	}
+}
 
-	45% {
-		opacity: 1;
+@keyframes umbrel-sheet-slide-in {
+	from {
+		transform: translateY(50%);
+	}
+}
+
+@keyframes umbrel-sheet-slide-out {
+	to {
+		transform: translateY(50%);
+		opacity: 0;
 	}
 }
 

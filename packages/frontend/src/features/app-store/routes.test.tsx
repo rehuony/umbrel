@@ -14,7 +14,7 @@ vi.mock('@/providers/available-apps', () => ({
 	useAvailableApps: () => ({apps: [], appsGroupedByCategory: {}, isLoading: false}),
 }))
 vi.mock('./hooks/use-storefront', () => ({
-	useStorefront: () => ({isLoading: false, isUnavailable: true, dates: new Map(), featuredByCategory: new Map()}),
+	useStorefront: () => ({isLoading: false, sections: [], dates: new Map(), featuredByCategory: new Map()}),
 }))
 vi.mock('./hooks/use-app-status', () => ({useAppStatusMap: () => new Map(), useAppCardStateMap: () => new Map()}))
 vi.mock('@/hooks/use-is-mobile', () => ({useIsSmallMobile: () => false}))
@@ -48,7 +48,7 @@ test('the complete catalog stays on an empty grid instead of redirecting back to
 	expect(container.querySelector('[role="grid"]')?.getAttribute('data-count')).toBe('0')
 })
 
-test('the offline Discover fallback retains an open dialog and sorting parameters', async () => {
+test('Discover without recommendations stays accessible and retains dialog and sorting parameters', async () => {
 	router = createMemoryRouter(
 		[
 			{path: '/app-store', element: <Discover />},
@@ -58,6 +58,7 @@ test('the offline Discover fallback retains an open dialog and sorting parameter
 	)
 	root = createRoot(container)
 	await act(async () => root.render(<RouterProvider router={router} />))
-	expect(router.state.location.pathname).toBe('/app-store/category/all')
+	expect(router.state.location.pathname).toBe('/app-store')
+	expect(container.querySelector('[role="grid"]')).not.toBeNull()
 	expect(router.state.location.search).toBe('?dialog=import-compose&sort=newest')
 })

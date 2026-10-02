@@ -19,7 +19,6 @@ function globalDialog(
 
 const globalDialogs = new Map<GlobalDialogKey, ReturnType<typeof globalDialog>>([
 	['logout', globalDialog(() => import('@/modules/desktop/logout-dialog'))],
-	['live-usage', globalDialog(() => import('@/routes/live-usage'))],
 	['troubleshoot', globalDialog(() => import('@/routes/settings/troubleshoot'), {ownerOnly: true})],
 	['terminal', globalDialog(() => import('@/routes/settings/terminal'), {ownerOnly: true})],
 ])

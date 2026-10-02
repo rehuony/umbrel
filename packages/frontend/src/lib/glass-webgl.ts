@@ -144,7 +144,9 @@ export function attachBackdropLens(
 	onFirstFrame?: () => void,
 	onContextLost?: () => void,
 ): (() => void) | null {
-	const gl = canvas.getContext('webgl', {antialias: false, alpha: false})
+	// Static lenses skip unchanged frames, so their last drawing must survive
+	// compositing while an ancestor animates. No depth buffer is needed for a quad.
+	const gl = canvas.getContext('webgl', {antialias: false, alpha: false, depth: false, preserveDrawingBuffer: true})
 	if (!gl) return null
 
 	// All GL objects live in `let`s so they can be rebuilt wholesale after a

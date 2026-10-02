@@ -26,8 +26,7 @@ import type {ResolvedSection, SpotlightBanner as SpotlightBannerData} from '@/fe
 import {cn} from '@/lib/utils'
 import type {RegistryApp} from '@/trpc/trpc'
 
-// Renders one resolved editorial section. Sections fade in when remote data
-// arrives, enhancing the already-complete local layout underneath.
+// Renders project-owned editorial sections using locally available applications.
 export function StorefrontSectionView({
 	section,
 	statuses,

@@ -1,7 +1,6 @@
 // Placeholder icons: swapped for the real Photos icon set later
 import {
 	Album,
-	ChevronRight,
 	GalleryHorizontalEnd,
 	Globe,
 	Heart,
@@ -16,9 +15,8 @@ import {type ComponentProps} from 'react'
 import {useTranslation} from 'react-i18next'
 import {useLocation, useNavigate} from 'react-router-dom'
 
-import {FadeScroller} from '@/components/fade-scroller'
 import {ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger} from '@/components/ui/context-menu'
-import {AlbumCard} from '@/features/photos/components/albums/album-card'
+import {ScrollArea} from '@/components/ui/scroll-area'
 import {LivePhotoIcon} from '@/features/photos/components/live-photo-icon'
 import {usePhotosSelection} from '@/features/photos/components/selection-context'
 import {EnrichmentIndicator} from '@/features/photos/components/sidebar/enrichment-indicator'
@@ -26,8 +24,7 @@ import {SidebarItem} from '@/features/photos/components/sidebar/sidebar-item'
 import {SourceItem} from '@/features/photos/components/sidebar/source-item'
 import {SourcesRootItem} from '@/features/photos/components/sidebar/sources-root-item'
 import {SourceIcon} from '@/features/photos/components/sources/source-icon'
-import {BASE_ROUTE_PATH, sectionPath, sourcePath, type PhotosSection} from '@/features/photos/constants'
-import {useAlbums} from '@/features/photos/hooks/use-library'
+import {sectionPath, sourcePath, type PhotosSection} from '@/features/photos/constants'
 import {usePhotoSources, type PhotoSource} from '@/features/photos/hooks/use-photo-sources'
 import {cn} from '@/lib/utils'
 import {useLinkToDialog} from '@/utils/dialog'
@@ -81,11 +78,7 @@ export function Sidebar({className}: {className?: string}) {
 
 	return (
 		<nav className={cn('flex min-h-0 flex-col', className)} aria-label={t('photos-sidebar.navigation')}>
-			{/* Pulled left and padded back so an album card scaling up on hover isn't clipped by the scroll box's edge */}
-			<FadeScroller
-				direction='y'
-				className='umbrel-hide-scrollbar h-full min-h-0 overflow-y-auto overscroll-contain lg:-ml-2 lg:pl-2'
-			>
+			<ScrollArea className='h-full'>
 				<SidebarSection>{libraryItems.map(renderItem)}</SidebarSection>
 
 				<SidebarDivider />
@@ -116,53 +109,10 @@ export function Sidebar({className}: {className?: string}) {
 				<SidebarDivider />
 				<SidebarSection label={t('photos-sidebar.utilities')}>{utilityItems.map(renderItem)}</SidebarSection>
 
-				<SidebarDivider />
-				<AlbumsSection isActive={pathname === sectionPath('albums')} onClick={() => navigate(sectionPath('albums'))} />
-
 				{/* Spacer */}
 				<div className='h-6' />
-			</FadeScroller>
+			</ScrollArea>
 		</nav>
-	)
-}
-
-// The most recently touched albums as cards, under a link to all of them
-const SIDEBAR_ALBUMS = 4
-
-function AlbumsSection({isActive, onClick}: {isActive: boolean; onClick: () => void}) {
-	const {t} = useTranslation()
-	const navigate = useNavigate()
-	const {pathname} = useLocation()
-	const {data: albums} = useAlbums()
-	const recent = [...(albums ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, SIDEBAR_ALBUMS)
-	return (
-		<section className='flex flex-col gap-2 pr-4' aria-label={t('photos-sidebar.albums')}>
-			<button
-				onClick={onClick}
-				aria-current={isActive ? 'page' : undefined}
-				className={cn(
-					'flex items-center justify-between rounded-lg px-2 py-1 text-12 font-medium',
-					isActive ? 'text-white' : 'text-white/40 hover:text-white/70',
-				)}
-			>
-				{t('photos-sidebar.albums')}
-				<ChevronRight className='h-3.5 w-3.5' />
-			</button>
-			<div className='flex flex-col gap-2'>
-				{recent.map((album) => {
-					const path = `${BASE_ROUTE_PATH}/albums/${album.id}`
-					return (
-						<AlbumCard
-							key={album.id}
-							album={album}
-							className='aspect-[15/8]'
-							isActive={pathname === path}
-							onClick={() => navigate(path)}
-						/>
-					)
-				})}
-			</div>
-		</section>
 	)
 }
 

@@ -82,6 +82,7 @@ test.sequential('repositories() returns owner-only repository management data', 
 	await expect(umbreld.client.appStore.repositories.query()).resolves.toStrictEqual([
 		{
 			url: umbreld.instance.appStore.defaultAppStoreRepo,
+			isDefault: true,
 			meta: {id: 'sparkles', name: 'Sparkles'},
 		},
 	])
@@ -89,6 +90,11 @@ test.sequential('repositories() returns owner-only repository management data', 
 
 test.sequential('addRepository() adds a second repository', async () => {
 	await expect(umbreld.client.appStore.addRepository.mutate({url: communityAppStoreGitServer.url})).resolves.toBe(true)
+	await expect(umbreld.client.appStore.repositories.query()).resolves.toContainEqual({
+		url: communityAppStoreGitServer.url,
+		isDefault: false,
+		meta: {id: 'sparkles', name: 'Sparkles'},
+	})
 })
 
 test.sequential('registry() returns both app repositories in registry', async () => {

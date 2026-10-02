@@ -19,10 +19,9 @@ vi.mock('@/trpc/trpc', async () => {
 })
 vi.mock('react-i18next', () => ({useTranslation: () => ({t: (key: string) => key})}))
 vi.mock('@/components/ui/toast', () => ({toast: {error: vi.fn(), info: vi.fn()}}))
-vi.mock('@/features/files/widgets', () => ({filesWidgets: []}))
-vi.mock('@/modules/widgets/shared/constants', () => ({
-	MAX_WIDGETS: 3,
-	liveUsageWidgets: ['storage', 'memory', 'system-stats', 'files-favorites'].map((id) => ({id: `umbrel:${id}`})),
+vi.mock('@/features/files/widgets', () => ({
+	filesWidgets: [{id: 'umbrel:files-favorites'}],
+	filesWidgetTypes: [],
 }))
 vi.mock('@/providers/apps', () => ({
 	useApps: () => ({isLoading: false}),
@@ -130,27 +129,30 @@ afterEach(async () => {
 	notifyManager.setScheduler((callback) => setTimeout(callback, 0))
 })
 
-test('immediately replaces a full selection and saves removal before addition', async () => {
-	await act(async () => {
-		editor.toggleSelected(initial[0])
-		editor.toggleSelected(memory)
-	})
-	expect(selected()).toEqual([...initial.slice(1), memory])
-	expect(container.textContent).toBe(selected().join(','))
-	expect(editor.isLoading).toBe(false)
-	expect(editor.isSaving).toBe(true)
-	expect(writes).toHaveLength(1)
-	expect(writes[0]).toMatchObject({widgetId: initial[0], checked: false})
+test.each([memory, 'umbrel:cpu'])(
+	'immediately replaces a full selection with %s and saves in order',
+	async (widgetId) => {
+		await act(async () => {
+			editor.toggleSelected(initial[0])
+			editor.toggleSelected(widgetId)
+		})
+		expect(selected()).toEqual([...initial.slice(1), widgetId])
+		expect(container.textContent).toBe(selected().join(','))
+		expect(editor.isLoading).toBe(false)
+		expect(editor.isSaving).toBe(true)
+		expect(writes).toHaveLength(1)
+		expect(writes[0]).toMatchObject({widgetId: initial[0], checked: false})
 
-	await act(async () => client.invalidateQueries({queryKey: widgetKey}))
-	expect(selected()).toEqual([...initial.slice(1), memory])
-	await act(async () => writes[0].resolve())
-	expect(writes).toHaveLength(2)
-	expect(writes[1]).toMatchObject({widgetId: memory, checked: true})
-	await act(async () => writes[1].resolve())
-	expect(server).toEqual(selected())
-	expect(editor.isSaving).toBe(false)
-})
+		await act(async () => client.invalidateQueries({queryKey: widgetKey}))
+		expect(selected()).toEqual([...initial.slice(1), widgetId])
+		await act(async () => writes[0].resolve())
+		expect(writes).toHaveLength(2)
+		expect(writes[1]).toMatchObject({widgetId, checked: true})
+		await act(async () => writes[1].resolve())
+		expect(server).toEqual(selected())
+		expect(editor.isSaving).toBe(false)
+	},
+)
 
 test('interprets rapid repeated clicks against pending intent instead of stale renders', async () => {
 	await act(async () => {

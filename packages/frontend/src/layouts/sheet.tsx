@@ -1,6 +1,6 @@
 import {Suspense, useCallback, useLayoutEffect, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
-import {Outlet, useLocation, useNavigate} from 'react-router-dom'
+import {matchPath, Outlet, useLocation, useNavigate} from 'react-router-dom'
 
 import {DialogCloseButton} from '@/components/ui/dialog-close-button'
 import {Sheet, SheetContent, SheetTitle} from '@/components/ui/sheet'
@@ -41,6 +41,11 @@ export function SheetLayout() {
 	// below the dock line), so the dock spacer would only add phantom scroll
 	const isFilesRoute = /^\/files(\/|$)/.test(location.pathname)
 	const isPhotosRoute = /^\/photos(\/|$)/.test(location.pathname)
+	// Machine forms must not lose drafts to an accidental backdrop click.
+	const isMachineForm = Boolean(
+		matchPath('/machines/new/configure', location.pathname) ||
+		matchPath('/machines/:machineId/settings', location.pathname),
+	)
 	const isFullHeightFeatureRoute = isFilesRoute || isPhotosRoute
 
 	// The Sheet layout persists between Files, App Store, and Settings. Clear a
@@ -80,7 +85,7 @@ export function SheetLayout() {
 								<div
 									data-state={open ? 'open' : 'closed'}
 									className='fixed inset-0 z-30'
-									onClick={() => setOpen(false)}
+									onClick={isMachineForm ? undefined : () => setOpen(false)}
 								/>
 							)
 						}

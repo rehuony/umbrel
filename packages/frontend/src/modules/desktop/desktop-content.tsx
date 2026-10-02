@@ -27,6 +27,7 @@ type DesktopVariant = 'default' | 'edit-widgets' | 'overlayed'
 
 export const desktopVariants: Record<DesktopVariant, Variant> = {
 	default: {
+		translateY: 0,
 		opacity: 1,
 	},
 	'edit-widgets': {

@@ -64,9 +64,7 @@ export const systemApps = [
 		name: 'Live Usage',
 		icon: '/assets/dock/dock-live-usage.webp',
 		systemApp: true,
-		// NOTE: using this will clear existing search params
-		// In practice, this means cmdk will clear params and clicking dock icon will not
-		systemAppTo: '?dialog=live-usage',
+		systemAppTo: '/live-usage',
 	},
 	{
 		id: 'UMBREL_widgets',

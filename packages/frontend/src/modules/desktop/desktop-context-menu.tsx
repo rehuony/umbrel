@@ -1,24 +1,17 @@
 import {useEffect, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
-import {RiCloseCircleFill} from 'react-icons/ri'
 import {Link} from 'react-router-dom'
 
 import {ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger} from '@/components/ui/context-menu'
-import {Popover, PopoverAnchor, PopoverClose, PopoverContent} from '@/components/ui/popover'
 import {contextMenuClasses} from '@/components/ui/shared/menu'
 import {useQueryParams} from '@/hooks/use-query-params'
-import {cn} from '@/lib/utils'
-import {WallpaperPicker} from '@/routes/settings/_components/wallpaper-picker'
-import {t} from '@/utils/i18n'
 
 import {ShortcutPopover} from './shortcut-dialog'
 
 export function DesktopContextMenu({children}: {children: React.ReactNode}) {
 	const {t} = useTranslation()
-	const [show, setShow] = useState(false)
 	const [showShortcut, setShowShortcut] = useState(false)
 	const contentRef = useRef<HTMLDivElement>(null)
-	const anchorRef = useRef<HTMLDivElement>(null)
 	const shortcutAnchorRef = useRef<HTMLDivElement>(null)
 	const {params, addLinkSearchParams, remove} = useQueryParams()
 	const isShowingDialog = params.get('dialog') !== null
@@ -40,7 +33,10 @@ export function DesktopContextMenu({children}: {children: React.ReactNode}) {
 			<ContextMenu
 				modal={false}
 				onOpenChange={(open) => {
-					if (open) void import('@/routes/edit-widgets')
+					if (open) {
+						void import('@/routes/edit-widgets')
+						void import('@/routes/wallpaper')
+					}
 				}}
 			>
 				<ContextMenuTrigger disabled={isShowingDialog}>{children}</ContextMenuTrigger>
@@ -58,15 +54,8 @@ export function DesktopContextMenu({children}: {children: React.ReactNode}) {
 					<ContextMenuItem asChild>
 						<Link to='/edit-widgets'>{t('desktop.context-menu.edit-widgets')}</Link>
 					</ContextMenuItem>
-					<ContextMenuItem
-						onSelect={() => {
-							const {top, left} = contentRef.current!.getBoundingClientRect()
-							anchorRef.current!.style.top = `${top}px`
-							anchorRef.current!.style.left = `${left}px`
-							setTimeout(() => setShow(true), 200)
-						}}
-					>
-						{t('desktop.context-menu.change-wallpaper')}
+					<ContextMenuItem asChild>
+						<Link to='/wallpaper'>{t('desktop.context-menu.change-wallpaper')}</Link>
 					</ContextMenuItem>
 					<ContextMenuItem asChild className={contextMenuClasses.item.rootDestructive}>
 						<Link to={{search: addLinkSearchParams({dialog: 'logout'})}}>{t('desktop.context-menu.logout')}</Link>
@@ -74,28 +63,7 @@ export function DesktopContextMenu({children}: {children: React.ReactNode}) {
 				</ContextMenuContent>
 			</ContextMenu>
 
-			<Popover open={show} onOpenChange={(open) => setShow(open)}>
-				<PopoverAnchor className='fixed' ref={anchorRef} />
-				{/* `relative` fixes Safari paint bug caused by the `mask-image` property in the `WallpaperPicker` not playing well with the popover `transform: translate()`. On hovering the close button, Safari would jump the wallpaper picker in the wrong spot. */}
-				<PopoverContent align='start' className='relative py-2.5 pr-5 pl-1.5'>
-					<CloseButton className='absolute top-2 right-2' />
-					<WallpaperPicker maxW={300} />
-				</PopoverContent>
-			</Popover>
-
 			<ShortcutPopover open={showShortcut} onOpenChange={setShowShortcut} anchorRef={shortcutAnchorRef} />
 		</>
 	)
 }
-
-const CloseButton = ({className}: {className: string}) => (
-	<PopoverClose
-		className={cn(
-			'rounded-full opacity-30 ring-white/60 outline-hidden transition-opacity hover:opacity-40 focus-visible:opacity-40 focus-visible:ring-2',
-			className,
-		)}
-	>
-		<RiCloseCircleFill className='h-4 w-4' />
-		<span className='sr-only'>{t('close')}</span>
-	</PopoverClose>
-)

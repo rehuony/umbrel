@@ -19,8 +19,8 @@ import {tw} from '@/utils/tw'
 const tabClass = tw`settings-edge-material flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent bg-white/6 text-14 font-semibold -tracking-2 whitespace-nowrap text-white/85 transition-[background-color,border-color,color,transform] duration-200 hover:bg-white/12 hover:text-white focus:outline-hidden focus-visible:ring-3 focus-visible:ring-white/20 active:scale-95`
 const tabActiveClass = tw`border-white/60 bg-white/14 text-white hover:bg-white/14`
 
-// Each pill animates its own position during the column-width morph (the nav
-// itself is full-width and a scroll container, so animating it does nothing)
+// Each pill animates its position when machines are added or removed; the
+// full-width navigation keeps a stable scrollable viewport.
 const MotionNavLink = motion.create(NavLink)
 
 function Tab({

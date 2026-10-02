@@ -52,7 +52,7 @@ export function useSettingsNotificationCount() {
 				action: {
 					label: t('notifications.view'),
 					onClick: () => {
-						navigate(`?dialog=live-usage`)
+						navigate('/live-usage')
 					},
 				},
 				// Don't auto-close

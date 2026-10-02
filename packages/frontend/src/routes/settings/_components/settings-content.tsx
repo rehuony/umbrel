@@ -20,7 +20,6 @@ import {useBackups} from '@/features/backups/hooks/use-backups'
 import {getDeviceHealth} from '@/features/storage/hooks/use-storage'
 import {useCpuTemperature} from '@/hooks/use-cpu-temperature'
 import {useIsHomeOrPro} from '@/hooks/use-is-home-or-pro'
-import {useQueryParams} from '@/hooks/use-query-params'
 import {cn} from '@/lib/utils'
 import {DesktopPreviewConnected, DesktopPreviewFrame} from '@/modules/desktop/desktop-preview'
 import {WifiListRowConnectedDescription} from '@/modules/wifi/wifi-list-row-connected-description'
@@ -57,12 +56,11 @@ function LiveUsageCardLink({
 	className?: string
 	children: ReactNode
 }) {
-	const {addLinkSearchParams} = useQueryParams()
 	const reduceMotion = Boolean(useReducedMotion())
 
 	return (
 		<Link
-			to={{search: addLinkSearchParams({dialog: 'live-usage', 'live-usage-tab': tab})}}
+			to={`/live-usage?tab=${tab}`}
 			id={id}
 			className={cn(
 				'block shrink-0 rounded-24 outline-hidden focus-visible:ring-2 focus-visible:ring-white/20',
@@ -441,7 +439,7 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 									</Card>
 
 									<ButtonLink
-										to={linkToDialog('live-usage')}
+										to='/live-usage'
 										className='mt-1 min-w-0 shrink-0 self-center px-6 text-11 whitespace-nowrap'
 									>
 										{t('open-live-usage')}

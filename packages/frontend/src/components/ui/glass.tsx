@@ -350,12 +350,11 @@ export function Glass({
 	// Fresh id per rebuild (and per edgeBlur — it lives inside the filter as
 	// stdDeviation) — Chromium caches filter output by id.
 	const id = lens ? `${filterId}-${lens.ver}-${edgeBlur}` : filterId
-	const backdropFilter =
-		contrast || canvasLens || (forceRefractionTarget && !!refractionTarget)
-			? undefined
-			: refractBackdrop && lens && !frosted
-				? `url("#${id}") blur(${blur}px) saturate(${saturate}) brightness(${brightness})`
-				: `blur(${blur * 3}px) saturate(${saturate}) brightness(${brightness})`
+	const backdropFilter = contrast
+		? undefined
+		: refractBackdrop && lens && !frosted
+			? `url("#${id}") blur(${blur}px) saturate(${saturate}) brightness(${brightness})`
+			: `blur(${blur * 3}px) saturate(${saturate}) brightness(${brightness})`
 
 	const channels = [
 		{key: 'cr', s: scale * (1 + chroma), m: '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0'},
@@ -370,12 +369,22 @@ export function Glass({
 	const Host = as
 	return (
 		<Host ref={hostRef} className={cn(!positioned && 'relative', 'isolate', className)} {...rest}>
+			{/* Keep the frosted surface until the canvas has drawn. Crossfade the
+			    two instead of swapping materials in a single frame during entry. */}
+			<div
+				aria-hidden
+				className={cn(
+					'pointer-events-none absolute inset-0 -z-10 rounded-[inherit] transition-opacity duration-150 motion-reduce:transition-none',
+					canvasLens && 'opacity-0',
+				)}
+				style={{WebkitBackdropFilter: backdropFilter, backdropFilter}}
+			/>
 			{!refractBackdrop && !frosted && refractionTarget && (
 				<canvas
 					ref={canvasRef}
 					aria-hidden
 					className={cn(
-						'pointer-events-none absolute inset-0 -z-10 size-full rounded-[inherit]',
+						'pointer-events-none absolute inset-0 -z-10 size-full rounded-[inherit] transition-opacity duration-150 motion-reduce:transition-none',
 						!canvasLens && 'opacity-0',
 					)}
 				/>
@@ -383,11 +392,7 @@ export function Glass({
 			<div
 				aria-hidden
 				className='pointer-events-none absolute inset-0 -z-10 rounded-[inherit]'
-				style={{
-					WebkitBackdropFilter: backdropFilter,
-					backdropFilter,
-					background: tint,
-				}}
+				style={{background: tint}}
 			/>
 			{!refractBackdrop && !frosted && !contrast && edgeBlur > 0 && (
 				<div

@@ -2,7 +2,7 @@ import {AnimatePresence, motion, useReducedMotion} from 'motion/react'
 import {lazy, Suspense, useEffect, useState} from 'react'
 import {ErrorBoundary} from 'react-error-boundary'
 import {HiMenuAlt2} from 'react-icons/hi'
-import {Outlet, useLocation} from 'react-router-dom'
+import {Outlet, useLocation, useSearchParams} from 'react-router-dom'
 
 import {ErrorBoundaryCardFallback} from '@/components/ui/error-boundary-card-fallback'
 import {SheetHeader, SheetTitle} from '@/components/ui/sheet'
@@ -18,6 +18,7 @@ import {PhotosViewProvider} from '@/features/photos/components/view-context'
 import {usePhotosEvents} from '@/features/photos/hooks/use-photos-events'
 import {useIsMobile} from '@/hooks/use-is-mobile'
 import {HttpUrlAuthorizerProvider} from '@/modules/auth/http-url-authorizer'
+import type {PhotosDialogKey} from '@/utils/dialog'
 
 // The sheet's title row. On phones it is also the search's stage: while a
 // search is on, the field and its Cancel take the row (the way the desktop
@@ -72,10 +73,21 @@ const RenameAlbumDialog = lazy(() =>
 	import('@/features/photos/components/albums/rename-album-dialog').then((m) => ({default: m.RenameAlbumDialog})),
 )
 
+const photoDialogs = {
+	'photos-source': SourceDetailsDialog,
+	'photos-add-source': AddSourceDialog,
+	'photos-create-album': CreateAlbumDialog,
+	'photos-rename-album': RenameAlbumDialog,
+	'photos-item': ItemViewer,
+} satisfies Record<PhotosDialogKey, unknown>
+
 // Photos shell: mirrors the Files layout (title row, sidebar column, actions bar
 // above the listing outlet) so the two system apps feel like siblings.
 export default function PhotosLayout() {
 	const {pathname} = useLocation()
+	const [searchParams] = useSearchParams()
+	const dialogKey = searchParams.get('dialog')
+	const Dialog = dialogKey && Object.hasOwn(photoDialogs, dialogKey) ? photoDialogs[dialogKey as PhotosDialogKey] : null
 	const isMobile = useIsMobile()
 	const barDrop = useBarDrop()
 	const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -126,22 +138,10 @@ export default function PhotosLayout() {
 							</UploadDropZone>
 						</div>
 
-						{/* Lazy loaded dialogs, opened via ?dialog=photos-source / photos-add-source / photos-create-album */}
-						<Suspense>
-							<SourceDetailsDialog />
-						</Suspense>
-						<Suspense>
-							<AddSourceDialog />
-						</Suspense>
-						<Suspense>
-							<CreateAlbumDialog />
-						</Suspense>
-						<Suspense>
-							<RenameAlbumDialog />
-						</Suspense>
-						<Suspense>
-							<ItemViewer />
-						</Suspense>
+						{/* Match GlobalDialogs: unopened dialogs neither fetch chunks nor
+						    subscribe to data. The URL retains the slot during closing,
+						    so the active dialog can finish its own exit animation. */}
+						<Suspense>{Dialog && <Dialog key={dialogKey} />}</Suspense>
 					</ErrorBoundary>
 				</HttpUrlAuthorizerProvider>
 			</PhotosSelectionProvider>

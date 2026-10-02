@@ -38,7 +38,6 @@ import {Settings} from './routes/settings'
 
 const CommunityAppStoreHome = React.lazy(() => import('./routes/community-app-store'))
 const CommunityAppPage = React.lazy(() => import('./routes/community-app-store/app-page'))
-const EditWidgetsPage = React.lazy(() => import('./routes/edit-widgets'))
 const Login = React.lazy(() => import('./routes/login'))
 const OnboardingStart = React.lazy(() => import('./routes/onboarding'))
 const CreateAccount = React.lazy(() => import('./routes/onboarding/create-account'))
@@ -97,15 +96,25 @@ export const router = createBrowserRouter([
 		children: [
 			{
 				path: 'edit-widgets',
-				Component: EditWidgetsPage,
+				lazy: async () => ({Component: (await import('./routes/edit-widgets')).default}),
 				ErrorBoundary: ErrorBoundaryCardFallback,
 			},
-			...machinesRoutes,
+			{
+				path: 'wallpaper',
+				lazy: async () => ({Component: (await import('./routes/wallpaper')).default}),
+				ErrorBoundary: ErrorBoundaryCardFallback,
+			},
 			{
 				Component: SheetLayout,
 				children: [
 					...filesRoutes,
 					...photosRoutes,
+					...machinesRoutes,
+					{
+						path: 'live-usage',
+						lazy: async () => ({Component: (await import('./routes/live-usage')).default}),
+						ErrorBoundary: ErrorBoundaryCardFallback,
+					},
 					// The root desktop tree already mounts AvailableAppsProvider, so
 					// app-store routes consume it without nesting another provider
 					...appStoreRoutes,

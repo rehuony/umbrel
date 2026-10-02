@@ -62,7 +62,7 @@ export function Widget({appId, config: manifestConfig}: {appId: string; config: 
 	const handleClick = (link?: string) => {
 		// Handle special system/features widgets
 		if (appId === 'live-usage' && systemAppsKeyed['UMBREL_live-usage']) {
-			navigate(link || '?dialog=live-usage')
+			navigate(link || systemAppsKeyed['UMBREL_live-usage'].systemAppTo)
 			return
 		}
 		if (appId === 'files' && systemAppsKeyed['UMBREL_files']) {

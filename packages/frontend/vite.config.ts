@@ -24,6 +24,7 @@ export default defineConfig({
 	// Development containers use mDNS names. Keep Vite's host check enabled
 	// while allowing those names alongside its default localhost and IP support.
 	server: {
+		host: '127.0.0.1',
 		allowedHosts: ['.local'],
 	},
 	resolve: {

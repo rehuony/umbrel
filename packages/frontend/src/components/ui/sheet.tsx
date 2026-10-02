@@ -23,7 +23,7 @@ const sheetVariants = cva('fixed z-30 gap-4 contrast-more:bg-black overflow-hidd
 	variants: {
 		side: {
 			top: `inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top ${slideSheetAnimation}`,
-			bottom: `inset-x-0 bottom-0 data-[state=closed]:slide-out-to-bottom-1/2 data-[state=open]:slide-in-from-bottom-1/2 ${slideSheetAnimation}`,
+			bottom: 'inset-x-0 bottom-0 umbrel-sheet-slide',
 			'bottom-zoom': 'inset-x-0 bottom-0 umbrel-sheet-zoom',
 			left: `inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm ${slideSheetAnimation}`,
 			right: `inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm ${slideSheetAnimation}`,
@@ -63,7 +63,7 @@ function SheetContent({
 					sheetVariants({side}),
 					// will-change alone keeps the layer promoted; a static transform here
 					// would force the zoom keyframes through matrix interpolation
-					'umbrel-window-shadow umbrel-window-surface-top will-change-[transform]',
+					'umbrel-window-shadow umbrel-window-surface-top isolate bg-black will-change-[transform]',
 					className,
 				)}
 				{...props}
@@ -74,9 +74,9 @@ function SheetContent({
 				    itself: Safari does not reliably clip a composited child by an ancestor's
 				    radius while that ancestor animates, and the transform keeps this layer
 				    composited so the clip applies to the child */}
-				<div className='umbrel-window-surface-top absolute inset-0 transform-gpu overflow-hidden bg-black contrast-more:hidden'>
-					{/* Fade in the wallpaper to avoid a flash when the sheet opens. The
-					    tint layer above stays constant so the fade happens under it. */}
+				<div className='umbrel-window-surface-top pointer-events-none absolute inset-0 -z-10 transform-gpu overflow-hidden contrast-more:hidden'>
+					{/* The sheet owns the opaque base and its only entry animation.
+					    Keep this material steady as content and wallpaper images load. */}
 					{/* An empty src resolves to the current document, so fall back to the
 					    plain black underneath until a wallpaper is actually resolved */}
 					{wallpaper.url && (
@@ -86,7 +86,7 @@ function SheetContent({
 								src={wallpaper.url}
 								alt=''
 								aria-hidden='true'
-								className='umbrel-window-wallpaper absolute inset-0 size-full object-cover object-center opacity-0'
+								className='umbrel-window-wallpaper absolute inset-0 size-full object-cover object-center'
 							/>
 						</picture>
 					)}

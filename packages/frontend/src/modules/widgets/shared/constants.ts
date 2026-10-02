@@ -160,31 +160,11 @@ export type RegistryWidget<T extends WidgetType = WidgetType> = {
 export const MAX_WIDGETS = 3
 
 export const liveUsageWidgets: [
-	RegistryWidget<'text-with-progress'>,
-	RegistryWidget<'text-with-progress'>,
 	RegistryWidget<'three-stats'>,
+	RegistryWidget<'text-with-progress'>,
+	RegistryWidget<'text-with-progress'>,
+	RegistryWidget<'text-with-progress'>,
 ] = [
-	{
-		id: 'umbrel:storage',
-		type: 'text-with-progress',
-		example: {
-			title: 'Storage',
-			text: '256 GB',
-			progressLabel: '1.75 TB left',
-			progress: 0.25,
-		},
-	},
-	{
-		id: 'umbrel:memory',
-		type: 'text-with-progress',
-		example: {
-			title: 'Memory',
-			text: '5.8 GB',
-			subtext: '/16GB',
-			progressLabel: '11.4 GB left',
-			progress: 0.36,
-		},
-	},
 	{
 		id: 'umbrel:system-stats',
 		type: 'three-stats',
@@ -206,6 +186,37 @@ export const liveUsageWidgets: [
 					text: '1.75 TB',
 				},
 			],
+		},
+	},
+	{
+		id: 'umbrel:cpu',
+		type: 'text-with-progress',
+		example: {
+			title: 'CPU',
+			text: '24%',
+			progressLabel: '76% idle',
+			progress: 0.24,
+		},
+	},
+	{
+		id: 'umbrel:memory',
+		type: 'text-with-progress',
+		example: {
+			title: 'Memory',
+			text: '5.8 GB',
+			subtext: '/16GB',
+			progressLabel: '11.4 GB left',
+			progress: 0.36,
+		},
+	},
+	{
+		id: 'umbrel:storage',
+		type: 'text-with-progress',
+		example: {
+			title: 'Storage',
+			text: '256 GB',
+			progressLabel: '1.75 TB left',
+			progress: 0.25,
 		},
 	},
 ]

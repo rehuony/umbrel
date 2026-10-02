@@ -1,7 +1,8 @@
 import {DialogDescription} from '@radix-ui/react-dialog'
-import {useState} from 'react'
+import {useEffect, useState} from 'react'
 import {useTranslation} from 'react-i18next'
 import {TbAlertTriangle, TbTrash} from 'react-icons/tb'
+import {useLocalStorage} from 'react-use'
 
 import {AppIcon} from '@/components/app-icon'
 import {WarningAlert} from '@/components/ui/alert'
@@ -79,9 +80,7 @@ export function CommunityAppStoreDialog() {
 	const remoteFormError = !addAppStoreMut.error?.data?.zodError && addAppStoreMut.error?.message
 	const formError = localError || remoteFormError
 
-	const nonUmbrelAppStores = (appStoresQ.data ?? [])
-		.filter((store) => store !== null)
-		.filter((store) => store.meta.id !== UMBREL_APP_STORE_ID)
+	const appStores = appStoresQ.data ?? []
 
 	const appCountByStore = new Map(
 		(registryQ.data ?? []).filter((repo) => repo !== null).map((repo) => [repo.meta.id, repo.apps.length]),
@@ -109,7 +108,7 @@ export function CommunityAppStoreDialog() {
 							</DialogDescription>
 						</DialogHeader>
 
-						<WarningAlert icon={TbAlertTriangle} description={t('community-app-stores.warning')} />
+						<CommunityStoreWarning />
 
 						<form onSubmit={handleSubmit} className='flex flex-col gap-2'>
 							<fieldset disabled={addAppStoreMut.isPending} className='flex flex-col gap-2.5 md:flex-row'>
@@ -137,7 +136,7 @@ export function CommunityAppStoreDialog() {
 							<h3 className='px-1 text-12 font-medium -tracking-2 text-white/40'>
 								{t('community-app-stores.added-title')}
 							</h3>
-							{nonUmbrelAppStores.length === 0 ? (
+							{appStores.length === 0 ? (
 								<div className='flex items-center justify-center rounded-12 border border-dashed border-white/10 px-4 py-6 text-center text-13 -tracking-2 text-white/30'>
 									{t('community-app-stores.empty')}
 								</div>
@@ -145,13 +144,14 @@ export function CommunityAppStoreDialog() {
 								// contain-inline-size: the scroll area's display:table wrapper would otherwise
 								// grow to the untruncated URL and push rows past the dialog
 								<ul className='flex flex-col gap-2.5 contain-inline-size md:gap-0 md:divide-y md:divide-white/6 md:overflow-hidden md:rounded-12 md:bg-white/5'>
-									{nonUmbrelAppStores.map(({url, meta}) => {
+									{appStores.map(({url, meta, isDefault}) => {
+										const storePath = meta.id === UMBREL_APP_STORE_ID ? '/app-store' : `/community-app-store/${meta.id}`
 										const appCount = appCountByStore.get(meta.id)
 										const removing = removingUrl === url
 										const removeLabel = t('community-app-store.remove-button')
 										return (
 											<li
-												key={meta.id}
+												key={url}
 												className={cn(
 													// Mobile: a centered tile. Desktop: a compact row on a grid whose
 													// middle track is minmax(0,1fr), so the URL truncates instead of
@@ -188,34 +188,38 @@ export function CommunityAppStoreDialog() {
 												</div>
 												{/* Mobile: full-width stacked actions */}
 												<div className='flex w-full flex-col gap-2 md:hidden'>
-													<ButtonLink size='dialog' variant='primary' to={`/community-app-store/${meta.id}`}>
+													<ButtonLink size='dialog' variant='primary' to={storePath}>
 														{t('community-app-store.open-button')}
 													</ButtonLink>
-													<Button
-														size='dialog'
-														text='destructive'
-														disabled={removing}
-														onClick={() => removeAppStoreMut.mutate({url})}
-													>
-														{removing ? <Spinner /> : removeLabel}
-													</Button>
+													{!isDefault && (
+														<Button
+															size='dialog'
+															text='destructive'
+															disabled={removing}
+															onClick={() => removeAppStoreMut.mutate({url})}
+														>
+															{removing ? <Spinner /> : removeLabel}
+														</Button>
+													)}
 												</div>
 												{/* Desktop: inline actions */}
 												<div className='hidden shrink-0 items-center gap-1.5 md:flex'>
-													<ButtonLink size='sm' to={`/community-app-store/${meta.id}`}>
+													<ButtonLink size='sm' to={storePath}>
 														{t('community-app-store.open-button')}
 													</ButtonLink>
-													<DarkTooltip label={removeLabel}>
-														<button
-															type='button'
-															aria-label={removeLabel}
-															disabled={removing}
-															onClick={() => removeAppStoreMut.mutate({url})}
-															className='flex size-[25px] items-center justify-center rounded-full text-white/40 transition-colors duration-300 hover:bg-destructive2/20 hover:text-destructive2-lightest focus:outline-hidden focus-visible:bg-destructive2/20 focus-visible:text-destructive2-lightest'
-														>
-															{removing ? <Spinner /> : <TbTrash className='size-4' />}
-														</button>
-													</DarkTooltip>
+													{!isDefault && (
+														<DarkTooltip label={removeLabel}>
+															<button
+																type='button'
+																aria-label={removeLabel}
+																disabled={removing}
+																onClick={() => removeAppStoreMut.mutate({url})}
+																className='flex size-[25px] items-center justify-center rounded-full text-white/40 transition-colors duration-300 hover:bg-destructive2/20 hover:text-destructive2-lightest focus:outline-hidden focus-visible:bg-destructive2/20 focus-visible:text-destructive2-lightest'
+															>
+																{removing ? <Spinner /> : <TbTrash className='size-4' />}
+															</button>
+														</DarkTooltip>
+													)}
 												</div>
 											</li>
 										)
@@ -228,4 +232,15 @@ export function CommunityAppStoreDialog() {
 			</DialogPortal>
 		</Dialog>
 	)
+}
+
+// Mounted with the dialog content, so merely visiting the store does not consume the notice.
+function CommunityStoreWarning() {
+	const {t} = useTranslation()
+	const [seen, setSeen] = useLocalStorage('UMBREL_community-store-warning-seen', false)
+	const [show] = useState(() => !seen)
+	useEffect(() => {
+		if (show) setSeen(true)
+	}, [show, setSeen])
+	return show ? <WarningAlert icon={TbAlertTriangle} description={t('community-app-stores.warning')} /> : null
 }

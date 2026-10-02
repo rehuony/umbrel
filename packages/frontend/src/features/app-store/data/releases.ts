@@ -11,7 +11,7 @@ import {queryOptions} from '@tanstack/react-query'
 import {z} from 'zod'
 
 import {APP_STORE_REMOTE_API_BASE} from '@/features/app-store/constants'
-import {remoteJsonFetcher} from '@/features/app-store/data/storefront-query'
+import {remoteJsonFetcher} from '@/features/app-store/data/remote-json'
 import type {RegistryApp} from '@/trpc/trpc'
 
 // ---------------------------------------------------------------------------

@@ -68,9 +68,7 @@ export const APP_STORE_EMPTY_STATE_SRC = '/assets/app-store/no-results.webp'
 // Remote editorial API (apps.umbrel.com)
 // ---------------------------------------------------------------------------
 
-// The storefront feed and release history are optional editorial decoration:
-// every id is resolved against the local registry and any failure renders the
-// complete local experience instead. See data/storefront.ts.
+// Optional release history. Discover recommendations and artwork are bundled locally.
 export const APP_STORE_REMOTE_API_BASE = 'https://apps.umbrel.com/api/v3/umbrelos/app-store'
 
 // ---------------------------------------------------------------------------

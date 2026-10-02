@@ -6,7 +6,6 @@ import {getLastFilesPath} from '@/features/files/utils/last-files-path'
 import {useQueryParams} from '@/hooks/use-query-params'
 import {systemAppsKeyed} from '@/providers/apps'
 import {trpcReact} from '@/trpc/trpc'
-import {useLinkToDialog} from '@/utils/dialog'
 
 const NAV_SHORTCUTS = {
 	files: 'f',
@@ -34,7 +33,6 @@ export function NavigationShortcuts() {
 	const navigate = useNavigate()
 	const {pathname} = useLocation()
 	const {params} = useQueryParams()
-	const linkToDialog = useLinkToDialog()
 	const {open: cmdkOpen} = useCmdkOpen()
 
 	const {data: user} = trpcReact.user.get.useQuery()
@@ -83,8 +81,9 @@ export function NavigationShortcuts() {
 				[NAV_SHORTCUTS.settings]: pathname.startsWith(systemAppsKeyed['UMBREL_settings'].systemAppTo)
 					? null
 					: () => navigate(systemAppsKeyed['UMBREL_settings'].systemAppTo),
-				[NAV_SHORTCUTS.liveUsage]:
-					params.get('dialog') === 'live-usage' ? null : () => navigate(linkToDialog('live-usage')),
+				[NAV_SHORTCUTS.liveUsage]: pathname.startsWith(systemAppsKeyed['UMBREL_live-usage'].systemAppTo)
+					? null
+					: () => navigate(systemAppsKeyed['UMBREL_live-usage'].systemAppTo),
 				// Home also closes whichever url-driven dialog is up, since
 				// navigating clears the dialog search params
 				[NAV_SHORTCUTS.home]: pathname === '/' && !params.get('dialog') ? null : () => navigate('/'),
@@ -98,7 +97,7 @@ export function NavigationShortcuts() {
 
 		document.addEventListener('keydown', handler)
 		return () => document.removeEventListener('keydown', handler)
-	}, [pathname, params, linkToDialog, navigate, userId, isOwner, cmdkOpen])
+	}, [pathname, params, navigate, userId, isOwner, cmdkOpen])
 
 	return null
 }

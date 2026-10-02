@@ -11,7 +11,6 @@ import {cn} from '@/lib/utils'
 import {systemAppsKeyed} from '@/providers/apps'
 import {useWallpaper} from '@/providers/wallpaper'
 import {trpcReact} from '@/trpc/trpc'
-import {useLinkToDialog} from '@/utils/dialog'
 import {tw} from '@/utils/tw'
 
 import {DockItem} from './dock-item'
@@ -60,7 +59,6 @@ function useDockDimensions(options?: {isPreview?: boolean}): DockDimensionsPx {
 export function Dock() {
 	const {pathname} = useLocation()
 	const navigate = useNavigate()
-	const linkToDialog = useLinkToDialog()
 	const mouseX = useMotionValue(Infinity)
 	const settingsNotificationCount = useSettingsNotificationCount()
 	const {appsWithUpdates} = useAppsWithUpdates()
@@ -125,6 +123,18 @@ export function Dock() {
 					label={systemAppsKeyed['UMBREL_photos'].name}
 					mouseX={mouseX}
 				/>
+				{isOwner && (
+					<DockItem
+						iconSize={iconSize}
+						iconSizeZoomed={iconSizeZoomed}
+						to={systemAppsKeyed['UMBREL_machines'].systemAppTo}
+						open={pathname.startsWith(systemAppsKeyed['UMBREL_machines'].systemAppTo)}
+						bg={systemAppsKeyed['UMBREL_machines'].icon}
+						label={systemAppsKeyed['UMBREL_machines'].name}
+						mouseX={mouseX}
+					/>
+				)}
+
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
@@ -139,17 +149,6 @@ export function Dock() {
 					notificationCount={isMember ? undefined : appUpdateCount}
 					mouseX={mouseX}
 				/>
-				{isOwner && (
-					<DockItem
-						iconSize={iconSize}
-						iconSizeZoomed={iconSizeZoomed}
-						to={systemAppsKeyed['UMBREL_machines'].systemAppTo}
-						open={pathname.startsWith(systemAppsKeyed['UMBREL_machines'].systemAppTo)}
-						bg={systemAppsKeyed['UMBREL_machines'].icon}
-						label={systemAppsKeyed['UMBREL_machines'].name}
-						mouseX={mouseX}
-					/>
-				)}
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
@@ -163,7 +162,7 @@ export function Dock() {
 				<DockItem
 					iconSize={iconSize}
 					iconSizeZoomed={iconSizeZoomed}
-					to={linkToDialog('live-usage')}
+					to={systemAppsKeyed['UMBREL_live-usage'].systemAppTo}
 					open={pathname.startsWith(systemAppsKeyed['UMBREL_live-usage'].systemAppTo)}
 					bg={systemAppsKeyed['UMBREL_live-usage'].icon}
 					label={systemAppsKeyed['UMBREL_live-usage'].name}
@@ -200,13 +199,14 @@ export function DockPreview() {
 				iconSizeZoomed={iconSizeZoomed}
 			/>
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_app-store'].icon}
+				bg={systemAppsKeyed['UMBREL_machines'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}
 			/>
+
 			<DockItem
-				bg={systemAppsKeyed['UMBREL_machines'].icon}
+				bg={systemAppsKeyed['UMBREL_app-store'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}

@@ -20,7 +20,7 @@
 		"test:integration": "pnpm test integration.test",
 		"test:coverage": "open ./coverage/index.html",
 		"watch": "NODE_ENV=development nodemon --legacy-watch --ext js,json,ts --watch source --exec",
-		"dev": "FORCE_COLOR=1 UMBREL_UI_PROXY=http://localhost:3000 pnpm watch \"./source/cli.ts --data-directory /home/umbrel/umbrel --log-level verbose\"",
+		"dev": "FORCE_COLOR=1 UMBREL_UI_PROXY=http://127.0.0.1:3000 pnpm watch \"./source/cli.ts --data-directory /home/umbrel/umbrel --log-level verbose\"",
 		"dev:production-mode": "FORCE_COLOR=1 pnpm start --data-directory /home/umbrel/umbrel",
 		"todo": "git grep --line-number TODO -- ':!package.json'",
 		"test:vm": "pnpm test vm.test",

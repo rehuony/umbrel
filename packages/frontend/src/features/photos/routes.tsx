@@ -1,15 +1,14 @@
-import {lazy} from 'react'
 import {RouteObject} from 'react-router-dom'
 
 import {PhotosListing} from '@/features/photos/components/listing'
 import {SourcesOverview} from '@/features/photos/components/sources/sources-overview'
 
-const Photos = lazy(() => import('@/features/photos'))
-
 export const photosRoutes: RouteObject[] = [
 	{
 		path: 'photos',
-		element: <Photos />,
+		// Resolve the page before mounting its sheet, so the opening animation
+		// never starts with an empty Suspense fallback inside the window.
+		lazy: async () => ({Component: (await import('@/features/photos')).default}),
 		children: [
 			// All (everything)
 			{

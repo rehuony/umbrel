@@ -239,7 +239,7 @@ export default function CreateMachine() {
 		// No page-level fade: the hero monitor glides in from the catalog card
 		// via its shared layoutId, and a fading ancestor would hide it mid-flight.
 		// Each section settles on its own beat around the landing instead.
-		<div className='flex flex-col gap-8 px-4 py-6 md:p-12'>
+		<div className='flex flex-col gap-8 py-6'>
 			<div className='flex flex-col gap-10 md:flex-row md:gap-10 lg:gap-14'>
 				{/* Identity: the machine is the hero, its name editable in place. The
 				    column stays lean at md so the spec rows get the width, and

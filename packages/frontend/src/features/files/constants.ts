@@ -83,10 +83,9 @@ export const SUPPORTED_ARCHIVE_EXTRACT_EXTENSIONS = [
 
 export const SORT_BY_OPTIONS = [
 	{sortBy: 'name', labelTKey: 'files-sort.name'},
-	{sortBy: 'modified', labelTKey: 'files-sort.modified'},
 	{sortBy: 'size', labelTKey: 'files-sort.size'},
-	// {sortBy: 'created', labelTKey: 'files-sort.created'},
 	{sortBy: 'type', labelTKey: 'files-sort.type'},
+	{sortBy: 'modified', labelTKey: 'files-sort.modified'},
 ] as const
 
 // Keep these client-side sets aligned with PHOTO_EXTENSIONS and

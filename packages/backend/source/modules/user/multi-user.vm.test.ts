@@ -1280,6 +1280,7 @@ rm -rf '${home}/Photos/holiday-private'
 		)
 		await expect(umbreld.client.appStore.repositories.query()).resolves.toContainEqual({
 			url: repositoryUrl,
+			isDefault: false,
 			meta: {id: 'sparkles', name: 'Sparkles'},
 		})
 

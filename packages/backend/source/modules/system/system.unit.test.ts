@@ -1,4 +1,5 @@
 import {describe, afterEach, expect, test, vi} from 'vitest'
+import os from 'node:os'
 
 // Mocks
 import systemInformation from 'systeminformation'
@@ -7,6 +8,7 @@ import fse from 'fs-extra'
 
 import Umbreld from '../../index.js'
 import {getCpuTemperature, getMemoryUsage, getDiskUsage, getDiskUsageByPath, shutdown, reboot} from './system.js'
+import {systemWidgets} from './system-widgets.js'
 
 vi.mock('systeminformation')
 vi.mock('execa')
@@ -14,6 +16,40 @@ vi.mock('fs-extra')
 
 afterEach(() => {
 	vi.resetAllMocks()
+})
+
+describe('CPU widget', () => {
+	const umbreld = {
+		apps: {instances: []},
+		machines: {runtimeResourceUsage: async () => ({cpu: []})},
+	} as unknown as Umbreld
+
+	test.each([
+		{usage: 24, text: '24%', progress: 0.24, idle: '76%'},
+		{usage: 0.1, text: '0.10%', progress: 0.001, idle: '100%'},
+		{usage: 0, text: '0.0%', progress: 0, idle: '100%'},
+		{usage: 99.8, text: '100%', progress: 0.998, idle: '0.20%'},
+		{usage: 100, text: '100%', progress: 1, idle: '0.0%'},
+		{usage: 110, text: '100%', progress: 1, idle: '0.0%'},
+		{usage: -1, text: '0.0%', progress: 0, idle: '100%'},
+	])('returns total-system usage and bounded progress for $usage%', async ({usage, text, progress, idle}) => {
+		vi.mocked(execa.$, {partial: true}).mockResolvedValue({stdout: `PID %CPU\n1 ${usage * os.cpus().length}`})
+		const widget = await systemWidgets.cpu(umbreld)
+		expect(widget).toMatchObject({
+			type: 'text-with-progress',
+			title: 'CPU',
+			text,
+			progressLabel: `${idle} idle`,
+			link: '/live-usage?tab=cpu',
+			refresh: '10s',
+		})
+		expect(widget.progress).toBeCloseTo(progress, 6)
+	})
+
+	test('propagates sampling failures instead of displaying a fabricated idle reading', async () => {
+		vi.mocked(execa.$).mockRejectedValue(new Error('CPU sampling failed'))
+		await expect(systemWidgets.cpu(umbreld)).rejects.toThrow('CPU sampling failed')
+	})
 })
 
 describe('getCpuTemperature', () => {

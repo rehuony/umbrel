@@ -1,17 +1,16 @@
 // @vitest-environment jsdom
+import {readFileSync} from 'node:fs'
+import path from 'node:path'
 import {describe, expect, test, vi} from 'vitest'
 
-import {APP_STORE_REMOTE_API_BASE} from '@/features/app-store/constants'
 import type {RegistryApp} from '@/trpc/trpc'
 
 import {parseStorefront, resolveStorefront, STOREFRONT_LIMITS, type Storefront} from './storefront'
+import storefrontData from './storefront.json'
 
 vi.mock('@/utils/i18n', () => ({t: (key: string) => key}))
 
-// Artwork must be hosted alongside the API, so build fixture URLs from the
-// configured base — the tests then hold for both the production and the
-// temporary local-development API base.
-const artworkUrl = `${new URL(APP_STORE_REMOTE_API_BASE).origin}/images/redesign/banners/banner-openclaw.webp`
+const artworkUrl = '/assets/app-store/storefront/banner-openclaw.webp'
 const artwork = {dark: artworkUrl}
 
 const validFeed = {
@@ -37,6 +36,24 @@ const validFeed = {
 }
 
 describe('parseStorefront', () => {
+	test('ships valid editorial sections and every referenced banner locally', () => {
+		const feed = parseStorefront(storefrontData)
+		expect(feed.sections).toHaveLength(storefrontData.sections.length)
+		for (const section of feed.sections) {
+			const artwork =
+				section.type === 'spotlight'
+					? section.banners.map((banner) => banner.artwork)
+					: section.type === 'category-feature'
+						? [section.artwork]
+						: []
+			for (const {dark} of artwork) {
+				const bytes = readFileSync(path.resolve(import.meta.dirname, '../../../../public', dark.slice(1)))
+				expect(bytes.subarray(0, 4).toString()).toBe('RIFF')
+				expect(bytes.subarray(8, 12).toString()).toBe('WEBP')
+			}
+		}
+	})
+
 	test('accepts a valid feed', () => {
 		const storefront = parseStorefront(validFeed)
 		expect(storefront.sections).toHaveLength(3)
@@ -62,7 +79,7 @@ describe('parseStorefront', () => {
 		expect(() => parseStorefront('<!doctype html>')).toThrow()
 	})
 
-	test('rejects artwork not hosted alongside the API', () => {
+	test('rejects artwork outside the bundled storefront directory', () => {
 		const storefront = parseStorefront({
 			...validFeed,
 			sections: [

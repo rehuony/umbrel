@@ -1,14 +1,11 @@
 import {compute} from 'compute-scroll-into-view'
 import {motion, useReducedMotion} from 'motion/react'
 import {useEffect, useId, useRef} from 'react'
-import {useTranslation} from 'react-i18next'
 import {NavLink, useParams} from 'react-router-dom'
 
 import {FadeScroller} from '@/components/fade-scroller'
-import {DarkTooltip} from '@/components/ui/dark-tooltip'
 import {categoryIcon, categoryPath, DISCOVER_PATH} from '@/features/app-store/constants'
 import {getCategoryLabel, getNavCategories} from '@/features/app-store/data/catalog'
-import {useStorefront} from '@/features/app-store/hooks/use-storefront'
 import {cn} from '@/lib/utils'
 import {useAvailableApps} from '@/providers/available-apps'
 import {tw} from '@/utils/tw'
@@ -18,30 +15,18 @@ import {tw} from '@/utils/tw'
 export function CategoryRail() {
 	const {categoryId} = useParams<{categoryId: string}>()
 	const {appsGroupedByCategory} = useAvailableApps()
-	const {isUnavailable} = useStorefront()
 
 	// No category in the URL means we're on the Discover (index) route
 	const activeId = categoryId ?? 'discover'
-	// Discover already ends with the complete catalog, so the All apps pill
-	// only earns its place when Discover is unavailable (where navigation also
-	// defaults to it — see discover.tsx)
-	const navIds = getNavCategories(appsGroupedByCategory ?? {}).filter((navId) => navId !== 'all' || isUnavailable)
+	// Discover always includes the complete catalog, even without the optional feed.
+	const navIds = getNavCategories(appsGroupedByCategory ?? {}).filter((navId) => navId !== 'all')
 
-	return <CategoryRailPills activeId={activeId} navIds={navIds} discoverUnavailable={isUnavailable} />
+	return <CategoryRailPills activeId={activeId} navIds={navIds} />
 }
 
 const pillClass = tw`relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-14 font-medium -tracking-2 whitespace-nowrap outline-hidden transition-colors duration-200`
 
-function CategoryRailPills({
-	activeId,
-	navIds,
-	discoverUnavailable,
-}: {
-	activeId: string
-	navIds: string[]
-	discoverUnavailable: boolean
-}) {
-	const {t} = useTranslation()
+function CategoryRailPills({activeId, navIds}: {activeId: string; navIds: string[]}) {
 	const layoutId = useId()
 	const reduceMotion = Boolean(useReducedMotion())
 	const scrollerRef = useRef<HTMLDivElement>(null)
@@ -73,22 +58,6 @@ function CategoryRailPills({
 				const iconImg = icon && (
 					<img src={icon} alt='' className='relative z-10 h-6 w-6 object-contain' draggable={false} />
 				)
-
-				// Discover is remote editorial content; without it the pill waits,
-				// disabled, and navigation defaults to All apps instead
-				if (navId === 'discover' && discoverUnavailable) {
-					return (
-						<DarkTooltip key={navId} label={t('app-store.discover-unavailable')} side='bottom'>
-							<span
-								aria-disabled
-								className={cn(pillClass, 'cursor-not-allowed text-white/30 ring-1 ring-white/7 ring-inset')}
-							>
-								{iconImg && <span className='opacity-40'>{iconImg}</span>}
-								<span className='relative z-10 pt-[1px]'>{getCategoryLabel(navId)}</span>
-							</span>
-						</DarkTooltip>
-					)
-				}
 
 				const isActive = navId === activeId
 				return (
