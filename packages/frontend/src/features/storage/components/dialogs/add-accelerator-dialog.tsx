@@ -123,11 +123,11 @@ export function AddAcceleratorDialog({open, onOpenChange, devices, addAccelerato
 					{isOperationInProgress && <OperationInProgressBanner variant='wait' />}
 
 					<DialogFooter>
-						<Button variant='primary' onClick={handleAdd} disabled={isOperationInProgress}>
-							{t('storage-manager.ssd-acceleration.enable')}
-						</Button>
 						<Button variant='default' onClick={() => onOpenChange(false)}>
 							{t('cancel')}
+						</Button>
+						<Button variant='primary' onClick={handleAdd} disabled={isOperationInProgress}>
+							{t('storage-manager.ssd-acceleration.enable')}
 						</Button>
 					</DialogFooter>
 				</div>

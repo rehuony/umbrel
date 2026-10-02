@@ -26,6 +26,7 @@ export default function ShutdownDialog() {
 					<AlertDialogTitle>{t('shut-down.confirm.title')}</AlertDialogTitle>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel disabled={isPowerActionPending}>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction
 						variant='destructive'
 						onClick={(e) => {
@@ -37,7 +38,6 @@ export default function ShutdownDialog() {
 					>
 						{t('shut-down.confirm.submit')}
 					</AlertDialogAction>
-					<AlertDialogCancel disabled={isPowerActionPending}>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

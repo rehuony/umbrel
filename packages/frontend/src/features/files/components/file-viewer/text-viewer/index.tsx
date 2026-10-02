@@ -820,10 +820,10 @@ export default function TextViewer({item}: TextViewerProps) {
 						<AlertDialogDescription>{t('files-text-editor.discard-description')}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction variant='destructive' onClick={handleDiscard}>
 							{t('files-text-editor.discard-confirm')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

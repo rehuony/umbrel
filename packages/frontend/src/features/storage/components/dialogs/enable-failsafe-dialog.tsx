@@ -168,11 +168,11 @@ export function EnableFailsafeDialog({
 					{isOperationInProgress && <OperationInProgressBanner variant='wait' />}
 
 					<DialogFooter>
-						<Button variant='primary' onClick={handleEnable} disabled={!plan.satisfied || isOperationInProgress}>
-							{t('storage-manager.enable-failsafe.enable')}
-						</Button>
 						<Button variant='default' onClick={() => onOpenChange(false)}>
 							{t('cancel')}
+						</Button>
+						<Button variant='primary' onClick={handleEnable} disabled={!plan.satisfied || isOperationInProgress}>
+							{t('storage-manager.enable-failsafe.enable')}
 						</Button>
 					</DialogFooter>
 				</div>

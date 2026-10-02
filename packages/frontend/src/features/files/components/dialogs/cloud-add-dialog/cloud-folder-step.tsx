@@ -115,7 +115,7 @@ export function CloudFolderStep({
 						)}
 					</div>
 				</div>
-				<DialogFooter className='flex-col-reverse justify-center gap-2 pt-6'>
+				<DialogFooter className='flex-col-reverse gap-2 pt-6'>
 					<Button size='dialog' onClick={onBack}>
 						{t('back')}
 					</Button>
@@ -136,7 +136,7 @@ export function CloudFolderStep({
 				<CloudLinkDiagram layoutKey={layoutKey} logo={logo} morph={morph} />
 				<p className='max-w-[340px] text-13 leading-relaxed text-white/60'>{body}</p>
 			</div>
-			<DialogFooter className='flex-col-reverse justify-center gap-2 pt-4'>
+			<DialogFooter className='flex-col-reverse gap-2 pt-4'>
 				<Button size='dialog' onClick={onBack}>
 					{t('back')}
 				</Button>

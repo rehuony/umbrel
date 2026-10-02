@@ -129,11 +129,11 @@ export function AddMirrorDialog({open, onOpenChange, devices, addMirrorAsync}: A
 					{isOperationInProgress && <OperationInProgressBanner variant='wait' />}
 
 					<DialogFooter>
-						<Button variant='primary' onClick={handleAdd} disabled={isOperationInProgress}>
-							{t('storage-manager.add-mirror.add-drives')}
-						</Button>
 						<Button variant='default' onClick={() => onOpenChange(false)}>
 							{t('cancel')}
+						</Button>
+						<Button variant='primary' onClick={handleAdd} disabled={isOperationInProgress}>
+							{t('storage-manager.add-mirror.add-drives')}
 						</Button>
 					</DialogFooter>
 				</div>

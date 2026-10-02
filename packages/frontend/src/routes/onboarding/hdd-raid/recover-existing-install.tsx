@@ -53,10 +53,10 @@ export function HddRecoverExistingInstall({
 					<AlertDialogDescription>{t('onboarding.raid.recovery.set-up-new-dialog.description')}</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction onClick={onSetUpAsNew}>
 						{t('onboarding.raid.recovery.set-up-new-dialog.confirm')}
 					</AlertDialogAction>
-					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

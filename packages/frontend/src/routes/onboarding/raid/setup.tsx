@@ -879,8 +879,8 @@ export default function RaidSetup({variant = 'pro'}: {variant?: RaidOnboardingVa
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogAction onClick={() => shutdown()}>{t('shut-down')}</AlertDialogAction>
 						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+						<AlertDialogAction onClick={() => shutdown()}>{t('shut-down')}</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

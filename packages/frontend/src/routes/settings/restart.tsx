@@ -26,6 +26,7 @@ export default function RestartDialog() {
 					<AlertDialogTitle>{t('restart.confirm.title')}</AlertDialogTitle>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel disabled={isPowerActionPending}>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction
 						variant='destructive'
 						className='px-6'
@@ -38,7 +39,6 @@ export default function RestartDialog() {
 					>
 						{t('restart.confirm.submit')}
 					</AlertDialogAction>
-					<AlertDialogCancel disabled={isPowerActionPending}>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

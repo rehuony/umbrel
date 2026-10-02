@@ -914,6 +914,7 @@ export function StorageSettingsView({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='destructive'
 							onClick={() => {
@@ -923,7 +924,6 @@ export function StorageSettingsView({
 						>
 							{t('app-settings.storage.start-fresh')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

@@ -43,12 +43,12 @@ export function ConnectExistingModal({
 					<FormLabel className='text-13 opacity-60'>{t('backups-restore.encryption-password')}</FormLabel>
 					<PasswordInput value={password} onValueChange={onPasswordChange} />
 				</div>
-				<DialogFooter className='justify-center gap-2 pt-2'>
-					<Button variant='primary' size='dialog' disabled={!password || isConnecting} onClick={onConnect}>
-						{t('connect')}
-					</Button>
+				<DialogFooter className='gap-2 pt-2'>
 					<Button variant='default' size='dialog' onClick={onClose} disabled={isConnecting}>
 						{t('cancel')}
+					</Button>
+					<Button variant='primary' size='dialog' disabled={!password || isConnecting} onClick={onConnect}>
+						{t('connect')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

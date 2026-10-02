@@ -28,6 +28,7 @@ export function ShutdownConfirmationDialog({open, onOpenChange}: ShutdownConfirm
 					<AlertDialogTitle>{t('shut-down.confirm.title')}</AlertDialogTitle>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction
 						onClick={(e) => {
 							e.preventDefault()
@@ -36,7 +37,6 @@ export function ShutdownConfirmationDialog({open, onOpenChange}: ShutdownConfirm
 					>
 						{t('shut-down.confirm.submit')}
 					</AlertDialogAction>
-					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

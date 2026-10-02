@@ -92,6 +92,7 @@ export function CloudDisconnectDialog({
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction
 						variant='destructive'
 						className='px-6'
@@ -105,7 +106,6 @@ export function CloudDisconnectDialog({
 					>
 						{t('files-cloud.disconnect-confirm-action')}
 					</AlertDialogAction>
-					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

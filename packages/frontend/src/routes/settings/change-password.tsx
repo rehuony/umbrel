@@ -58,11 +58,11 @@ export default function ChangePasswordDialog() {
 								<AnimatedInputError>{formError}</AnimatedInputError>
 							</div>
 							<DialogFooter>
-								<Button type='submit' size='dialog' variant='primary'>
-									{t('confirm')}
-								</Button>
 								<Button type='button' size='dialog' onClick={() => dialogProps.onOpenChange(false)}>
 									{t('cancel')}
+								</Button>
+								<Button type='submit' size='dialog' variant='primary'>
+									{t('confirm')}
 								</Button>
 							</DialogFooter>
 						</fieldset>

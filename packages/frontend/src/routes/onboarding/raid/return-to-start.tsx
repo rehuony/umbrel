@@ -31,6 +31,7 @@ export function ReturnToStart() {
 						<AlertDialogDescription>{t('onboarding.raid.return-to-start-warning')}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={() => {
 								window.location.href = '/'
@@ -38,7 +39,6 @@ export function ReturnToStart() {
 						>
 							{t('onboarding.raid.return-to-start')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

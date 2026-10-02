@@ -42,10 +42,10 @@ export function OSUpdateRequiredDialog({
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction variant='primary' className='px-6' onClick={handleConfirm}>
 						{t('app.os-update-required.confirm')}
 					</AlertDialogAction>
-					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

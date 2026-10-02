@@ -38,7 +38,7 @@ export function NotFound() {
 						<AlertDialogTitle>{t('not-found-404')}</AlertDialogTitle>
 						<AlertDialogDescription></AlertDialogDescription>
 					</AlertDialogHeader>
-					<AlertDialogFooter>
+					<AlertDialogFooter className='flex-col md:justify-center'>
 						<AlertDialogAction onClick={() => navigate(-1)}>{t('not-found-404.back')}</AlertDialogAction>
 						<AlertDialogCancel onClick={() => navigate('/')}>{t('not-found-404.home')}</AlertDialogCancel>
 					</AlertDialogFooter>

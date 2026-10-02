@@ -552,10 +552,10 @@ export default function MachineSettings() {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel onClick={handleDoItLater}>{t('machines.settings-do-it-later')}</AlertDialogCancel>
 						<AlertDialogAction variant='primary' onClick={handleShutDownNow}>
 							{t('machines.settings-shut-down-now')}
 						</AlertDialogAction>
-						<AlertDialogCancel onClick={handleDoItLater}>{t('machines.settings-do-it-later')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

@@ -26,12 +26,12 @@ export function AlreadyConfiguredModal({
 					<DialogTitle>{t('backups.modals.already-in-use.title')}</DialogTitle>
 					<DialogDescription>{t('backups.modals.already-in-use.description')}</DialogDescription>
 				</DialogHeader>
-				<DialogFooter className='justify-center gap-2 pt-2'>
-					<Button variant='primary' size='dialog' onClick={onManage}>
-						{t('backups.modals.already-in-use.manage')}
-					</Button>
+				<DialogFooter className='gap-2 pt-2'>
 					<Button variant='default' size='dialog' onClick={onClose}>
 						{t('close')}
+					</Button>
+					<Button variant='primary' size='dialog' onClick={onManage}>
+						{t('backups.modals.already-in-use.manage')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

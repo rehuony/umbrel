@@ -42,6 +42,10 @@ export const GenericConfirmationDialog: React.FC<GenericConfirmationDialogProps>
 	}
 
 	const {title, message, actions, icon: IconComponent, showApplyToAll} = options
+	const orderedActions = [
+		...actions.filter((action) => action.value === 'cancel'),
+		...actions.filter((action) => action.value !== 'cancel'),
+	]
 
 	// If the action represents a user cancellation (with the value "cancel"),
 	// propagate the promise rejection so callers can distinguish cancellation from
@@ -73,8 +77,8 @@ export const GenericConfirmationDialog: React.FC<GenericConfirmationDialogProps>
 				</AlertDialogHeader>
 
 				{/* Action Buttons */}
-				<div className='flex flex-col justify-center gap-y-2 md:flex-row md:gap-x-2 md:gap-y-0'>
-					{actions.map((action) => (
+				<AlertDialogFooter className='gap-2'>
+					{orderedActions.map((action) => (
 						<AlertDialogAction
 							key={action.label}
 							variant={action.variant || 'default'}
@@ -84,11 +88,11 @@ export const GenericConfirmationDialog: React.FC<GenericConfirmationDialogProps>
 							{action.label}
 						</AlertDialogAction>
 					))}
-				</div>
+				</AlertDialogFooter>
 
 				{/* "Apply to all" checkbox (only if enabled) */}
 				{showApplyToAll && (
-					<AlertDialogFooter>
+					<AlertDialogFooter className='flex-col md:justify-center'>
 						<div className={cn(checkboxContainerClass)}>
 							<Checkbox
 								id={checkboxId}

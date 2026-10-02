@@ -1034,10 +1034,10 @@ export default function UsersDialog() {
 					<AlertDialogDescription>{t('users.delete-confirm.description')}</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel disabled={isDeleting}>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction variant='destructive' disabled={isDeleting} onClick={handleDelete}>
 						{t('users.delete')}
 					</AlertDialogAction>
-					<AlertDialogCancel disabled={isDeleting}>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

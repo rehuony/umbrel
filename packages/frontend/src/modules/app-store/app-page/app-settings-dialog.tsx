@@ -629,6 +629,7 @@ function AppSettingsDialogForApp({
 						<AlertDialogDescription>{t('app-settings.auth.confirm-enable-description')}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='primary'
 							onClick={() => {
@@ -638,7 +639,6 @@ function AppSettingsDialogForApp({
 						>
 							{t('app-settings.auth.confirm-enable-action')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
@@ -652,6 +652,7 @@ function AppSettingsDialogForApp({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='destructive'
 							onClick={() => {
@@ -661,7 +662,6 @@ function AppSettingsDialogForApp({
 						>
 							{t('app-settings.auth.confirm-disable-action')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
@@ -678,6 +678,7 @@ function AppSettingsDialogForApp({
 						<AlertDialogDescription>{t('app-settings.discard-description', {app: app.name})}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('app-settings.keep-editing')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='destructive'
 							onClick={() => {
@@ -689,7 +690,6 @@ function AppSettingsDialogForApp({
 						>
 							{t('app-settings.discard')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('app-settings.keep-editing')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

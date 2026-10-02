@@ -560,11 +560,11 @@ export function AddToRaidDialog({
 						{isOperationInProgress && <OperationInProgressBanner variant='wait' />}
 
 						<DialogFooter>
-							<Button variant='primary' onClick={handleAddDevice} disabled={isBlockedBySize || isOperationInProgress}>
-								{isHdd ? t('storage-manager.add-to-raid.add-drive') : t('storage-manager.add-to-raid.add-ssd')}
-							</Button>
 							<Button variant='default' onClick={() => onOpenChange(false)}>
 								{t('cancel')}
+							</Button>
+							<Button variant='primary' onClick={handleAddDevice} disabled={isBlockedBySize || isOperationInProgress}>
+								{isHdd ? t('storage-manager.add-to-raid.add-drive') : t('storage-manager.add-to-raid.add-ssd')}
 							</Button>
 						</DialogFooter>
 					</div>
@@ -587,6 +587,7 @@ export function AddToRaidDialog({
 						<p>{t('storage-manager.add-to-raid.restart-after')}</p>
 					</div>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='primary'
 							disabled={isOperationInProgress}
@@ -597,7 +598,6 @@ export function AddToRaidDialog({
 						>
 							{t('storage-manager.add-to-raid.understand-continue')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

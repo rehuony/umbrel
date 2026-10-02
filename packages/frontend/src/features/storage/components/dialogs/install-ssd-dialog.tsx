@@ -83,11 +83,11 @@ export function InstallSsdDialog({open, onOpenChange, isUmbrelPro, isHdd = false
 						{isOperationInProgress && <OperationInProgressBanner variant='shutdown-safe' />}
 
 						<DialogFooter>
-							<Button variant='primary' onClick={() => setShowShutdownConfirmation(true)}>
-								{t('shut-down')}
-							</Button>
 							<Button variant='default' onClick={() => onOpenChange(false)}>
 								{t('cancel')}
+							</Button>
+							<Button variant='primary' onClick={() => setShowShutdownConfirmation(true)}>
+								{t('shut-down')}
 							</Button>
 						</DialogFooter>
 					</div>

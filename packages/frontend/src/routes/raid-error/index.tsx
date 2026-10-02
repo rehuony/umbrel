@@ -213,6 +213,7 @@ export default function RaidErrorScreen() {
 						<AlertDialogDescription>{t('raid-error.shutdown-dialog.description')}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel disabled={busy}>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='destructive'
 							onClick={(e) => {
@@ -223,7 +224,6 @@ export default function RaidErrorScreen() {
 						>
 							{t('shut-down')}
 						</AlertDialogAction>
-						<AlertDialogCancel disabled={busy}>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
@@ -236,6 +236,7 @@ export default function RaidErrorScreen() {
 						<AlertDialogDescription>{t('raid-error.factory-reset-dialog.description')}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel disabled={busy}>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='destructive'
 							onClick={(e) => {
@@ -246,7 +247,6 @@ export default function RaidErrorScreen() {
 						>
 							{t('factory-reset')}
 						</AlertDialogAction>
-						<AlertDialogCancel disabled={busy}>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

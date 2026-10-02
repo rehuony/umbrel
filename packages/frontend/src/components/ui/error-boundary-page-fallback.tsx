@@ -61,7 +61,7 @@ export function ErrorBoundaryPageFallback({error}: Partial<FallbackProps> = {}) 
 						<AlertDialogTitle>{t('something-went-wrong')}</AlertDialogTitle>
 						<AlertDialogDescription></AlertDialogDescription>
 					</AlertDialogHeader>
-					<AlertDialogFooter>
+					<AlertDialogFooter className='flex-col md:justify-center'>
 						<AlertDialogAction onClick={() => navigate('/')}>{t('not-found-404.home')}</AlertDialogAction>
 						<Button size='dialog' variant='default' onClick={() => downloadLogs()}>
 							{t('download-logs')}

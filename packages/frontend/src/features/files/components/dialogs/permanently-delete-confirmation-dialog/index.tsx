@@ -72,6 +72,7 @@ export default function PermanentlyDeleteConfirmationDialog() {
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
+					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction
 						variant='destructive'
 						className='px-6'
@@ -82,7 +83,6 @@ export default function PermanentlyDeleteConfirmationDialog() {
 					>
 						{t('files-permanently-delete.confirm')}
 					</AlertDialogAction>
-					<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

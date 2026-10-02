@@ -322,15 +322,15 @@ export function SwapDialog({
 						{isOperationInProgress && <OperationInProgressBanner variant='wait' />}
 
 						<DialogFooter>
+							<Button variant='default' onClick={() => onOpenChange(false)}>
+								{t('cancel')}
+							</Button>
 							<Button
 								variant='primary'
 								onClick={handleReplace}
 								disabled={!selectedDevice || !oldDevice || isOperationInProgress}
 							>
 								{t('storage-manager.replace')}
-							</Button>
-							<Button variant='default' onClick={() => onOpenChange(false)}>
-								{t('cancel')}
 							</Button>
 						</DialogFooter>
 					</div>
@@ -422,11 +422,11 @@ export function SwapDialog({
 							{isOperationInProgress && <OperationInProgressBanner variant='shutdown-safe' />}
 
 							<DialogFooter>
-								<Button variant='primary' onClick={() => setShowShutdownConfirmation(true)}>
-									{t('shut-down')}
-								</Button>
 								<Button variant='default' onClick={() => onOpenChange(false)}>
 									{t('cancel')}
+								</Button>
+								<Button variant='primary' onClick={() => setShowShutdownConfirmation(true)}>
+									{t('shut-down')}
 								</Button>
 							</DialogFooter>
 						</div>
@@ -590,11 +590,11 @@ export function SwapDialog({
 						{isOperationInProgress && <OperationInProgressBanner variant='shutdown-safe' />}
 
 						<DialogFooter>
-							<Button variant='primary' onClick={() => setShowShutdownConfirmation(true)}>
-								{t('shut-down')}
-							</Button>
 							<Button variant='default' onClick={() => onOpenChange(false)}>
 								{t('cancel')}
+							</Button>
+							<Button variant='primary' onClick={() => setShowShutdownConfirmation(true)}>
+								{t('shut-down')}
 							</Button>
 						</DialogFooter>
 					</div>

@@ -73,6 +73,7 @@ export function WifiDrawerOrDialogContent() {
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 								<AlertDialogFooter>
+									<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 									<AlertDialogAction
 										variant='destructive'
 										onClick={() => {
@@ -84,7 +85,6 @@ export function WifiDrawerOrDialogContent() {
 									>
 										{t('disable')}
 									</AlertDialogAction>
-									<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 								</AlertDialogFooter>
 							</AlertDialogContent>
 						</AlertDialog>
@@ -365,6 +365,7 @@ function ConnectWithConfirmation({onConnect, ...rest}: ConnectProps) {
 						<AlertDialogDescription>{t('wifi-dangerous-change-confirmation-description')}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
+						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 						<AlertDialogAction
 							variant='destructive'
 							onClick={() => {
@@ -375,7 +376,6 @@ function ConnectWithConfirmation({onConnect, ...rest}: ConnectProps) {
 						>
 							{t('change')}
 						</AlertDialogAction>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

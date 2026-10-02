@@ -145,10 +145,10 @@ export function UninstallConfirmationContent({
 				</div>
 			) : null}
 			<AlertDialogFooter>
+				<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 				<AlertDialogAction variant='destructive' onClick={onConfirm}>
 					{requiresUninstallAnyway ? t('app.uninstall.confirm.submit-anyway') : t('app.uninstall.confirm.submit')}
 				</AlertDialogAction>
-				<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 			</AlertDialogFooter>
 		</AlertDialogContent>
 	)

@@ -8,7 +8,7 @@ export const dialogContentClass = `${materialSurfaceClasses.modal} fixed left-[5
 export const dialogContentAnimationClass = tw`data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95`
 export const dialogContentAnimationSlideClass = tw``
 
-export const dialogFooterClass = tw`flex flex-col gap-2.5 md:flex-row`
+export const dialogFooterClass = tw`flex flex-col-reverse gap-2.5 md:flex-row md:justify-end`
 
 /**
  * Radix modals treat any pointerdown outside their content as a dismiss

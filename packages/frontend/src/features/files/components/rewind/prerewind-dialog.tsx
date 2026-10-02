@@ -186,6 +186,9 @@ export function PreRewindDialog({
 					)}
 				</div>
 				<DialogFooter className='mt-2 gap-2 pt-2'>
+					<Button size='dialog' onClick={() => onOpenChange(false)}>
+						{t('cancel')}
+					</Button>
 					{/* We disable the Start Rewind button if the selected repo's device isn't connected */}
 					<Button
 						variant='primary'
@@ -199,9 +202,6 @@ export function PreRewindDialog({
 						}}
 					>
 						{t('backups-rewind.start')}
-					</Button>
-					<Button size='dialog' onClick={() => onOpenChange(false)}>
-						{t('cancel')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

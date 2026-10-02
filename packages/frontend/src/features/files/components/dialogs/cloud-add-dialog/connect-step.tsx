@@ -165,7 +165,7 @@ function OAuthConnect({
 				<div className='flex flex-col items-center gap-4 py-4 text-center'>
 					<p className='max-w-[340px] text-13 leading-relaxed text-white/60'>{failureText}</p>
 				</div>
-				<DialogFooter className='flex-col-reverse justify-center gap-2 pt-4'>
+				<DialogFooter className='flex-col-reverse gap-2 pt-4'>
 					<Button size='dialog' onClick={onBack}>
 						{t('back')}
 					</Button>
@@ -200,7 +200,7 @@ function OAuthConnect({
 					onCodeChange={setCode}
 					onSubmit={(value) => oauth.complete(value)}
 				/>
-				<DialogFooter className='flex-col-reverse justify-center gap-2 pt-4'>
+				<DialogFooter className='flex-col-reverse gap-2 pt-4'>
 					<Button size='dialog' disabled={oauth.isCompleting} onClick={oauth.cancel}>
 						{t('cancel')}
 					</Button>
@@ -228,7 +228,7 @@ function OAuthConnect({
 					{t('files-cloud.oauth-description', {provider: provider.displayName})}
 				</p>
 			</div>
-			<DialogFooter className='flex-col-reverse justify-center gap-2 pt-4'>
+			<DialogFooter className='flex-col-reverse gap-2 pt-4'>
 				<Button size='dialog' onClick={onBack}>
 					{t('back')}
 				</Button>
@@ -374,7 +374,7 @@ function WebDavConnect({
 			<FieldRow label={t('files-cloud.webdav-password')}>
 				<PasswordInput value={password} onValueChange={setPassword} />
 			</FieldRow>
-			<DialogFooter className='flex-col-reverse justify-center gap-2 pt-2'>
+			<DialogFooter className='flex-col-reverse gap-2 pt-2'>
 				<Button size='dialog' onClick={onBack}>
 					{t('back')}
 				</Button>
@@ -465,7 +465,7 @@ function WebDavFlavorConnect({
 			>
 				<PasswordInput value={password} onValueChange={setPassword} />
 			</FieldRow>
-			<DialogFooter className='flex-col-reverse justify-center gap-2 pt-2'>
+			<DialogFooter className='flex-col-reverse gap-2 pt-2'>
 				<Button size='dialog' onClick={onBack}>
 					{t('back')}
 				</Button>
@@ -630,7 +630,7 @@ function ICloudConnect({
 						</>
 					)}
 				</div>
-				<DialogFooter className='flex-col-reverse justify-center gap-2 pt-4'>
+				<DialogFooter className='flex-col-reverse gap-2 pt-4'>
 					<Button size='dialog' disabled={isChallengePending} onClick={restartAfterFailure}>
 						{t('cancel')}
 					</Button>
@@ -663,7 +663,7 @@ function ICloudConnect({
 				<PasswordInput value={password} onValueChange={setPassword} />
 			</FieldRow>
 			<p className='text-12 text-white/50'>{t('files-cloud.icloud-note')}</p>
-			<DialogFooter className='flex-col-reverse justify-center gap-2 pt-2'>
+			<DialogFooter className='flex-col-reverse gap-2 pt-2'>
 				<Button size='dialog' onClick={onBack}>
 					{t('back')}
 				</Button>

@@ -327,7 +327,7 @@ export function BackupsRestoreWizard() {
 								sizeVariant='short'
 							/>
 						</div>
-						<AlertDialogFooter className='flex justify-start md:justify-start'>
+						<AlertDialogFooter>
 							<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
 							<AlertDialogAction
 								variant='destructive'
