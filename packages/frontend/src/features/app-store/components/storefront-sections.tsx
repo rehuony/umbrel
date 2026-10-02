@@ -94,10 +94,10 @@ export function SpotlightCarousel({banners}: {banners: SpotlightBannerData[]}) {
 		>
 			<Carousel
 				setApi={setApi}
-				className='-mx-3 md:-mx-[40px] xl:-mx-[70px]'
+				className='-mx-3 md:-mx-[40px] xl:-mx-[60px]'
 				opts={{align: 'center', containScroll: 'trimSnaps'}}
 			>
-				<CarouselContent containerClassName='px-3 md:px-[40px] xl:px-[70px]' className='-ml-3 md:-ml-4'>
+				<CarouselContent containerClassName='px-3 md:px-[40px] xl:px-[60px]' className='-ml-3 md:-ml-4'>
 					{shown.map((banner) => (
 						<CarouselItem
 							key={banner.app.id}

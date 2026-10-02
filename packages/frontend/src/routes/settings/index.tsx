@@ -121,8 +121,6 @@ function PickerDialogRedirect({dialogKey}: {dialogKey: PickerDialogKey}) {
 }
 
 export function Settings() {
-	const {t} = useTranslation()
-	const title = t('settings')
 	const isMobile = useIsMobile() && !IS_ANDROID
 
 	// Wait for the role before mounting the settings content so role-restricted
@@ -132,8 +130,8 @@ export function Settings() {
 
 	return (
 		<div className='contents lg:flex lg:h-full lg:min-h-0 lg:flex-col'>
-			<SheetHeader className='px-2.5 lg:shrink-0 lg:px-0.5 lg:pt-12 lg:pb-5'>
-				<SheetTitle className='leading-none lg:text-36'>{title}</SheetTitle>
+			<SheetHeader className='lg:shrink-0 lg:pt-12 lg:pb-5'>
+				<SheetTitle variant='window'>Settings</SheetTitle>
 			</SheetHeader>
 			<ErrorBoundary FallbackComponent={ErrorBoundaryCardFallback}>
 				{userQ.isLoading ? null : isMobile ? (

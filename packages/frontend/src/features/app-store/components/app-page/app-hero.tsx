@@ -109,7 +109,7 @@ function DesktopAppHero({app, renderActions}: HeroProps) {
 						style={{y: wrapperY}}
 						className='pointer-events-none absolute inset-x-0 top-0 z-[55]'
 					>
-						<div className='relative mx-3 h-[120px] md:mx-[40px] xl:mx-[70px]'>
+						<div className='relative mx-3 h-[120px] md:mx-[40px] xl:mx-[60px]'>
 							<motion.div
 								style={{x: iconX, y: iconY, scale: iconScale, borderRadius: iconRadius}}
 								className='absolute top-0 left-0 origin-top-left'

@@ -111,12 +111,8 @@ export function SheetLayout() {
 						>
 							<div
 								className={cn(
-									'flex flex-col gap-5 px-3 pt-6 md:px-[40px] md:pt-12',
-									isSettingsRoute
-										? 'lg:h-full lg:min-h-0 lg:gap-0 lg:pt-0 xl:px-[60px]'
-										: isFullHeightFeatureRoute
-											? 'xl:px-[60px]'
-											: 'xl:px-[70px]',
+									'flex flex-col gap-5 px-3 pt-6 md:px-[40px] md:pt-12 xl:px-[60px]',
+									isSettingsRoute && 'lg:h-full lg:min-h-0 lg:gap-0 lg:pt-0',
 								)}
 							>
 								<Suspense fallback={<SheetTitle className='sr-only'>{t('loading')}</SheetTitle>}>

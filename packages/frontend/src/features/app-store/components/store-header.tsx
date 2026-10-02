@@ -39,7 +39,8 @@ import {useLinkToDialog} from '@/utils/dialog'
 type StoreSearch = ReturnType<typeof useStoreSearch>
 type UpdatesState = ReturnType<typeof useAppsWithUpdates>
 
-const TITLE_ROW_HEIGHT = 36
+const TITLE_ROW_HEIGHT = 44
+const CONTROLS_HEIGHT = 36
 const ROW_GAP = 20
 const RAIL_HEIGHT = 44
 const HEADER_HEIGHT = TITLE_ROW_HEIGHT + ROW_GAP + RAIL_HEIGHT
@@ -113,7 +114,11 @@ function DesktopStoreHeader({
 
 	const titleOpacity = useTransform(collapseProgress, [0, 0.45], [1, 0])
 	const titleY = useTransform(collapseProgress, [0, 1], [0, -8])
-	const clusterY = useTransform(collapseProgress, [0, 1], [0, (BAR_HEIGHT - TITLE_ROW_HEIGHT) / 2])
+	const clusterY = useTransform(
+		collapseProgress,
+		[0, 1],
+		[(TITLE_ROW_HEIGHT - CONTROLS_HEIGHT) / 2, (BAR_HEIGHT - CONTROLS_HEIGHT) / 2],
+	)
 	const railY = useTransform(collapseProgress, [0, 1], [TITLE_ROW_HEIGHT + ROW_GAP, (BAR_HEIGHT - RAIL_HEIGHT) / 2])
 	const railRight = useTransform(collapseProgress, [0, 1], [0, clusterWidth + 16])
 
@@ -130,9 +135,11 @@ function DesktopStoreHeader({
 						className={cn('pointer-events-none absolute inset-x-0 top-0 z-[55]', storeRevealSoftClass)}
 						style={{y: wrapperY, height: headerHeight}}
 					>
-						<div className='relative mx-3 h-full md:mx-[40px] xl:mx-[70px]'>
+						<div className='relative mx-3 h-full md:mx-[40px] xl:mx-[60px]'>
 							<motion.div style={{opacity: titleOpacity, y: titleY}} className='absolute top-0 left-0'>
-								<SheetTitle className='leading-none whitespace-nowrap lg:text-36'>{t('app-store.title')}</SheetTitle>
+								<SheetTitle variant='window' className='whitespace-nowrap'>
+									{t('app-store.title')}
+								</SheetTitle>
 							</motion.div>
 							<motion.div
 								ref={clusterRef}
@@ -177,8 +184,10 @@ function MobileStoreHeader({
 		<SheetHeader className={cn('gap-4', storeRevealSoftClass)}>
 			{/* The sheet's close button sits in this row's top-right corner on phones;
 			    the right padding keeps the controls clear of it */}
-			<div className='flex flex-wrap items-center gap-x-3 gap-y-3 pr-8 pl-2.5'>
-				<SheetTitle className='leading-none whitespace-nowrap'>{t('app-store.title')}</SheetTitle>
+			<div className='flex flex-wrap items-center gap-x-3 gap-y-3 pr-8'>
+				<SheetTitle variant='window' className='whitespace-nowrap'>
+					{t('app-store.title')}
+				</SheetTitle>
 				<div className='flex min-w-0 flex-1 items-center justify-end gap-2'>
 					<StoreSearchInput inputRef={search.setActiveInput} value={search.query} onValueChange={search.setQuery} />
 					{showOwnerControls && <OwnerControls updates={updates} />}
@@ -285,10 +294,6 @@ function CommunityAppsMenuTrigger() {
 				<TbDots className='h-4.5 w-4.5' />
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className='p-1' align='end'>
-				<DropdownMenuItem asChild>
-					<Link to={{search: addLinkSearchParams({dialog: 'import-compose'})}}>{t('panel-catalog.import-title')}</Link>
-				</DropdownMenuItem>
-				<DropdownMenuSeparator className='-mx-1 my-1' />
 				{communityStores.length === 0 ? (
 					<DropdownMenuItem asChild>
 						<Link to={manageLink}>{t('app-store.menu.community-app-stores')}</Link>
@@ -317,6 +322,10 @@ function CommunityAppsMenuTrigger() {
 						</DropdownMenuPortal>
 					</DropdownMenuSub>
 				)}
+				<DropdownMenuSeparator className='-mx-1 my-1' />
+				<DropdownMenuItem asChild>
+					<Link to={{search: addLinkSearchParams({dialog: 'import-compose'})}}>{t('panel-catalog.import-title')}</Link>
+				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	)

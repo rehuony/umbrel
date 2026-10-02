@@ -113,15 +113,21 @@ SheetFooter.displayName = 'SheetFooter'
 
 function SheetTitle({
 	className,
+	variant = 'default',
 	ref,
 	...props
 }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Title> & {
+	variant?: 'default' | 'window'
 	ref?: React.Ref<React.ComponentRef<typeof SheetPrimitive.Title>>
 }) {
 	return (
 		<SheetPrimitive.Title
 			ref={ref}
-			className={cn('text-24 font-bold -tracking-3 text-white/75 md:text-48', className)}
+			className={cn(
+				'text-24 font-bold -tracking-3 text-white/75',
+				variant === 'window' ? 'flex min-h-11 items-center leading-none md:text-36' : 'md:text-48',
+				className,
+			)}
 			{...props}
 		/>
 	)

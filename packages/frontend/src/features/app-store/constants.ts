@@ -94,7 +94,7 @@ export const appGridClass = tw`grid sm:grid-cols-2 xl:grid-cols-3 gap-x-2.5 gap-
 
 // Bleeds a horizontally scrolling rail through the sheet's responsive padding
 // (layouts/sheet.tsx) so cards scroll edge-to-edge — keep the two in sync.
-export const sheetBleedClass = tw`-mx-3 px-3 md:-mx-[40px] md:px-[40px] xl:-mx-[70px] xl:px-[70px]`
+export const sheetBleedClass = tw`-mx-3 px-3 md:-mx-[40px] md:px-[40px] xl:-mx-[60px] xl:px-[60px]`
 
 // ---------------------------------------------------------------------------
 

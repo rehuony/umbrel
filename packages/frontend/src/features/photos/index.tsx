@@ -45,9 +45,11 @@ function TitleRow({isMobile, openSidebar}: {isMobile: boolean; openSidebar: () =
 						<MobileSearch />
 					</motion.div>
 				) : (
-					<motion.div key='title' className='flex min-w-0 flex-1 items-center gap-2' {...swap(-1)}>
+					<motion.div key='title' className='flex min-w-0 flex-1 items-center gap-3' {...swap(-1)}>
+						<SheetTitle variant='window' className='lg:min-w-[224px]'>
+							Photos
+						</SheetTitle>
 						{isMobile ? <HiMenuAlt2 role='button' className='h-5 w-5 text-white/90' onClick={openSidebar} /> : null}
-						<SheetTitle className='mr-2 leading-none lg:mr-0 lg:min-w-[224px] lg:text-36'>Photos</SheetTitle>
 						{/* Phones: the page's controls, clear of the sheet's close button */}
 						<MobileActions className='mr-5 ml-auto md:hidden' />
 					</motion.div>

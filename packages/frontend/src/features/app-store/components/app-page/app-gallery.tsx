@@ -44,11 +44,11 @@ export function AppGallery({gallery, galleryId}: {gallery: string[]; galleryId: 
 		<section>
 			<Carousel
 				setApi={setApi}
-				className='-mx-3 md:-mx-[40px] xl:-mx-[70px]'
+				className='-mx-3 md:-mx-[40px] xl:-mx-[60px]'
 				opts={{align: 'start', containScroll: 'trimSnaps'}}
 			>
 				<CarouselContent
-					containerClassName='px-3 md:px-[40px] xl:px-[70px]'
+					containerClassName='px-3 md:px-[40px] xl:px-[60px]'
 					className='pswp-gallery -ml-2.5 md:-ml-4'
 					id={galleryId}
 				>

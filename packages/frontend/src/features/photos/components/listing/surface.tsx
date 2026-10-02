@@ -69,13 +69,13 @@ export function ListingSurface({children}: {children: (frame: Frame) => ReactNod
 			    ScrollArea scrollable, and its scrollbar lands on top of the
 			    grid's. Mobile: the sheet is 100dvh−(--sheet-top), bottom-anchored,
 			    and above the box sit the column's pt-6, the 44px title row, the
-			    gap-5 and the grid's mt-[-0.5rem] (80px; md's pt-12 and text-48
-			    title add 28), plus the pull-up → 136/164. Desktop: sheet
+			    gap-5 and the grid's mt-[-0.5rem] (80px; md's pt-12 adds 24),
+			    plus the pull-up → 136/160. Desktop: sheet
 			    100vh−60px, the box starts
 			    66px down (bar 10+44, gap 12) plus the pull-up → 134. The right
 			    margins mirror the sheet's md/xl padding (layouts/sheet.tsx). */}
 			<div
-				className='-mt-(--umbrel-photos-inset) h-[calc(100dvh-var(--sheet-top)-136px+var(--umbrel-photos-inset))] md:h-[calc(100dvh-var(--sheet-top)-164px+var(--umbrel-photos-inset))] lg:-mr-10 lg:h-[calc(100vh-134px+var(--umbrel-photos-inset))] xl:-mr-[60px]'
+				className='-mt-(--umbrel-photos-inset) h-[calc(100dvh-var(--sheet-top)-136px+var(--umbrel-photos-inset))] md:h-[calc(100dvh-var(--sheet-top)-160px+var(--umbrel-photos-inset))] lg:-mr-10 lg:h-[calc(100vh-134px+var(--umbrel-photos-inset))] xl:-mr-[60px]'
 				style={{['--umbrel-photos-inset' as string]: `${barBottom + BAR_GAP}px`}}
 			>
 				{children(frame)}

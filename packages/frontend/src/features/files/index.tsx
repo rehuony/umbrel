@@ -74,7 +74,10 @@ export default function FilesLayout() {
 				<FilesDndWrapper>
 					<RewindOverlayProvider>
 						<SheetHeader className='flex flex-col gap-4 md:flex-row md:items-center md:gap-0'>
-							<div className='flex items-center gap-4'>
+							<div className='flex items-center gap-3'>
+								<SheetTitle variant='window' className='lg:min-w-[224px]'>
+									{t('files')}
+								</SheetTitle>
 								{isMobile ? (
 									<HiMenuAlt2
 										role='button'
@@ -82,7 +85,6 @@ export default function FilesLayout() {
 										onClick={() => setIsMobileSidebarOpen(true)}
 									/>
 								) : null}
-								<SheetTitle className='mr-2 leading-none lg:mr-0 lg:min-w-[224px] lg:text-36'>{t('files')}</SheetTitle>
 							</div>
 						</SheetHeader>
 						<ErrorBoundary FallbackComponent={ErrorBoundaryCardFallback}>

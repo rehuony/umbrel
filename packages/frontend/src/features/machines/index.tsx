@@ -28,7 +28,7 @@ function MachinesLayoutContent() {
 	return (
 		<div className='flex min-w-0 flex-col gap-5'>
 			<SheetHeader>
-				<SheetTitle>{t('machines')}</SheetTitle>
+				<SheetTitle variant='window'>{t('machines')}</SheetTitle>
 			</SheetHeader>
 			{!isLoading && machines.length > 0 && <MachinesTabBar machines={machines} />}
 			<div

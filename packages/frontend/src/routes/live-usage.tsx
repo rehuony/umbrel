@@ -41,7 +41,7 @@ export default function LiveUsage() {
 	return (
 		<>
 			<SheetHeader>
-				<SheetTitle>{t('live-usage')}</SheetTitle>
+				<SheetTitle variant='window'>{t('live-usage')}</SheetTitle>
 			</SheetHeader>
 			<ErrorBoundary FallbackComponent={ErrorBoundaryCardFallback}>
 				<LiveUsageContent />
