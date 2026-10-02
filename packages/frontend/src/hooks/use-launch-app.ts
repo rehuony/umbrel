@@ -5,7 +5,7 @@ import {toast} from '@/components/ui/toast'
 import {useApps} from '@/providers/apps'
 import {trpcReact} from '@/trpc/trpc'
 import {useLinkToDialog} from '@/utils/dialog'
-import {appToUrl, appToUrlWithAppPath, getAlwaysOpenHttpsRequiredApps, isOnionPage, urlJoin} from '@/utils/misc'
+import {appToUrlWithAppPath, getAlwaysOpenHttpsRequiredApps, isOnionPage} from '@/utils/misc'
 
 /**
  * There's a strong temptation to make launching an app just a link to the app's URL:
@@ -52,7 +52,7 @@ export function useLaunchApp() {
 
 		const open = (path?: string, protocol = location.protocol) => {
 			if (!isMember) trackOpenMut.mutate({appId})
-			const url = path ? urlJoin(appToUrl(app, protocol), path) : appToUrlWithAppPath(app, protocol)
+			const url = appToUrlWithAppPath(app, protocol, path)
 			window.open(url, '_blank')?.focus()
 		}
 
@@ -60,10 +60,14 @@ export function useLaunchApp() {
 			toast.warning(t('app-only-over-tor', {app: app.name}), {area: 'app-store'})
 			return
 		}
-
 		if (!app.port) {
 			if (isMember) toast(t('panel-catalog.background-app'), {area: 'app-store'})
 			else navigate(linkToDialog('app-settings', {for: appId}))
+			return
+		}
+
+		if (app.externalAccess?.enabled && location.origin === app.externalAccess.panelOrigin && !app.externalAccess.origin) {
+			toast.warning(t('external-access.app-unavailable'), {area: 'app-store'})
 			return
 		}
 

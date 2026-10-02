@@ -85,7 +85,7 @@ export default router({
 
 	exists: publicProcedure.query(async ({ctx}) => ctx.user.exists()),
 
-	// Public so the login and app-auth account pickers can render before auth.
+	// Public so the login account picker can render before auth.
 	listAccounts: publicProcedure.query(async ({ctx}) => {
 		if (!(await ctx.user.exists())) return []
 		return (await ctx.user.listAccounts()).map((account) => ({

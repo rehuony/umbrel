@@ -22,7 +22,6 @@ import createTerminalWebSocketHandler from './terminal-socket.js'
 import createMachineConsoleWebSocketHandler from './machine-console-socket.js'
 import MachineConsoleSessions from './machine-console-sessions.js'
 import createMachineAudioWebSocketHandler from './machine-audio-socket.js'
-import createAppAuthRouter from './app-auth.js'
 import {authorizeHttpRequest} from '../auth/http-request.js'
 import {getSystemDiskUsage} from '../system/system.js'
 import UploadDiskPreflight from './upload-disk-preflight.js'
@@ -158,6 +157,9 @@ class Server {
 			? createProxyMiddleware({
 					target: process.env.UMBREL_UI_PROXY,
 					ws: false,
+					onProxyRes: (response, request) => {
+						if (request.url?.split('?')[0] === '/app-access') response.headers['cache-control'] = 'no-store'
+					},
 					logProvider: () => ({
 						log: this.logger.verbose,
 						debug: this.logger.verbose,
@@ -224,9 +226,11 @@ class Server {
 			}
 		})
 
-		// App authentication is served by umbreld. LAN ingress rewrites traffic
-		// from the dedicated browser-facing app-auth port onto this private prefix.
-		this.app.use('/app-auth', createAppAuthRouter(this.umbreld))
+		// Login handoffs carry short-lived codes and must never be cached.
+		this.app.use('/app-access', (_request, response, next) => {
+			response.set('Cache-Control', 'no-store')
+			next()
+		})
 
 		// Handle tRPC routes
 		this.app.use('/trpc', trpcExpressHandler)

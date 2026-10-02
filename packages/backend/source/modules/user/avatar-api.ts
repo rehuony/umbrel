@@ -15,21 +15,16 @@ import {
 import {OWNER_USER_ID} from './constants.js'
 import type {Account} from './user.js'
 
-export function accountAvatarUrl(userId: string, hash: string, context: 'dashboard' | 'app-auth' = 'dashboard') {
+export function accountAvatarUrl(userId: string, hash: string) {
 	const encodedUserId = encodeURIComponent(userId)
-	return context === 'app-auth'
-		? `/v1/account/avatar/${encodedUserId}/${hash}.webp`
-		: `/api/accounts/${encodedUserId}/avatar/${hash}.webp`
+	return `/api/accounts/${encodedUserId}/avatar/${hash}.webp`
 }
 
-export function serializeAccountAvatar(
-	account: Account,
-	context: 'dashboard' | 'app-auth' = 'dashboard',
-): Omit<Account, 'avatarHash'> & {avatarUrl?: string} {
+export function serializeAccountAvatar(account: Account): Omit<Account, 'avatarHash'> & {avatarUrl?: string} {
 	const {avatarHash, ...publicAccount} = account
 	return {
 		...publicAccount,
-		...(avatarHash ? {avatarUrl: accountAvatarUrl(account.userId, avatarHash, context)} : {}),
+		...(avatarHash ? {avatarUrl: accountAvatarUrl(account.userId, avatarHash)} : {}),
 	}
 }
 

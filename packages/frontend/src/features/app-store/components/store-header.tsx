@@ -294,6 +294,10 @@ function CommunityAppsMenuTrigger() {
 				<TbDots className='h-4.5 w-4.5' />
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className='p-1' align='end'>
+				<DropdownMenuItem asChild>
+					<Link to={{search: addLinkSearchParams({dialog: 'import-compose'})}}>{t('panel-catalog.import-title')}</Link>
+				</DropdownMenuItem>
+				<DropdownMenuSeparator className='-mx-1 my-1' />
 				{communityStores.length === 0 ? (
 					<DropdownMenuItem asChild>
 						<Link to={manageLink}>{t('app-store.menu.community-app-stores')}</Link>
@@ -322,10 +326,6 @@ function CommunityAppsMenuTrigger() {
 						</DropdownMenuPortal>
 					</DropdownMenuSub>
 				)}
-				<DropdownMenuSeparator className='-mx-1 my-1' />
-				<DropdownMenuItem asChild>
-					<Link to={{search: addLinkSearchParams({dialog: 'import-compose'})}}>{t('panel-catalog.import-title')}</Link>
-				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	)

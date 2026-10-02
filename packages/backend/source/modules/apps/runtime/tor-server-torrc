@@ -17,8 +17,3 @@ HashedControlPassword 16:158FBE422B1A9D996073BE2B9EC38852C70CE12362CA016F8F6859C
 
 HiddenServiceDir /data/web
 HiddenServicePort 80 172.17.0.1:80
-
-# Auth Hidden Service
-
-HiddenServiceDir /data/auth
-HiddenServicePort 80 10.21.0.1:2000

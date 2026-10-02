@@ -118,6 +118,7 @@ export function SettingsNavigationRow({
 // control when the feature isn't applicable, so the row schema stays fixed
 // across apps.
 export function SettingsControlRow({
+	muted = false,
 	title,
 	description,
 	control,
@@ -127,13 +128,16 @@ export function SettingsControlRow({
 	title: string
 	description: ReactNode
 	control?: ReactNode
+	muted?: boolean
 	icon?: IconType
 	tone?: SettingsRowTone
 }) {
 	return (
 		<div className={cn(settingsRowClass, !control && 'opacity-60')}>
-			{icon ? <SettingsRowIcon icon={icon} tone={tone} /> : null}
-			<CardText title={title} description={description} />
+			<div className={cn('flex min-w-0 flex-1 gap-x-2.5 self-center', muted && 'opacity-60')}>
+				{icon ? <SettingsRowIcon icon={icon} tone={tone} /> : null}
+				<CardText title={title} description={description} />
+			</div>
 			{control ? <div className='shrink-0 self-center'>{control}</div> : null}
 		</div>
 	)

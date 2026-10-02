@@ -6,6 +6,7 @@ export type {AppRouter} from './index.js'
 
 // RPCs that MUST use HTTP (cookie/header semantics). Clients use this list for split-link routing.
 export const httpOnlyPaths = [
+	'apps.authorizeAccess',
 	// sets cookie
 	'user.login',
 	// reads the Authorization header and browser-session cookie

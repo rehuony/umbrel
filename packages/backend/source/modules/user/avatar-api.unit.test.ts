@@ -30,20 +30,17 @@ describe('avatar HTTP representation', () => {
 	const hash = 'a'.repeat(64)
 	const account = {userId: 'Alice', name: 'Alice', language: 'en', avatarHash: hash}
 
-	test('generates dashboard and app-auth URLs and strips storage metadata', () => {
+	test('generates dashboard URLs and strips storage metadata', () => {
 		expect(accountAvatarUrl('Alice', hash)).toBe(`/api/accounts/Alice/avatar/${hash}.webp`)
-		expect(accountAvatarUrl('Alice', hash, 'app-auth')).toBe(`/v1/account/avatar/Alice/${hash}.webp`)
 
 		const dashboard = serializeAccountAvatar(account)
-		const appAuth = serializeAccountAvatar(account, 'app-auth')
 		expect(dashboard).toEqual({
 			userId: 'Alice',
 			name: 'Alice',
 			language: 'en',
 			avatarUrl: `/api/accounts/Alice/avatar/${hash}.webp`,
 		})
-		expect(appAuth).toEqual({...dashboard, avatarUrl: `/v1/account/avatar/Alice/${hash}.webp`})
-		expect(JSON.stringify([dashboard, appAuth])).not.toContain('avatarHash')
+		expect(JSON.stringify(dashboard)).not.toContain('avatarHash')
 	})
 })
 

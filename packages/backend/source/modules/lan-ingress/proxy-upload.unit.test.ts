@@ -92,11 +92,10 @@ async function createProxy(protocol: 'http' | 'https', upstreamPort: number, gat
 	try {
 		if (gateway) {
 			const auth = {
-				authenticate: async (token: string) => {
+				authenticateApp: async (token: string) => {
 					if (token !== 'upload-session') throw new Error('Unauthorized')
 					return {accountId: 'owner'}
 				},
-				authorizeApp: async () => {},
 			}
 			const server = new AppGateway({logger, auth} as never, {
 				appId: 'upload-test',

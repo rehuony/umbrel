@@ -18,7 +18,6 @@ describe.sequential('LAN ingress', () => {
 	let umbreld: TestVm
 	let failed = false
 	let httpsPort: number
-	let authPort: number
 	let appProxyPort: number
 	let authenticatedAppPort: number
 	let bridgeAppPort: number
@@ -33,7 +32,6 @@ describe.sequential('LAN ingress', () => {
 		// Cover the fixed LAN ingress listeners plus each app routing shape.
 		const forwardedPorts = {
 			https: {guestPort: 443},
-			auth: {guestPort: 2000},
 			appProxy: {guestPort: 9091},
 			authenticatedApp: {guestPort: 9094},
 			bridgeApp: {guestPort: 9092},
@@ -66,7 +64,6 @@ describe.sequential('LAN ingress', () => {
 	test('boots VM and registers user', async () => {
 		await umbreld.vm.powerOn()
 		httpsPort = umbreld.vm.getHostPort(443)
-		authPort = umbreld.vm.getHostPort(2000)
 		appProxyPort = umbreld.vm.getHostPort(9091)
 		authenticatedAppPort = umbreld.vm.getHostPort(9094)
 		bridgeAppPort = umbreld.vm.getHostPort(9092)
@@ -105,90 +102,37 @@ describe.sequential('LAN ingress', () => {
 		expect([...logs.rawBody.subarray(0, 2)]).toEqual([0x1f, 0x8b])
 
 		await expectIngressResponds(`https://127.0.0.1:${httpsPort}/`, caCertificate)
-		await expectIngressResponds(`http://127.0.0.1:${authPort}/`)
-		await expectIngressResponds(`https://127.0.0.1:${authPort}/`, caCertificate)
 	})
 
-	test('preserves PhotoKit upload responses through HTTPS ingress', async () => {
-		type NativeSession = {accessToken: string}
-		type PhotoGrant = {token: string}
+	test('preserves browser upload responses through HTTPS ingress', async () => {
 		const https = {certificateAuthority: caCertificate}
-		const nativeLogin = await got.post<TrpcResponse<NativeSession>>(
-			`https://127.0.0.1:${httpsPort}/trpc/user.loginNative`,
-			{
-				json: {
-					userId: '0',
-					password: 'moneyprintergobrrr',
-					client: {
-						id: 'umbrel',
-						platform: 'ios',
-						deviceClass: 'phone',
-						appVersion: '0.1',
-						appBuild: '20',
-						osVersion: '26.6.1',
-					},
-				},
-				https,
-				responseType: 'json',
-			},
-		)
-		const accessToken = nativeLogin.body.result.data.accessToken
-		const sourceId = '11111111-1111-4111-8111-111111111111'
-		const grantResponse = await got.post<TrpcResponse<PhotoGrant>>(
-			`https://127.0.0.1:${httpsPort}/trpc/photos.createBackupGrant`,
-			{
-				json: {sourceId, suggestedName: 'Test iPhone'},
-				headers: {Authorization: `Bearer ${accessToken}`},
-				https,
-				responseType: 'json',
-			},
-		)
-		const grant = grantResponse.body.result.data.token
-
-		const capabilityProbe = await got(`https://127.0.0.1:${httpsPort}/api/photos/upload`, {
-			method: 'OPTIONS',
+		const login = await got.post<TrpcResponse<string>>(`https://127.0.0.1:${httpsPort}/trpc/user.login`, {
+			json: {password: 'moneyprintergobrrr'},
 			https,
-			throwHttpErrors: false,
+			responseType: 'json',
 		})
-		expect(capabilityProbe.statusCode).toBe(501)
-
-		const uploadedKey = 'a'.repeat(64)
-		const uploaded = await got.post(`https://127.0.0.1:${httpsPort}/api/photos/upload`, {
-			body: 'photo',
-			headers: {
-				Authorization: `Bearer ${grant}`,
-				'X-Umbrel-Photo-Backup-Key': uploadedKey,
-				'X-Umbrel-Photo-Backup-Extension': 'heic',
-				'X-Umbrel-Photo-Original-Filename-Base64': Buffer.from('IMG_1234.HEIC').toString('base64'),
-			},
+		const headers = {
+			authorization: `Bearer ${login.body.result.data}`,
+			cookie: (login.headers['set-cookie'] ?? []).map((value) => value.split(';')[0]).join('; '),
+		}
+		const uploaded = await got.post(`https://127.0.0.1:${httpsPort}/api/files/upload?path=/Home/ingress-upload.txt`, {
+			body: 'content',
+			headers,
 			https,
 		})
-		expect(uploaded.headers['cache-control']).toBe('no-store')
-		expect(uploaded.headers['x-umbrel-photo-backup-key']).toBe(uploadedKey)
-		expect(uploaded.headers['x-umbrel-upload-bytes']).toBe('5')
-		expect(JSON.parse(uploaded.body)).toEqual({resourceKey: uploadedKey, bytes: 5})
-
-		// Reject before consuming the body, exercising the ingress behavior that
-		// previously converted an early 507 into a lost client connection.
-		const rejectedKey = 'b'.repeat(64)
-		const rejected = await got.post(`https://127.0.0.1:${httpsPort}/api/photos/upload`, {
+		expect(uploaded.statusCode).toBe(200)
+		// Reject before consuming the body, preserving the early 507 response.
+		const rejected = await got.post(`https://127.0.0.1:${httpsPort}/api/files/upload?path=/Home/too-large.txt`, {
 			body: Readable.from([Buffer.alloc(1024)]),
-			headers: {
-				Authorization: `Bearer ${grant}`,
-				'Content-Length': String(500 * 1024 ** 4),
-				'X-Umbrel-Photo-Backup-Key': rejectedKey,
-				'X-Umbrel-Photo-Backup-Extension': 'heic',
-				'X-Umbrel-Photo-Original-Filename-Base64': Buffer.from('IMG_1235.HEIC').toString('base64'),
-			},
+			headers: {...headers, 'content-length': String(500 * 1024 ** 4)},
 			https,
 			throwHttpErrors: false,
 		})
 		expect(rejected.statusCode).toBe(507)
-		expect(rejected.headers['x-umbrel-photo-backup-error']).toBe('insufficient-storage')
 		expect(JSON.parse(rejected.body)).toEqual({error: '[not-enough-space]'})
 	})
 
-	test('resets the local CA without breaking dashboard or auth ingress', async () => {
+	test('resets the local CA without breaking dashboard ingress', async () => {
 		const status = await umbreld.client.lanIngress.resetCa.mutate()
 		expect(status.caCertificate).toContain('BEGIN CERTIFICATE')
 		expect(status.caCertificate).not.toBe(caCertificate)
@@ -199,7 +143,6 @@ describe.sequential('LAN ingress', () => {
 		caFingerprint = status.caFingerprint
 
 		await expectIngressResponds(`https://127.0.0.1:${httpsPort}/`, caCertificate)
-		await expectIngressResponds(`https://127.0.0.1:${authPort}/`, caCertificate)
 	})
 
 	test('keeps the local CA after umbreld restart', async () => {
@@ -211,7 +154,6 @@ describe.sequential('LAN ingress', () => {
 		expect(status.caFingerprint).toBe(caFingerprint)
 
 		await expectIngressResponds(`https://127.0.0.1:${httpsPort}/`, caCertificate)
-		await expectIngressResponds(`https://127.0.0.1:${authPort}/`, caCertificate)
 	})
 
 	test('sets up test apps', async () => {
@@ -272,13 +214,14 @@ describe.sequential('LAN ingress', () => {
 	})
 
 	test('completes app login in a real browser over HTTP and HTTPS', async () => {
-		// Reload the disk-backed fixtures through the Apps module so app-auth sees
+		// Reload the disk-backed fixtures through the Apps module so application login sees
 		// the authenticated fixture as a normal installed app.
 		await umbreld.vm.sshAsRoot('systemctl restart umbrel')
 		await umbreld.login()
 		await pRetry(
 			async () => {
 				const response = await got(`http://127.0.0.1:${authenticatedAppPort}/private`, {
+					headers: {accept: 'text/html'},
 					followRedirect: false,
 					retry: {limit: 0},
 					throwHttpErrors: false,
@@ -289,12 +232,13 @@ describe.sequential('LAN ingress', () => {
 		)
 
 		// Keep the real guest ports in browser URLs while routing them through
-		// QEMU's random host forwards. This preserves the app -> :2000 -> app
+		// QEMU's random host forwards. This preserves the app -> panel -> app
 		// redirect chain and sends traffic through the guest's LAN ingress path.
 		vmBrowser = await createVmBrowser({
 			forwardPorts: [
 				{hostPort: authenticatedAppPort, guestPort: 9094},
-				{hostPort: authPort, guestPort: 2000},
+				{hostPort: umbreld.vm.httpPort, guestPort: 80},
+				{hostPort: httpsPort, guestPort: 443},
 			],
 		})
 
@@ -307,67 +251,78 @@ describe.sequential('LAN ingress', () => {
 		}
 	})
 
-	test('app auth preserves 2FA and creates an app-bound Tor handoff', async () => {
+	test('unified panel login preserves 2FA and creates a browser-bound Tor handoff', async () => {
 		const totpUri =
 			'otpauth://totp/Umbrel?secret=63AU7PMWJX6EQJR6G3KTQFG5RDZ2UE3WVUMP3VFJWHSWJ7MMHTIQ&period=30&digits=6&algorithm=SHA1&issuer=umbrel.local'
 		await umbreld.client.apps.setTorEnabled.mutate(true)
 		await umbreld.client.user.enable2fa.mutate({totpUri, totpToken: totp.generateToken(totpUri)})
-
-		const query = 'origin=host&app=lan-ingress-auth&path=%2Fprivate'
-		const missing2fa = await got.post(`http://127.0.0.1:${authPort}/v1/account/login?${query}`, {
-			json: {password: 'moneyprintergobrrr', totpToken: ''},
-			throwHttpErrors: false,
-			retry: {limit: 0},
-		})
-		expect(missing2fa.statusCode).toBe(401)
-		expect(JSON.parse(missing2fa.body).error.message).toBe('Missing 2FA code')
-
-		const login = await got.post(`http://127.0.0.1:${authPort}/v1/account/login?${query}`, {
-			json: {password: 'moneyprintergobrrr', totpToken: totp.generateToken(totpUri)},
-			headers: {'user-agent': 'UmbrelAppAuthVm/1.0'},
-			retry: {limit: 0},
-		})
-		const appCookie = (login.headers['set-cookie'] ?? [])
-			.find((cookie) => cookie.startsWith('UMBREL_APP_SESSION='))
-			?.split(';')[0]
-		expect(appCookie).toBeTypeOf('string')
-		expect(JSON.parse(login.body).url).toBe('http://127.0.0.1:9094/umbrel_/api/v1/auth/handoff')
-		expect(await umbreld.client.user.listSessions.query()).toContainEqual(
-			expect.objectContaining({
-				client: {type: 'browser', userAgent: 'UmbrelAppAuthVm/1.0'},
-				current: false,
-			}),
-		)
-
-		const torHandoff = await pRetry(
-			async () => {
-				const response = await got.get(
-					`http://127.0.0.1:${authPort}/v1/account/session?origin=tor&app=lan-ingress-auth&path=%2Fprivate`,
-					{headers: {cookie: appCookie!}, retry: {limit: 0}},
-				)
-				const body = JSON.parse(response.body) as {url: string; params: {r: string; handoff: string}}
-				expect(body.url).toMatch(/^http:\/\/[a-z2-7]{56}\.onion\/umbrel_\/api\/v1\/auth\/handoff$/)
-				expect(body.params.r).toBe('/private')
-				expect(body.params.handoff).toBeTypeOf('string')
-				return body
-			},
-			{retries: 30, factor: 1, minTimeout: 1000, maxTimeout: 1000},
-		)
-		expect(torHandoff.params).not.toHaveProperty('token')
-
-		await umbreld.client.user.disable2fa.mutate({totpToken: totp.generateToken(totpUri)})
-		await umbreld.client.apps.setTorEnabled.mutate(false)
+		try {
+			const missing2fa = await umbreld.unauthenticatedApi.post('../trpc/user.login', {
+				responseType: 'json',
+				json: {password: 'moneyprintergobrrr', totpToken: ''},
+				throwHttpErrors: false,
+			})
+			expect(missing2fa.statusCode).toBe(401)
+			expect(missing2fa.body).toMatchObject({error: {message: 'Missing 2FA code'}})
+			const login = await umbreld.unauthenticatedApi.post('../trpc/user.login', {
+				responseType: 'json',
+				json: {password: 'moneyprintergobrrr', totpToken: totp.generateToken(totpUri)},
+				headers: {'user-agent': 'UmbrelPanelHandoffVm/1.0'},
+			})
+			const token = (login.body as TrpcResponse<string>).result.data
+			const cookies = (login.headers['set-cookie'] ?? []).map((value) => value.split(';')[0]).join('; ')
+			const appHost = await pRetry(
+				async () => {
+					const app = (await umbreld.client.apps.list.query()).find((app) => app.id === 'lan-ingress-auth')!
+					if ('error' in app || !app.hiddenService) throw new Error('Waiting for app hidden service')
+					return app.hiddenService
+				},
+				{retries: 30, factor: 1, minTimeout: 1000, maxTimeout: 1000},
+			)
+			const initial = await got(`http://127.0.0.1:${authenticatedAppPort}/private`, {
+				headers: {host: appHost, accept: 'text/html'},
+				followRedirect: false,
+				retry: {limit: 0},
+			})
+			const panelUrl = new URL(initial.headers.location!)
+			expect(panelUrl.hostname).toMatch(/^[a-z2-7]{56}\.onion$/)
+			const authorized = await umbreld.unauthenticatedApi.post('../trpc/apps.authorizeAccess', {
+				responseType: 'json',
+				json: {request: panelUrl.searchParams.get('request')},
+				headers: {host: panelUrl.host, cookie: cookies, authorization: `Bearer ${token}`},
+			})
+			const handoff = (authorized.body as TrpcResponse<{url: string; params: Record<string, string>}>).result.data
+			expect(handoff.url).toBe(`http://${appHost}/umbrel_/api/v1/auth/handoff`)
+			expect(handoff.params).not.toHaveProperty('token')
+			const completed = await got(`http://127.0.0.1:${authenticatedAppPort}/umbrel_/api/v1/auth/handoff`, {
+				searchParams: handoff.params,
+				headers: {host: appHost, cookie: initial.headers['set-cookie']![0].split(';')[0]},
+				followRedirect: false,
+				retry: {limit: 0},
+			})
+			expect(completed.statusCode).toBe(303)
+			expect(completed.headers.location).toBe('/private')
+		} finally {
+			await umbreld.client.user.disable2fa.mutate({totpToken: totp.generateToken(totpUri)})
+			await umbreld.client.apps.setTorEnabled.mutate(false)
+		}
 	})
 
 	test('enforces app auth in umbreld and never forwards auth cookies upstream', async () => {
 		const privateUrl = `http://127.0.0.1:${authenticatedAppPort}/private`
-		const unauthorized = await got(privateUrl, {followRedirect: false, retry: {limit: 0}, throwHttpErrors: false})
+		const unauthorized = await got(privateUrl, {
+			headers: {accept: 'text/html'},
+			followRedirect: false,
+			retry: {limit: 0},
+			throwHttpErrors: false,
+		})
 		expect(unauthorized.statusCode).toBe(302)
-		expect(unauthorized.headers.location).toContain(':2000/app-auth?origin=host&app=lan-ingress-auth')
+		expect(unauthorized.headers.location).toContain('http://127.0.0.1/app-access?request=')
 
 		const publicResponse = await requestAppEcho(`http://127.0.0.1:${authenticatedAppPort}/public/status`)
 		expect(publicResponse.app).toBe('authenticated')
 		const blacklisted = await got(`http://127.0.0.1:${authenticatedAppPort}/public/private/status`, {
+			headers: {accept: 'text/html'},
 			followRedirect: false,
 			retry: {limit: 0},
 			throwHttpErrors: false,
@@ -468,7 +423,7 @@ async function expectBrowserLoginFlow(browser: Browser, protocol: 'http' | 'http
 			const type = response.request().resourceType()
 			if (!['script', 'stylesheet'].includes(type)) return
 			const url = new URL(response.url())
-			if (url.hostname !== '127.0.0.1' || url.port !== '2000') return
+			if (url.hostname !== '127.0.0.1' || url.port !== '') return
 			uiAssets.push({
 				url: response.url(),
 				status: response.status(),
@@ -484,12 +439,10 @@ async function expectBrowserLoginFlow(browser: Browser, protocol: 'http' | 'http
 		const authUrl = new URL(page.url())
 		expect(authUrl.protocol).toBe(`${protocol}:`)
 		expect(authUrl.hostname).toBe('127.0.0.1')
-		expect(authUrl.port).toBe('2000')
-		expect(authUrl.pathname).toBe('/app-auth/')
-		expect(authUrl.searchParams.get('app')).toBe('lan-ingress-auth')
-		expect(authNavigation?.headers()['content-security-policy']).toContain(
-			`form-action 'self' ${protocol}://127.0.0.1:*`,
-		)
+		expect(authUrl.port).toBe('')
+		expect(authUrl.pathname).toBe('/login')
+		expect(authUrl.searchParams.get('redirect')).toMatch(/^\/app-access\?request=[0-9a-f]{64}$/)
+		expect(authNavigation?.headers()['content-security-policy']).toContain("form-action 'self'")
 		expect(pageErrors).toEqual([])
 		expect(uiAssets.length).toBeGreaterThan(0)
 		for (const asset of uiAssets) {
@@ -502,9 +455,9 @@ async function expectBrowserLoginFlow(browser: Browser, protocol: 'http' | 'http
 		const [loginResponse] = await Promise.all([
 			page.waitForResponse(
 				(response) =>
-					new URL(response.url()).pathname === '/v1/account/login' && response.request().method() === 'POST',
+					new URL(response.url()).pathname.includes('/trpc/user.login') && response.request().method() === 'POST',
 			),
-			page.getByRole('button', {name: 'Open LAN Ingress Auth'}).click(),
+			page.getByRole('button', {name: 'Log in', exact: true}).click(),
 		])
 		if (loginResponse.status() !== 200) {
 			throw new Error(`App login returned ${loginResponse.status()}: ${await loginResponse.text()}`)

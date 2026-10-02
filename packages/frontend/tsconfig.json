@@ -31,5 +31,5 @@
 			}
 		]
 	},
-	"include": ["src", "app-auth", "tailwind.config.ts"]
+	"include": ["src", "tailwind.config.ts"]
 }

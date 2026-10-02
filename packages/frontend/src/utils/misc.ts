@@ -40,11 +40,20 @@ export function pathJoin(base: string, path: string) {
 }
 
 export function appToUrl(app: UserApp, protocol = location.protocol) {
+	if (app.externalAccess?.enabled && location.origin === app.externalAccess.panelOrigin) {
+		if (!app.externalAccess.origin) return ''
+		return app.externalAccess.origin
+	}
 	return isOnionPage() ? `${location.protocol}//${app.hiddenService}` : `${protocol}//${location.hostname}:${app.port}`
 }
 
-export function appToUrlWithAppPath(app: UserApp, protocol = location.protocol) {
-	return urlJoin(appToUrl(app, protocol), app.path ?? '')
+export function appToUrlWithAppPath(app: UserApp, protocol = location.protocol, path = app.path ?? '') {
+	const origin = appToUrl(app, protocol)
+	if (!origin) return ''
+	const url = new URL(path, origin)
+	// Manifest and widget paths cannot replace the chosen application origin.
+	if (url.origin !== new URL(origin).origin) return `${origin}/`
+	return url.href
 }
 
 const ALWAYS_OPEN_HTTPS_REQUIRED_APPS_KEY = 'UMBREL_ALWAYS_OPEN_HTTPS_REQUIRED_APPS'

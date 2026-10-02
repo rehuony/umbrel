@@ -10,6 +10,7 @@ import {
 	TbKey,
 	TbLock,
 	TbPlugConnected,
+	TbWorld,
 } from 'react-icons/tb'
 import {useLocation, useNavigate, type To} from 'react-router-dom'
 import {arrayIncludes} from 'ts-extras'
@@ -47,7 +48,12 @@ import {getDialogParamKey, useDialogOpenProps} from '@/utils/dialog'
 
 import {getDependencyAlternatives} from '../dependency-alternatives'
 import {SelectDependencies, type InstallDependency} from '../select-dependencies-dialog'
-import {AdvancedSettingsView, EnvironmentSettingsView} from './app-settings-advanced'
+import {
+	AdvancedSettingsView,
+	EnvironmentSettingsView,
+	ExternalAccessSettingsView,
+	ExternalAccessSetupRow,
+} from './app-settings-advanced'
 import {appHasDefaultCredentials, CredentialsSettingsView} from './app-settings-credentials'
 import {
 	areCustomEnvironmentVariablesEqual,
@@ -75,7 +81,14 @@ import {
 	SettingsViewTransition,
 } from './shared'
 
-type AppSettingsView = 'home' | 'storage' | 'connections' | 'credentials' | 'advanced' | 'environment'
+type AppSettingsView =
+	| 'home'
+	| 'storage'
+	| 'connections'
+	| 'credentials'
+	| 'advanced'
+	| 'environment'
+	| 'external-access'
 
 export function AppSettingsDialog({
 	onInstallDependency,
@@ -265,6 +278,8 @@ function AppSettingsDialogForApp({
 	const [customEnvironmentVariables, setCustomEnvironmentVariables] = useState<AppCustomEnvironmentVariable[]>(
 		getCustomEnvironmentVariables(app),
 	)
+	const externalAccessEnabled = app.externalAccess?.enabled === true
+	const [externalOrigin, setExternalOrigin] = useState(app.externalAccess?.origin ?? '')
 	const [authEnableConfirmOpen, setAuthEnableConfirmOpen] = useState(false)
 	const [authDisableConfirmOpen, setAuthDisableConfirmOpen] = useState(false)
 	// A discard confirmation holding the action to run once the user lets go of
@@ -296,6 +311,7 @@ function AppSettingsDialogForApp({
 	const setSettingsMut = trpcReact.apps.setSettings.useMutation({
 		onSuccess: invalidateApp,
 	})
+	const setExternalOriginMut = trpcReact.apps.setExternalOrigin.useMutation({onSuccess: invalidateApp})
 	// Umbrel login applies instantly through the app gateway (no restart), so it
 	// gets its own mutation instead of joining the batched save
 	const setAuthMut = trpcReact.apps.setSettings.useMutation({
@@ -330,6 +346,7 @@ function AppSettingsDialogForApp({
 	)
 
 	async function onSubmit() {
+		if (hasExternalChanges && !externalAccessEnabled) return
 		const saveDependencies = hasDependencyChanges && areAllDependenciesInstalled
 		const settings = {
 			appId: app.id,
@@ -339,7 +356,8 @@ function AppSettingsDialogForApp({
 			...(hasCustomEnvironmentVariableChanges && {customEnvironment: customEnvironmentVariables}),
 		}
 		try {
-			await setSettingsMut.mutateAsync(settings)
+			if (hasAppChanges) await setSettingsMut.mutateAsync(settings)
+			if (hasExternalChanges) await setExternalOriginMut.mutateAsync({appId: app.id, origin: externalOrigin.trim()})
 		} catch (error) {
 			// The settings mutation has no hook-level onError (see above)
 			onMutationError(error as {message: string})
@@ -365,13 +383,19 @@ function AppSettingsDialogForApp({
 		customEnvironmentVariables,
 	)
 	const hasEnvironmentChanges = hasEnvironmentVariableChanges || hasCustomEnvironmentVariableChanges
-	const hasChanges = hasDependencyChanges || hasStorageSettingsChanges || hasEnvironmentChanges
-	const changedSectionCount = [hasDependencyChanges, hasStorageSettingsChanges, hasEnvironmentChanges].filter(
-		Boolean,
-	).length
-	const mutationInProgress = setSettingsMut.isPending
+	const hasAppChanges = hasDependencyChanges || hasStorageSettingsChanges || hasEnvironmentChanges
+	const hasExternalChanges = externalOrigin.trim() !== (app.externalAccess?.origin ?? '')
+	const hasChanges = hasAppChanges || hasExternalChanges
+	const changedSectionCount = [
+		hasDependencyChanges,
+		hasStorageSettingsChanges,
+		hasEnvironmentChanges,
+		hasExternalChanges,
+	].filter(Boolean).length
+	const mutationInProgress = setSettingsMut.isPending || setExternalOriginMut.isPending
 	const saveDisabled =
 		!hasChanges ||
+		(hasExternalChanges && !externalAccessEnabled) ||
 		inProgress ||
 		mutationInProgress ||
 		// The instant auth toggle holds the same backend settings lock, so a
@@ -382,10 +406,11 @@ function AppSettingsDialogForApp({
 	// after saving because the setting change may be fixing why they failed to
 	// start
 	const willRestartOnSave =
-		app.state === 'ready' || app.state === 'running' || (app.state === 'unknown' && app.autoStart)
+		hasAppChanges && (app.state === 'ready' || app.state === 'running' || (app.state === 'unknown' && app.autoStart))
 	const saveLabel = willRestartOnSave ? t('app-settings.save-and-restart') : t('app-settings.save-changes')
 
 	const resetChanges = () => {
+		setExternalOrigin(app.externalAccess?.origin ?? '')
 		setSelectedDependencies(app.selectedDependencies)
 		setCustomMounts(app.storage?.customMounts ?? [])
 		setFolderAccess(getSelectedFolderAccess(app))
@@ -487,29 +512,21 @@ function AppSettingsDialogForApp({
 
 			<SettingsViewHeader title={t('app-settings.title')} description={t('app-settings.description')} />
 
-			<div className='grid gap-3 lg:grid-cols-2'>
-				<div className='lg:col-span-2'>
-					<SettingsControlRow
-						title={t('app-settings.auth.row-title')}
-						description={
-							appProxyAuthSupported ? t('app-settings.auth.description') : t('app-settings.auth.unsupported')
-						}
-						icon={TbLock}
-						tone={1}
-						control={
-							appProxyAuthSupported ? (
-								<Switch checked={authEnabled} disabled={setAuthMut.isPending} onCheckedChange={onAuthToggle} />
-							) : undefined
-						}
-					/>
-				</div>
-				<SettingsNavigationRow
-					title={t('app-settings.storage.title')}
-					description={storageDescription}
-					onClick={storageSupported ? () => setView('storage') : undefined}
-					modified={hasStorageSettingsChanges}
-					icon={TbDatabase}
-					tone={2}
+			<div className='flex flex-col gap-3'>
+				<SettingsControlRow
+					title={t('app-settings.auth.row-title')}
+					description={appProxyAuthSupported ? t('app-settings.auth.description') : t('app-settings.auth.unsupported')}
+					icon={TbLock}
+					tone={1}
+					control={
+						appProxyAuthSupported ? (
+							<Switch
+								checked={authEnabled}
+								disabled={setAuthMut.isPending || mutationInProgress}
+								onCheckedChange={onAuthToggle}
+							/>
+						) : undefined
+					}
 				/>
 				<SettingsNavigationRow
 					title={t('app-settings.connections.title')}
@@ -525,6 +542,28 @@ function AppSettingsDialogForApp({
 					onClick={hasCredentials ? () => setView('credentials') : undefined}
 					icon={TbKey}
 					tone={4}
+				/>
+				{app.port ? (
+					externalAccessEnabled ? (
+						<SettingsNavigationRow
+							title={t('external-access.title')}
+							description={app.externalAccess?.origin || t('external-access.app-unavailable')}
+							onClick={() => setView('external-access')}
+							modified={hasExternalChanges}
+							icon={TbWorld}
+							tone={2}
+						/>
+					) : (
+						<ExternalAccessSetupRow onConfigure={() => navigateAway('/settings/advanced/external-access')} />
+					)
+				) : null}
+				<SettingsNavigationRow
+					title={t('app-settings.storage.title')}
+					description={storageDescription}
+					onClick={storageSupported ? () => setView('storage') : undefined}
+					modified={hasStorageSettingsChanges}
+					icon={TbDatabase}
+					tone={2}
 				/>
 				<SettingsNavigationRow
 					title={t('app-settings.advanced.title')}
@@ -583,6 +622,14 @@ function AppSettingsDialogForApp({
 			connections
 		) : view === 'credentials' ? (
 			<CredentialsSettingsView app={app} onBack={() => setView('home')} />
+		) : view === 'external-access' ? (
+			<ExternalAccessSettingsView
+				app={app}
+				origin={externalOrigin}
+				onConfigure={() => navigateAway('/settings/advanced/external-access')}
+				onOriginChange={setExternalOrigin}
+				onBack={() => setView('home')}
+			/>
 		) : view === 'advanced' ? (
 			<AdvancedSettingsView
 				app={app}

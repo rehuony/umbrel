@@ -13,7 +13,7 @@ const {dockerCommand, execaDollar} = vi.hoisted(() => {
 
 vi.mock('execa', () => ({$: execaDollar}))
 
-import LanIngress, {appAuthDashboardRedirect} from './lan-ingress.js'
+import LanIngress from './lan-ingress.js'
 
 describe('app gateway TCP readiness', () => {
 	function createIngress() {
@@ -123,91 +123,6 @@ describe('LAN ingress shutdown', () => {
 		await closePromise
 		await upgradedSocketClosed
 		expect(Date.now() - closeStartedAt).toBeLessThan(1000)
-	})
-})
-
-describe('app auth navigation redirect', () => {
-	test.each([
-		{
-			name: 'HTTP root',
-			input: {protocol: 'http' as const, host: 'umbrel.local:2000', url: '/', method: 'GET', accept: 'text/html'},
-			expected: 'http://umbrel.local/',
-		},
-		{
-			name: 'HTTPS dashboard path',
-			input: {
-				protocol: 'https' as const,
-				host: 'umbrel.local:2000',
-				url: '/settings?dialog=about',
-				method: 'GET',
-				accept: 'text/html,application/xhtml+xml',
-			},
-			expected: 'https://umbrel.local/settings?dialog=about',
-		},
-		{
-			name: 'IPv6 host',
-			input: {protocol: 'http' as const, host: '[fd00::1]:2000', url: '/', method: 'GET', accept: 'text/html'},
-			expected: 'http://[fd00::1]/',
-		},
-		{
-			name: 'HTTP protocol-relative request target',
-			input: {
-				protocol: 'http' as const,
-				host: 'umbrel.local:2000',
-				url: '//attacker.example:2000/phish?from=umbrel',
-				method: 'GET',
-				accept: 'text/html',
-			},
-			expected: 'http://umbrel.local/phish?from=umbrel',
-		},
-		{
-			name: 'HTTPS protocol-relative request target',
-			input: {
-				protocol: 'https' as const,
-				host: 'umbrel.local:2000',
-				url: '//attacker.example:2000/phish?from=umbrel',
-				method: 'GET',
-				accept: 'text/html',
-			},
-			expected: 'https://umbrel.local/phish?from=umbrel',
-		},
-	])('redirects a $name navigation to the main dashboard origin', ({input, expected}) => {
-		expect(appAuthDashboardRedirect(input)).toBe(expected)
-	})
-
-	test.each([
-		{
-			name: 'allowed app-auth page',
-			input: {
-				protocol: 'http' as const,
-				host: 'umbrel.local:2000',
-				url: '/app-auth?app=files',
-				method: 'GET',
-				accept: 'text/html',
-			},
-		},
-		{
-			name: 'Tor auth hidden service',
-			input: {
-				protocol: 'http' as const,
-				host: `${'a'.repeat(56)}.onion`,
-				url: '/',
-				method: 'GET',
-				accept: 'text/html',
-			},
-		},
-		{
-			name: 'API request',
-			input: {
-				protocol: 'http' as const,
-				host: 'umbrel.local:2000',
-				url: '/unexpected',
-				method: 'POST',
-				accept: 'application/json',
-			},
-		},
-	])('does not redirect an $name', ({input}) => {
-		expect(appAuthDashboardRedirect(input)).toBeUndefined()
 	})
 })
 

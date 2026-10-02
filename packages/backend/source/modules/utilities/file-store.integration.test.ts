@@ -57,6 +57,20 @@ describe('store.get()', () => {
 	})
 })
 
+describe('concurrent configuration reads', () => {
+	test('returns independent snapshots and reads new permissions after a completed write', async () => {
+		const store = await createStore()
+		await store.set('shares', [{id: 'app', users: ['alice']}])
+		const [first, second] = await Promise.all([store.get('shares'), store.get('shares')])
+		first[0].users.push('bob')
+		expect(second[0].users).toEqual(['alice'])
+		await store.set('shares', [])
+		expect(await store.get('shares')).toEqual([])
+		await fse.writeFile(store.filePath, 'shares: [external-change]')
+		expect(await store.get('shares')).toEqual(['external-change'])
+	})
+})
+
 describe('store.set()', () => {
 	test('can set a value', async () => {
 		const store = await createStore()

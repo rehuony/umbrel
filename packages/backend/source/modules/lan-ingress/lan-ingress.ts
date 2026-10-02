@@ -25,7 +25,6 @@ const NFT_BIN = '/usr/sbin/nft'
 // This table contains only Umbrel-owned LAN ingress rules. App ports stay
 // owned by apps; nftables redirects inbound LAN traffic to hidden Node listeners.
 const NFT_TABLE_NAME = 'umbrel_lan_ingress'
-const APP_AUTH_PUBLIC_PORT = 2000
 const HIDDEN_INGRESS_PORT_START = 23_000
 const HIDDEN_INGRESS_PORT_END = 65_535
 const APP_TARGET_RECOVERY_RETRY_DELAYS = [0, 250, 1000, 2000]
@@ -48,8 +47,6 @@ type IngressPortMapping = {
 
 type UmbrelProxyOptions = {
 	includeForwardedFor?: boolean
-	pathPrefix?: string
-	redirectUnexpectedAppAuthNavigation?: boolean
 }
 
 type AppMuxServer = {
@@ -72,43 +69,6 @@ type ComposeFile = {
 	>
 }
 
-export function appAuthDashboardRedirect({
-	protocol,
-	host,
-	url,
-	method,
-	accept,
-}: {
-	protocol: 'http' | 'https'
-	host?: string
-	url?: string
-	method?: string
-	accept?: string
-}) {
-	// This is a convenience redirect for browser navigations, not an API rule.
-	if (method !== 'GET' || !accept?.toLowerCase().includes('text/html') || !host) return
-
-	try {
-		// Never let the request target choose the redirect authority. In particular,
-		// a request target beginning with // is a protocol-relative URL to URL().
-		const target = new URL(`${protocol}://${host}`)
-		// Tor exposes this listener as port 80 on a dedicated hidden service and
-		// forwards to port 2000 internally. Only redirect when the browser itself
-		// used :2000, otherwise the auth onion would redirect back to itself.
-		if (target.port !== APP_AUTH_PUBLIC_PORT.toString()) return
-
-		const requestTarget = new URL(url ?? '/', 'http://request.invalid')
-		if (requestTarget.pathname === '/app-auth' || requestTarget.pathname.startsWith('/app-auth/')) return
-
-		target.pathname = requestTarget.pathname
-		target.search = requestTarget.search
-		target.port = ''
-		return target.toString()
-	} catch {
-		return
-	}
-}
-
 export default class LanIngress {
 	#umbreld: Umbreld
 	#stopPeriodicRefresh?: () => void
@@ -119,9 +79,6 @@ export default class LanIngress {
 	#isStopped = true
 	#dashboardHttpServer?: http.Server
 	#dashboardHttpsServer?: https.Server
-	#appAuthMuxServer?: net.Server
-	#appAuthHttpProxyServer?: http.Server
-	#appAuthHttpsProxyServer?: https.Server
 	#appMuxServers = new Map<string, AppMuxServer>()
 	#appGatewayWaits = new Map<string, {target: string; controller: AbortController; ready: boolean}>()
 	// Track sockets at the TCP layer because Node's HTTP force-close helper does not cover
@@ -192,6 +149,7 @@ export default class LanIngress {
 		if (this.#isStopped) return
 		this.logger.log('Stopping LAN ingress')
 		this.#isStopped = true
+		this.#umbreld.externalAccess.reset()
 		this.#stopPeriodicRefresh?.()
 		this.#stopPeriodicRefresh = undefined
 		this.#nextAppTargetRecoveryAt.clear()
@@ -718,7 +676,7 @@ export default class LanIngress {
 	) {
 		// Hidden ingress listeners are real host ports, so avoid Umbrel-owned ports
 		// and every app-published port we discovered from compose.
-		const reservedPorts = new Set([80, 443, APP_AUTH_PUBLIC_PORT, this.#umbreld.port, ...reservedAppPorts])
+		const reservedPorts = new Set([80, 443, this.#umbreld.port, ...reservedAppPorts])
 		const allocatedHiddenPorts = new Set<number>()
 		const allocations: Record<string, {publicPort: number; hiddenPort: number}> = {}
 		const sortedRoutes = [...routes].sort((a, b) => a.id.localeCompare(b.id))
@@ -765,7 +723,7 @@ export default class LanIngress {
 	}
 
 	private removeConflictingAppRoutes(appRoutes: AppIngressRoute[]) {
-		const usedPublicPorts = new Set([80, 443, APP_AUTH_PUBLIC_PORT])
+		const usedPublicPorts = new Set([80, 443])
 		const routes: AppIngressRoute[] = []
 
 		for (const route of appRoutes) {
@@ -785,8 +743,8 @@ export default class LanIngress {
 		await this.loadSecureContext()
 		await this.ensureDashboardHttpServer()
 		await this.ensureDashboardHttpsServer()
-		await this.ensureAppAuthMuxServer()
 		await this.updateAppMuxServers(appRoutes)
+		this.#umbreld.externalAccess.reconcile(appRoutes)
 	}
 
 	private async loadSecureContext() {
@@ -795,7 +753,6 @@ export default class LanIngress {
 			key: await fse.readFile(this.serverKeyPath),
 		}
 		this.#dashboardHttpsServer?.setSecureContext(options)
-		this.#appAuthHttpsProxyServer?.setSecureContext(options)
 		for (const entry of this.#appMuxServers.values()) entry.httpsProxyServer?.setSecureContext(options)
 	}
 
@@ -809,37 +766,6 @@ export default class LanIngress {
 		if (this.#dashboardHttpsServer) return
 		this.#dashboardHttpsServer = await this.createHttpsProxyServer(this.#umbreld.port)
 		await this.listen(this.#dashboardHttpsServer, 443)
-	}
-
-	private async ensureAppAuthMuxServer() {
-		if (!this.#appAuthHttpProxyServer) {
-			this.#appAuthHttpProxyServer = this.createHttpProxyServer(this.#umbreld.port, 'http', {
-				pathPrefix: '/app-auth',
-				redirectUnexpectedAppAuthNavigation: true,
-			})
-			await this.listen(this.#appAuthHttpProxyServer, 0, '127.0.0.1')
-		}
-		if (!this.#appAuthHttpsProxyServer) {
-			this.#appAuthHttpsProxyServer = await this.createHttpsProxyServer(this.#umbreld.port, {
-				pathPrefix: '/app-auth',
-				redirectUnexpectedAppAuthNavigation: true,
-			})
-			// The mux owns the public port. TLS requests are forwarded to this
-			// loopback-only HTTPS server so Node handles the normal TLS lifecycle.
-			await this.listen(this.#appAuthHttpsProxyServer, 0, '127.0.0.1')
-		}
-		if (this.#appAuthMuxServer) return
-		// App auth is still browser-facing during app login redirects
-		// (`<app-port>` -> `:2000` -> `<app-port>/umbrel_/api/v1/auth/handoff`),
-		// so it needs the same HTTP/HTTPS muxing as app ports. Unlike app
-		// ports, `:2000` is Umbrel-owned infrastructure, so Node can bind it
-		// directly instead of relying on nftables redirection.
-		this.#appAuthMuxServer = this.createMuxServer({
-			listenPort: APP_AUTH_PUBLIC_PORT,
-			httpPort: this.serverPort(this.#appAuthHttpProxyServer),
-			getHttpsProxyServer: () => this.#appAuthHttpsProxyServer,
-		})
-		await this.listen(this.#appAuthMuxServer, APP_AUTH_PUBLIC_PORT)
 	}
 
 	private async updateAppMuxServers(appRoutes: AppIngressRoute[]) {
@@ -983,20 +909,7 @@ export default class LanIngress {
 	) {
 		const middleware = this.createProxyMiddleware(upstreamPort, originalProtocol, options)
 		const server = http.createServer((request, response) => {
-			if (options.redirectUnexpectedAppAuthNavigation) {
-				const redirect = appAuthDashboardRedirect({
-					protocol: originalProtocol,
-					host: request.headers.host,
-					url: request.url,
-					method: request.method,
-					accept: request.headers.accept,
-				})
-				if (redirect) {
-					response.writeHead(302, {location: redirect})
-					response.end()
-					return
-				}
-			}
+			if (upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.handleRequest(request, response)) return
 			middleware(request as any, response as any, (error?: unknown) => {
 				// Reset instead of an error response for the same reason as onError above.
 				this.logger.verbose(`LAN ingress proxy error to ${upstreamPort}: ${error}`)
@@ -1006,33 +919,20 @@ export default class LanIngress {
 		// Let umbreld and upstream apps enforce their own upload deadlines.
 		// Keep the separate timeout for receiving request headers.
 		server.requestTimeout = 0
-		this.attachProxyUpgradeHandler(server, middleware)
+		this.attachProxyUpgradeHandler(server, middleware, upstreamPort === this.#umbreld.port)
 		return server
 	}
 
 	private async createHttpsProxyServer(upstreamPort: number, options: UmbrelProxyOptions = {}) {
-		const {includeForwardedFor = true, pathPrefix} = options
-		const middleware = this.createProxyMiddleware(upstreamPort, 'https', {includeForwardedFor, pathPrefix})
+		const {includeForwardedFor = true} = options
+		const middleware = this.createProxyMiddleware(upstreamPort, 'https', {includeForwardedFor})
 		const server = https.createServer(
 			{
 				cert: await fse.readFile(this.serverCertificatePath),
 				key: await fse.readFile(this.serverKeyPath),
 			},
 			(request, response) => {
-				if (options.redirectUnexpectedAppAuthNavigation) {
-					const redirect = appAuthDashboardRedirect({
-						protocol: 'https',
-						host: request.headers.host,
-						url: request.url,
-						method: request.method,
-						accept: request.headers.accept,
-					})
-					if (redirect) {
-						response.writeHead(302, {location: redirect})
-						response.end()
-						return
-					}
-				}
+				if (upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.handleRequest(request, response)) return
 				middleware(request as any, response as any, (error?: unknown) => {
 					// Reset instead of an error response for the same reason as onError above.
 					this.logger.verbose(`LAN ingress proxy error to ${upstreamPort}: ${error}`)
@@ -1043,27 +943,22 @@ export default class LanIngress {
 		// Let umbreld and upstream apps enforce their own upload deadlines.
 		// Keep the separate timeout for receiving request headers.
 		server.requestTimeout = 0
-		this.attachProxyUpgradeHandler(server, middleware)
+		this.attachProxyUpgradeHandler(server, middleware, upstreamPort === this.#umbreld.port)
 		return server
 	}
 
 	private createProxyMiddleware(
 		upstreamPort: number,
 		originalProtocol: 'http' | 'https',
-		{includeForwardedFor = true, pathPrefix}: UmbrelProxyOptions = {},
+		{includeForwardedFor = true}: UmbrelProxyOptions = {},
 	): RequestHandler {
-		const rewritePath = pathPrefix
-			? (path: string) =>
-					path === pathPrefix || path.startsWith(`${pathPrefix}/`) || path.startsWith(`${pathPrefix}?`)
-						? path
-						: `${pathPrefix}${path}`
-			: undefined
 		return createProxyMiddleware({
 			target: `http://127.0.0.1:${upstreamPort}`,
 			changeOrigin: false,
-			ws: true,
-			pathRewrite: rewritePath,
-			// Umbrel-owned upstreams (dashboard, app-auth) get X-Forwarded-For since they
+			// Upgrade events are dispatched explicitly after routing/authentication.
+			// Automatic subscription would bypass that boundary on subsequent requests.
+			ws: false,
+			// Umbrel-owned upstreams (dashboard) get X-Forwarded-For since they
 			// only trust it from loopback. App upstreams must not: some apps reject any
 			// X-Forwarded-For from an unconfigured proxy (Home Assistant returns 400),
 			// and the plain-HTTP raw forward path never carried it either.
@@ -1076,15 +971,25 @@ export default class LanIngress {
 				error: this.logger.error,
 			}),
 			onProxyReq: (proxyRequest, request) => {
-				// The upstream target is always HTTP. Tell umbreld/app-auth/app-proxy
+				// The upstream target is always HTTP. Tell umbreld/app gateways
 				// whether the original browser request used HTTP or HTTPS.
-				proxyRequest.setHeader('x-forwarded-proto', originalProtocol)
+				proxyRequest.setHeader(
+					'x-forwarded-proto',
+					upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.isExternalRequest(request)
+						? 'https'
+						: originalProtocol,
+				)
 				if (request.headers.host) proxyRequest.setHeader('x-forwarded-host', request.headers.host)
 			},
 			onProxyReqWs: (proxyRequest, request) => {
 				// WebSocket upgrade requests bypass onProxyReq, so mirror the same
 				// forwarded headers for ws:// and wss:// traffic.
-				proxyRequest.setHeader('x-forwarded-proto', originalProtocol)
+				proxyRequest.setHeader(
+					'x-forwarded-proto',
+					upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.isExternalRequest(request)
+						? 'https'
+						: originalProtocol,
+				)
 				if (request.headers.host) proxyRequest.setHeader('x-forwarded-host', request.headers.host)
 			},
 			onProxyRes: (proxyResponse) => {
@@ -1107,8 +1012,11 @@ export default class LanIngress {
 		})
 	}
 
-	private attachProxyUpgradeHandler(server: http.Server, middleware: RequestHandler) {
-		server.on('upgrade', (request, socket, head) => middleware.upgrade?.(request as any, socket as net.Socket, head))
+	private attachProxyUpgradeHandler(server: http.Server, middleware: RequestHandler, dashboard: boolean) {
+		server.on('upgrade', (request, socket, head) => {
+			if (dashboard && this.#umbreld.externalAccess.handleUpgrade(request, socket as net.Socket, head)) return
+			middleware.upgrade?.(request as any, socket as net.Socket, head)
+		})
 	}
 
 	private serverPort(server: net.Server | http.Server) {
@@ -1234,9 +1142,6 @@ export default class LanIngress {
 			this.closeServer(this.#dashboardHttpsServer, {drainActiveResponses: true}).then(
 				() => (this.#dashboardHttpsServer = undefined),
 			),
-			this.closeServer(this.#appAuthMuxServer).then(() => (this.#appAuthMuxServer = undefined)),
-			this.closeServer(this.#appAuthHttpProxyServer),
-			this.closeServer(this.#appAuthHttpsProxyServer),
 			...Array.from(this.#appMuxServers.values()).flatMap((entry) => [
 				this.closeServer(entry.server),
 				this.closeServer(entry.httpsProxyServer),
@@ -1244,8 +1149,6 @@ export default class LanIngress {
 				this.closeServer(entry.loopbackServer),
 			]),
 		])
-		this.#appAuthHttpProxyServer = undefined
-		this.#appAuthHttpsProxyServer = undefined
 		this.#appMuxServers.clear()
 	}
 
@@ -1261,6 +1164,14 @@ export default class LanIngress {
 
 	// Generate public-port redirects plus hidden-port guard rules.
 	private buildNftRuleset(redirectRoutes: IngressPortMapping[], hiddenPortRoutes: IngressPortMapping[]) {
+		const external = this.#umbreld.externalAccess.settings
+		// A designated external proxy may only reach the shared web ingress. Run
+		// before Docker DNAT so published container ports cannot bypass app auth.
+		// Reply traffic for connections initiated by this host remains unaffected.
+		const proxyGuardRules = external.trustedProxies.map(
+			(ip) =>
+				`add rule inet ${NFT_TABLE_NAME} external_proxy fib daddr type local iifname != "lo" ${net.isIP(ip) === 6 ? 'ip6' : 'ip'} saddr ${ip} ct direction original tcp dport != { 80, 443 } drop`,
+		)
 		const redirectRules = redirectRoutes.map(
 			(route) =>
 				`add rule inet ${NFT_TABLE_NAME} prerouting fib daddr type local iifname != "lo" tcp dport ${route.publicPort} redirect to :${route.hiddenPort}`,
@@ -1277,6 +1188,8 @@ export default class LanIngress {
 			`flush table inet ${NFT_TABLE_NAME}`,
 			`add chain inet ${NFT_TABLE_NAME} prerouting { type nat hook prerouting priority dstnat - 1; policy accept; }`,
 			`add chain inet ${NFT_TABLE_NAME} input { type filter hook input priority filter - 1; policy accept; }`,
+			`add chain inet ${NFT_TABLE_NAME} external_proxy { type filter hook prerouting priority dstnat - 2; policy accept; }`,
+			...proxyGuardRules,
 			...redirectRules,
 			...hiddenPortDropRules,
 			'',

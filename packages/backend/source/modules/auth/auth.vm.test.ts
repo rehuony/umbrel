@@ -427,8 +427,11 @@ describe.sequential('Browser authentication', () => {
 			).statusCode,
 		).toBe(401)
 
-		const appSession = await request('/app-auth/v1/account/session?origin=host&app=missing-app&path=%2F', {
-			cookie: primary.appCookie,
+		const appSession = await request('/trpc/apps.authorizeAccess', {
+			method: 'POST',
+			json: {request: 'a'.repeat(64)},
+			authorization: primary.dashboardToken,
+			cookie: `${primary.appCookie}; ${primary.browserCookie}`,
 			throwHttpErrors: false,
 		})
 		expect(appSession.statusCode).toBe(401)

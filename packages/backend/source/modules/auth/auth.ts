@@ -120,6 +120,12 @@ const secretsMatch = (actual: string, expected: string) => {
 	return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
 }
 
+export class AppAccessDeniedError extends Error {
+	constructor() {
+		super('App access denied')
+	}
+}
+
 export default class Auth {
 	#umbreld: Umbreld
 	#store: FileStore<AuthStore>
@@ -320,7 +326,21 @@ export default class Auth {
 		if (principal.actor === 'system' || principal.accountId === OWNER_ACCOUNT_ID) return principal
 
 		const sharedAppIds = await this.#umbreld.apps.sharedAppIdsForUser(principal.accountId)
-		if (!sharedAppIds.includes(appId)) throw new Error('App access denied')
+		if (!sharedAppIds.includes(appId)) throw new AppAccessDeniedError()
+		return principal
+	}
+
+	// Authenticate once per request. Do not re-read the account while checking
+	// app access, or cache a grant beyond a permission/session change.
+	async authenticateApp(token: string, appId: string) {
+		const revision = this.appAccessRevision
+		const principal = await this.authenticate(token, 'app-gateway')
+		if (principal.accountId !== OWNER_ACCOUNT_ID) {
+			const shared = await this.#umbreld.apps.sharedAppIdsForUser(principal.accountId)
+			if (!shared.includes(appId)) throw new AppAccessDeniedError()
+		}
+		if (!this.#isPrincipalActive(principal)) throw new Error('Invalid credential')
+		if (revision !== this.appAccessRevision) throw new AppAccessDeniedError()
 		return principal
 	}
 
@@ -432,8 +452,7 @@ export default class Auth {
 
 	async issueAppHandoff(appId: string, appGatewayToken: string) {
 		this.#removeExpiredAppHandoffs()
-		const principal = await this.authenticate(appGatewayToken, 'app-gateway')
-		await this.authorizeApp(principal, appId)
+		await this.authenticateApp(appGatewayToken, appId)
 
 		const token = randomToken(256)
 		this.#appHandoffs.set(hash(token), {
@@ -452,10 +471,7 @@ export default class Auth {
 			throw new Error('Invalid app handoff')
 		}
 
-		const principal = await this.authenticate(handoff.appGatewayToken, 'app-gateway').catch(() => {
-			throw new Error('Invalid app handoff')
-		})
-		await this.authorizeApp(principal, appId).catch(() => {
+		const principal = await this.authenticateApp(handoff.appGatewayToken, appId).catch(() => {
 			throw new Error('Invalid app handoff')
 		})
 		return {principal, appGatewayToken: handoff.appGatewayToken}

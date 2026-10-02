@@ -27,6 +27,7 @@ export default class FileStore<T extends Serializable> {
 
 	#parser
 	#writes = 0
+	#pendingRead?: Promise<T>
 	#writeQueue
 	#onBeforeWrite?: () => Promise<void>
 	#onAfterWrite?: () => Promise<void>
@@ -74,6 +75,7 @@ export default class FileStore<T extends Serializable> {
 	}
 
 	async #write(store: T): Promise<boolean> {
+		this.#pendingRead = undefined
 		const rawData = this.#parser.encode(store)
 
 		// Call pre-write hook if provided
@@ -87,6 +89,8 @@ export default class FileStore<T extends Serializable> {
 
 			return true
 		} finally {
+			// Reads started during the write may have seen the old file.
+			this.#pendingRead = undefined
 			// Call post-write hook if provided
 			if (this.#onAfterWrite) await this.#onAfterWrite()
 		}
@@ -109,10 +113,17 @@ export default class FileStore<T extends Serializable> {
 	async get(): Promise<T>
 	async get<P extends string>(property: StorePath<T, P>, defaultValue?: DotProp<T, P>): Promise<DotProp<T, P>>
 	async get<P extends string>(property?: StorePath<T, P>, defaultValue?: DotProp<T, P>): Promise<T | DotProp<T, P>> {
-		const store = await this.#read()
-		if (property === undefined) return store
-
-		return getProperty(store, property as string, defaultValue) as DotProp<T, P>
+		// Coalesce concurrent reads only; retain no permission/configuration cache
+		// after I/O completes. Each caller receives its own mutable snapshot.
+		const pending = (this.#pendingRead ??= this.#read())
+		try {
+			const store = await pending
+			return structuredClone(property === undefined ? store : getProperty(store, property as string, defaultValue)) as
+				| T
+				| DotProp<T, P>
+		} finally {
+			if (this.#pendingRead === pending) this.#pendingRead = undefined
+		}
 	}
 
 	async set<P extends string>(property: StorePath<T, P>, value: DotProp<T, P>): Promise<boolean> {

@@ -34,13 +34,6 @@ export default defineConfig({
 	},
 	build: {
 		rolldownOptions: {
-			// Build separate HTML entrypoints while keeping their shared dependencies
-			// in one set of chunks. The server chooses which document to serve, so the
-			// restricted app-auth origin never has to select an entrypoint at runtime.
-			input: {
-				dashboard: path.resolve(import.meta.dirname, 'index.html'),
-				appAuth: path.resolve(import.meta.dirname, 'app-auth/index.html'),
-			},
 			output: {
 				minifyInternalExports: true,
 				codeSplitting: {

@@ -51,7 +51,7 @@ describe.sequential('App gateway behind a host network forwarder', () => {
 
 	const loopbackResponse = (https = false) =>
 		umbreld.vm.sshAsRoot(
-			`curl --silent --show-error --max-time 5 -i ${https ? `--cacert '${umbreld.vm.dataDirectory}/lan-ingress/ca.pem' https` : 'http'}://127.0.0.1:${appPort}/`,
+			`curl --silent --show-error --max-time 5 -i -H "Accept: text/html" ${https ? `--cacert '${umbreld.vm.dataDirectory}/lan-ingress/ca.pem' https` : 'http'}://127.0.0.1:${appPort}/`,
 		)
 
 	test('starts a same-port forwarder before installing the app', async () => {
@@ -83,7 +83,7 @@ systemd-run --quiet --unit=app-loopback-forwarder /usr/local/bin/node /tmp/app-l
 		await pRetry(
 			async () => {
 				const response = await umbreld.vm.sshAsRoot(
-					'curl --silent --show-error --max-time 5 -i http://100.64.0.1:4000/',
+					'curl --silent --show-error --max-time 5 -i -H "Accept: text/html" http://100.64.0.1:4000/',
 				)
 				expect(response).toContain('X-Test-Forwarder: tailnet')
 				expect(response).toContain('ECONNREFUSED')
@@ -114,7 +114,9 @@ systemd-run --quiet --unit=app-loopback-forwarder /usr/local/bin/node /tmp/app-l
 	test('serves the app to host-local clients and same-port forwarders', async () => {
 		// A successful LAN request alone misses the regression: PREROUTING does
 		// not handle connections originating on the Umbrel itself.
-		const response = await umbreld.vm.sshAsRoot('curl --silent --show-error --max-time 5 -i http://100.64.0.1:4000/')
+		const response = await umbreld.vm.sshAsRoot(
+			'curl --silent --show-error --max-time 5 -i -H "Accept: text/html" http://100.64.0.1:4000/',
+		)
 		expect(response).toContain('X-Test-Forwarder: tailnet')
 		expect(response).toContain('HTTP/1.1 200 OK')
 		expect(response).toContain('Hello world')
@@ -132,10 +134,12 @@ systemd-run --quiet --unit=app-loopback-forwarder /usr/local/bin/node /tmp/app-l
 		for (const https of [false, true]) {
 			const response = await loopbackResponse(https)
 			expect(response).toContain('HTTP/1.1 302 Found')
-			expect(response).toContain(`${https ? 'https' : 'http'}://127.0.0.1:2000/app-auth?`)
+			expect(response).toContain(`${https ? 'https' : 'http'}://127.0.0.1/app-access?request=`)
 			expect(response).not.toContain('Hello world')
 		}
-		const forwarded = await umbreld.vm.sshAsRoot('curl --silent --show-error --max-time 5 -i http://100.64.0.1:4000/')
+		const forwarded = await umbreld.vm.sshAsRoot(
+			'curl --silent --show-error --max-time 5 -i -H "Accept: text/html" http://100.64.0.1:4000/',
+		)
 		expect(forwarded).toContain('HTTP/1.1 302 Found')
 		expect(forwarded).not.toContain('Hello world')
 		await umbreld.client.apps.setSettings.mutate({appId, appProxyAuthEnabled: false})
@@ -177,7 +181,9 @@ systemd-run --quiet --unit=app-loopback-port-owner /usr/local/bin/node /tmp/app-
 		await waitForApp()
 		await expect(loopbackResponse()).resolves.toContain('Hello world')
 		await expect(loopbackResponse(true)).resolves.toContain('Hello world')
-		const response = await umbreld.vm.sshAsRoot('curl --silent --show-error --max-time 5 -i http://100.64.0.1:4000/')
+		const response = await umbreld.vm.sshAsRoot(
+			'curl --silent --show-error --max-time 5 -i -H "Accept: text/html" http://100.64.0.1:4000/',
+		)
 		expect(response).toContain('X-Test-Forwarder: tailnet')
 		expect(response).toContain('Hello world')
 	})

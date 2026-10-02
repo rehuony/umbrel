@@ -995,6 +995,7 @@ export default class Apps {
 		// and a crash partway through uninstall cannot leave a stale grant. The '*'
 		// share is intentionally retained because it covers future installations.
 		await this.removeMemberShare(appId)
+		await this.#umbreld.externalAccess.removeApp(appId)
 		// MCP bookkeeping is best effort, a failure here must never abort the uninstall
 		await this.#umbreld.mcp
 			.removeAppGrant(appId)

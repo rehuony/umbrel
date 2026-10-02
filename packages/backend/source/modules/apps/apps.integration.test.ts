@@ -17,15 +17,15 @@ import type {AppManifest} from './schema.js'
 
 let umbreld: Awaited<ReturnType<typeof createTestUmbreld>>
 let communityAppStoreGitServer: Awaited<ReturnType<typeof runGitServer>>
-let stopAppAuthUi = async () => {}
+let stopPanelUi = async () => {}
 
 beforeAll(async () => {
-	stopAppAuthUi = await startAppAuthUi()
+	stopPanelUi = await startPanelUi()
 	;[umbreld, communityAppStoreGitServer] = await Promise.all([createTestUmbreld(), runGitServer()])
 })
 
 afterAll(async () => {
-	await Promise.all([communityAppStoreGitServer.close(), umbreld.cleanup(), stopAppAuthUi()])
+	await Promise.all([communityAppStoreGitServer.close(), umbreld.cleanup(), stopPanelUi()])
 })
 
 // The following tests are stateful and must be run in order
@@ -248,40 +248,13 @@ test.sequential('updates() follows the same first-repository precedence as app u
 	}
 })
 
-test.sequential('app auth dev proxy serves executable UI modules with scoped handoff CSP', async () => {
-	const document = await umbreld.unauthenticatedApi.get('../app-auth/?origin=host&app=sparkles-hello-world&path=%2F', {
-		responseType: 'text',
-	})
+test.sequential('application login uses the dashboard entrypoint without widening form destinations', async () => {
+	const document = await umbreld.unauthenticatedApi.get('../app-access?request=invalid', {responseType: 'text'})
 	expect(document.headers['content-type']).toMatch(/^text\/html/)
-	expect(document.headers['content-security-policy']).toContain("form-action 'self' http://127.0.0.1:*")
-
-	const scripts = [...document.body.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
-	expect(scripts.length).toBeGreaterThan(0)
-	expect(scripts).toContain('/src/app-auth.tsx')
-	expect(scripts).not.toContain('/src/dashboard.tsx')
-	for (const source of scripts) {
-		const url = new URL(source, 'http://umbrel.local')
-		const module = await umbreld.unauthenticatedApi.get(`../app-auth${url.pathname}${url.search}`, {
-			responseType: 'text',
-		})
-		expect(module.statusCode, source).toBe(200)
-		expect(module.headers['content-type'], source).toMatch(/javascript/)
-		expect(module.body, source).not.toMatch(/^\s*<!doctype html>/i)
-	}
-
-	const hiddenService = `${'a'.repeat(56)}.onion`
-	const hiddenServicePath = path.join(umbreld.instance.dataDirectory, 'tor/data/app-sparkles-hello-world/hostname')
-	await fse.outputFile(hiddenServicePath, hiddenService)
-	try {
-		const torDocument = await umbreld.unauthenticatedApi.get(
-			'../app-auth/?origin=tor&app=sparkles-hello-world&path=%2F',
-			{responseType: 'text'},
-		)
-		expect(torDocument.headers['content-security-policy']).toContain(`form-action 'self' http://${hiddenService}`)
-		expect(torDocument.headers['content-security-policy']).not.toContain(`${hiddenService}:*`)
-	} finally {
-		await fse.remove(hiddenServicePath)
-	}
+	expect(document.headers['cache-control']).toContain('no-store')
+	expect(document.headers['content-security-policy']).toContain("form-action 'self'")
+	expect(document.body).toContain('/src/dashboard.tsx')
+	expect(document.body).not.toContain('/src/app-auth.tsx')
 })
 
 test.sequential('runs app proxying in umbreld without an app-proxy container', async () => {
@@ -309,28 +282,13 @@ test.sequential('runs app proxying in umbreld without an app-proxy container', a
 	)
 })
 
-test.sequential('app auth exchanges its cookie for an app-bound one-time handoff', async () => {
-	const login = await umbreld.unauthenticatedApi.post('../trpc/user.login', {json: {password: 'moneyprintergobrrr'}})
-	const appSession = (login.headers['set-cookie'] ?? [])
-		.find((cookie) => cookie.startsWith('UMBREL_APP_SESSION='))
-		?.split(';')[0]
-	expect(appSession).toBeDefined()
-
-	const handoff = await umbreld.unauthenticatedApi
-		.get('../app-auth/v1/account/session?origin=host&app=sparkles-hello-world&path=%2Fsettings%3Ftab%3Dnetwork', {
-			headers: {cookie: appSession!},
-		})
-		.json<{url: string; params: {r: string; handoff: string}}>()
-	expect(handoff.url).toMatch(/^http:\/\/127\.0\.0\.1:4000\/umbrel_\/api\/v1\/auth\/handoff$/)
-	expect(handoff.params.r).toBe('/settings?tab=network')
-	expect(handoff.params).not.toHaveProperty('token')
-
-	await expect(
-		umbreld.instance.auth.consumeAppHandoff('sparkles-hello-world', handoff.params.handoff),
-	).resolves.toMatchObject({principal: {accountId: OWNER_ACCOUNT_ID}})
-	await expect(umbreld.instance.auth.consumeAppHandoff('sparkles-hello-world', handoff.params.handoff)).rejects.toThrow(
-		'Invalid app handoff',
-	)
+test.sequential('retired app login endpoints cannot issue credentials', async () => {
+	const response = await umbreld.unauthenticatedApi.post('../app-auth/v1/account/login', {
+		json: {password: 'moneyprintergobrrr'},
+		throwHttpErrors: false,
+	})
+	expect(response.statusCode).toBe(404)
+	expect(response.headers['set-cookie']).toBeUndefined()
 })
 
 test.sequential('list() lists installed apps', async () => {
@@ -1916,14 +1874,14 @@ test.sequential('list() lists no apps after uninstall', async () => {
 	expect(installedApps.length).toStrictEqual(0)
 })
 
-async function startAppAuthUi() {
+async function startPanelUi() {
 	if (process.env.UMBREL_UI_PROXY) return async () => {}
 
 	const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 	const uiDirectory = path.resolve(currentDirectory, '../../../../frontend')
 	const vite = path.join(uiDirectory, 'node_modules/.bin/vite')
 	if (!(await fse.pathExists(vite))) {
-		throw new Error(`App auth integration test requires UI dependencies at ${vite}`)
+		throw new Error(`Panel integration test requires UI dependencies at ${vite}`)
 	}
 
 	const port = await getPort({host: '127.0.0.1'})
@@ -1935,8 +1893,8 @@ async function startAppAuthUi() {
 	try {
 		await pRetry(
 			async () => {
-				const response = await fetch(`http://127.0.0.1:${port}/app-auth/`)
-				if (!response.ok) throw new Error(`App auth Vite server returned ${response.status}`)
+				const response = await fetch(`http://127.0.0.1:${port}/app-access`)
+				if (!response.ok) throw new Error(`Panel Vite server returned ${response.status}`)
 			},
 			{retries: 100, factor: 1, minTimeout: 100, maxTimeout: 100},
 		)

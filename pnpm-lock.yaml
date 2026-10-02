@@ -278,6 +278,9 @@ importers:
       helmet:
         specifier: ^7.1.0
         version: 7.2.0
+      http-proxy:
+        specifier: ^1.18.1
+        version: 1.18.1(debug@4.4.3(supports-color@5.5.0))
       http-proxy-middleware:
         specifier: ^2.0.6
         version: 2.0.10(@types/express@4.17.25)(debug@4.4.3(supports-color@5.5.0))
@@ -393,6 +396,9 @@ importers:
       '@types/fs-extra':
         specifier: ^11.0.1
         version: 11.0.4
+      '@types/http-proxy':
+        specifier: ^1.17.17
+        version: 1.17.17
       '@types/js-yaml':
         specifier: ^4.0.5
         version: 4.0.9

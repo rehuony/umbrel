@@ -1,8 +1,10 @@
 import {useEffect, type Dispatch, type SetStateAction} from 'react'
 import {useTranslation} from 'react-i18next'
-import {TbFileText, TbTerminal2, TbVariable} from 'react-icons/tb'
+import {TbFileText, TbTerminal2, TbVariable, TbWorld} from 'react-icons/tb'
 import {type To} from 'react-router-dom'
 
+import {Button} from '@/components/ui/button'
+import {Input, Labeled} from '@/components/ui/input'
 import {prefetchGlobalDialog} from '@/modules/global-dialogs'
 import {UserApp} from '@/trpc/trpc'
 import {useLinkToDialog} from '@/utils/dialog'
@@ -12,7 +14,7 @@ import {
 	type AppCustomEnvironmentVariable,
 	type AppEnvironmentVariable,
 } from './app-settings-environment'
-import {BackButton, SettingsNavigationRow, SettingsViewHeader} from './shared'
+import {BackButton, SettingsControlRow, SettingsNavigationRow, SettingsViewHeader} from './shared'
 
 export function AdvancedSettingsView({
 	app,
@@ -113,6 +115,53 @@ export function EnvironmentSettingsView({
 				customVariables={customVariables}
 				setCustomVariables={setCustomVariables}
 			/>
+		</div>
+	)
+}
+
+export function ExternalAccessSetupRow({onConfigure}: {onConfigure: () => void}) {
+	const {t} = useTranslation()
+	return (
+		<SettingsControlRow
+			title={t('external-access.title')}
+			description={t('external-access.setup-required')}
+			icon={TbWorld}
+			tone={2}
+			muted
+			control={
+				<Button size='sm' onClick={onConfigure}>
+					{t('external-access.configure')}
+				</Button>
+			}
+		/>
+	)
+}
+
+export function ExternalAccessSettingsView({
+	app,
+	origin,
+	onConfigure,
+	onOriginChange,
+	onBack,
+}: {
+	app: UserApp
+	origin: string
+	onConfigure: () => void
+	onOriginChange: (value: string) => void
+	onBack: () => void
+}) {
+	const {t} = useTranslation()
+	return (
+		<div className='flex flex-col gap-y-5'>
+			<BackButton onClick={onBack}>{t('app-settings.title')}</BackButton>
+			<SettingsViewHeader title={t('external-access.title')} description={t('external-access.app-note')} />
+			{app.externalAccess?.enabled ? (
+				<Labeled label={t('external-access.app-domain')}>
+					<Input value={origin} onValueChange={onOriginChange} placeholder={`https://${app.id}.example.com`} />
+				</Labeled>
+			) : (
+				<ExternalAccessSetupRow onConfigure={onConfigure} />
+			)}
 		</div>
 	)
 }

@@ -7,16 +7,15 @@ import dotenv from 'dotenv'
 import express from 'express'
 import fse from 'fs-extra'
 import type {Compose} from 'compose-spec-schema'
-import {createProxyMiddleware} from 'http-proxy-middleware'
+import httpProxy from 'http-proxy'
 
 import type Umbreld from '../../index.js'
 import {
 	appGatewayTokenFromCookieHeader,
 	appGatewayTokenFromRequest,
-	setAppGatewayCookie,
 	stripAppGatewayCookies,
 } from '../auth/app-gateway-cookie.js'
-import {SESSION_DURATION} from '../auth/auth.js'
+import {AppAccessDeniedError} from '../auth/auth.js'
 import {appGatewayErrorPage} from './error-page.js'
 
 export type AppGatewayConfig = {
@@ -36,6 +35,7 @@ export type AppGatewayConfig = {
 
 type AppGatewayOptions = {
 	onUpstreamUnavailable?: () => void
+	externalOrigin?: string
 }
 
 function environmentRecord(environment: unknown) {
@@ -127,16 +127,6 @@ export function pathMatches(pathname: string, rules: string[]) {
 	})
 }
 
-function safeRedirect(value: unknown) {
-	if (typeof value !== 'string') return '/'
-	try {
-		const url = new URL(value, 'http://umbrel.local')
-		return `${url.pathname}${url.search}${url.hash}`
-	} catch {
-		return '/'
-	}
-}
-
 function hostWithPort(hostname: string, port: number) {
 	const host = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
 	return host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`
@@ -146,24 +136,35 @@ export default class AppGateway {
 	#umbreld: Umbreld
 	#config: AppGatewayConfig
 	#onUpstreamUnavailable?: () => void
-	#proxy: ReturnType<typeof createProxyMiddleware>
+	#externalOrigin?: string
+	#proxy: httpProxy
+	#agent: http.Agent
 	server: http.Server
 
 	constructor(umbreld: Umbreld, config: AppGatewayConfig, options: AppGatewayOptions = {}) {
 		this.#umbreld = umbreld
 		this.#config = config
 		this.#onUpstreamUnavailable = options.onUpstreamUnavailable
+		this.#externalOrigin = options.externalOrigin
+		this.#agent =
+			config.targetProtocol === 'https'
+				? new https.Agent({keepAlive: true, servername: config.targetHost})
+				: new http.Agent({keepAlive: true})
 		this.#proxy = this.createProxy()
 
 		const app = express()
 		app.disable('x-powered-by')
-		app.set('trust proxy', 'loopback')
+		// External instances have no listener; only the trusted ingress dispatches to them.
+		app.set('trust proxy', options.externalOrigin ? true : 'loopback')
 		app.use(cookieParser())
-		app.post('/umbrel_/api/v1/auth/handoff', express.urlencoded({extended: false}), (request, response) => {
-			this.acceptHandoff(request, response).catch((error) => {
-				this.#umbreld.logger.error(`Failed app auth handoff for ${config.appId}`, error)
-				response.status(401).send('Unauthorized')
-			})
+		app.get('/umbrel_/api/v1/auth/handoff', (request, response) => {
+			response.set('Cache-Control', 'no-store')
+			this.#umbreld.externalAccess
+				.acceptHandoff(request, response, config.appId, this.#externalOrigin)
+				.catch((error) => {
+					this.#umbreld.logger.error(`Failed app auth handoff for ${config.appId}`, error)
+					response.status(401).send('Unauthorized')
+				})
 		})
 		app.use((request, response) => {
 			this.handleRequest(request, response).catch((error) => {
@@ -173,42 +174,52 @@ export default class AppGateway {
 		})
 
 		this.server = http.createServer(app)
+		this.server.once('close', () => {
+			this.#proxy.close()
+			this.#agent.destroy()
+		})
 		// Let upstream apps enforce their own upload deadlines, as LAN ingress does.
 		// Keep the separate timeout for receiving request headers.
 		this.server.requestTimeout = 0
 		this.server.on('upgrade', (request, socket, head) => {
 			this.handleUpgrade(request, socket as net.Socket, head).catch(() => {
-				socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
-				socket.destroy()
+				socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
 			})
 		})
 	}
 
 	private createProxy() {
 		const targetHost = hostWithPort(this.#config.targetAddress ?? this.#config.targetHost, this.#config.targetPort)
-		return createProxyMiddleware({
+		// Use the existing proxy engine directly: each gateway owns its lifecycle,
+		// and only our authenticated handler can dispatch WebSocket upgrades.
+		const proxy = httpProxy.createProxyServer({
 			target: `${this.#config.targetProtocol}://${targetHost}`,
-			agent:
-				this.#config.targetProtocol === 'https' && this.#config.targetAddress
-					? new https.Agent({servername: this.#config.targetHost})
-					: undefined,
+			agent: this.#agent,
 			changeOrigin: false,
-			ws: true,
 			xfwd: false,
 			proxyTimeout: this.#config.timeout,
 			followRedirects: false,
-			onProxyReq: (proxyRequest, request, response) => {
-				if (request.socket.remoteAddress === undefined) return response.end()
-				if (!this.#config.trustUpstream) {
-					proxyRequest.setHeader('x-forwarded-proto', request.protocol)
-					if (request.headers.host) proxyRequest.setHeader('x-forwarded-host', request.headers.host)
-					proxyRequest.setHeader('x-forwarded-for', request.socket.remoteAddress)
-				}
-				this.stripCookies(proxyRequest, request)
-			},
-			onProxyReqWs: (proxyRequest, request) => this.stripCookies(proxyRequest, request),
-			onError: (error, _request, response) => this.handleUpstreamError(response, error),
 		})
+		const prepare = (proxyRequest: http.ClientRequest, request: http.IncomingMessage) => {
+			if (!this.#config.trustUpstream) {
+				const protocol = this.#externalOrigin
+					? 'https'
+					: 'protocol' in request
+						? String(request.protocol)
+						: request.headers['x-forwarded-proto'] === 'https' && request.socket.remoteAddress === '127.0.0.1'
+							? 'https'
+							: 'http'
+				proxyRequest.removeHeader('forwarded')
+				proxyRequest.setHeader('x-forwarded-proto', protocol)
+				if (request.headers.host) proxyRequest.setHeader('x-forwarded-host', request.headers.host)
+				proxyRequest.setHeader('x-forwarded-for', request.socket.remoteAddress ?? '')
+			}
+			this.stripCookies(proxyRequest, request)
+		}
+		proxy.on('proxyReq', prepare)
+		proxy.on('proxyReqWs', prepare)
+		proxy.on('error', (error, _request, response) => this.handleUpstreamError(response, error))
+		return proxy
 	}
 
 	private handleUpstreamError(response: http.ServerResponse | net.Socket, error?: unknown) {
@@ -266,6 +277,8 @@ export default class AppGateway {
 	}
 
 	private async isAuthorized(request: express.Request | http.IncomingMessage) {
+		if (this.#externalOrigin)
+			return this.#umbreld.externalAccess.authenticate(request, this.#config.appId, this.#externalOrigin)
 		if (!this.#config.auth) return
 		const pathname = new URL(request.url ?? '/', 'http://umbrel.local').pathname
 		const whitelisted = pathMatches(pathname, this.#config.authWhitelist)
@@ -279,42 +292,22 @@ export default class AppGateway {
 						request.headers.cookie,
 						request.socket.remoteAddress === '127.0.0.1' && request.headers['x-forwarded-proto'] === 'https',
 					)
-		const principal = await this.#umbreld.auth.authenticate(token, 'app-gateway')
-		await this.#umbreld.auth.authorizeApp(principal, this.#config.appId)
-		return principal
-	}
-
-	private async acceptHandoff(request: express.Request, response: express.Response) {
-		if (typeof request.body?.handoff !== 'string') return response.status(400).send('Invalid handoff')
-		const handoff = await this.#umbreld.auth.consumeAppHandoff(this.#config.appId, request.body.handoff)
-		setAppGatewayCookie(response, request, handoff.appGatewayToken, new Date(Date.now() + SESSION_DURATION))
-		response.redirect(safeRedirect(request.body.r))
+		return this.#umbreld.auth.authenticateApp(token, this.#config.appId)
 	}
 
 	private async handleRequest(request: express.Request, response: express.Response) {
 		try {
 			await this.isAuthorized(request)
-		} catch {
-			const origin = request.hostname.endsWith('.onion') ? 'tor' : 'host'
-			const searchParams = new URLSearchParams({
-				origin,
-				app: this.#config.appId,
-				path: request.originalUrl,
-			})
-			let host: string
-			if (origin === 'tor') {
-				host = await fse
-					.readFile(`${this.#umbreld.dataDirectory}/tor/data/auth/hostname`, 'utf8')
-					.then((value) => value.trim())
-					.catch(() => 'not-yet-generated.onion')
-			} else {
-				host = hostWithPort(request.hostname, 2000)
+		} catch (error) {
+			if (error instanceof AppAccessDeniedError) {
+				response.set('Cache-Control', 'no-store').status(403).send('Application access denied')
+				return
 			}
-			response.redirect(`${request.protocol}://${host}/app-auth?${searchParams}`)
+			await this.#umbreld.externalAccess.beginLogin(request, response, this.#config.appId, this.#externalOrigin)
 			return
 		}
-		this.#proxy(request, response, (error) => {
-			if (error) this.sendUpstreamError(response, error)
+		this.#proxy.web(request, response, {}, (error) => {
+			if (error) this.handleUpstreamError(response, error)
 		})
 	}
 
@@ -327,6 +320,6 @@ export default class AppGateway {
 		if (principal && !this.#umbreld.auth.registerAppSocket(principal, this.#config.appId, socket, appAccessRevision)) {
 			return
 		}
-		this.#proxy.upgrade?.(request as express.Request, socket, head)
+		this.#proxy.ws(request, socket, head)
 	}
 }

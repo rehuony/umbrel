@@ -29,7 +29,7 @@ afterAll(async () => {
 	vi.unstubAllEnvs()
 })
 
-test('development UI and app-auth proxies leave authenticated tRPC sockets to the server', async () => {
+test('development UI and application login routes leave authenticated tRPC sockets to the server', async () => {
 	const origin = `http://127.0.0.1:${host.instance.server.port}`
 	const document = await fetch(origin)
 	expect(await document.text()).toBe('development UI')
@@ -39,7 +39,7 @@ test('development UI and app-auth proxies leave authenticated tRPC sockets to th
 			?.split(';')
 			.find((rule) => rule.startsWith('connect-src')),
 	).toBe("connect-src 'self'")
-	await fetch(`${origin}/app-auth/`)
+	await fetch(`${origin}/app-access`)
 	const ticket = await host.client.user.createWebSocketTicket.mutate({target: 'trpc'})
 	const socket = new WebSocket(`${origin.replace('http:', 'ws:')}/trpc?ticket=${ticket}`)
 	try {

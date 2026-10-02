@@ -1,4 +1,5 @@
 import z from 'zod'
+import {TRPCError} from '@trpc/server'
 import {CustomAppInputSchema, prepareCustomApp} from './custom-apps.js'
 import {sanitizeRegistryApp} from './app-store.js'
 
@@ -44,6 +45,23 @@ export const appStore = router({
 })
 
 export const apps = router({
+	setExternalOrigin: privateProcedure
+		.input(z.object({appId: z.string(), origin: z.string().trim()}).strict())
+		.mutation(({ctx, input}) => ctx.umbreld.externalAccess.setAppOrigin(input.appId, input.origin)),
+	authorizeAccess: privateProcedureWithMembers
+		.input(z.object({request: z.string().regex(/^[0-9a-f]{64}$/)}))
+		.mutation(async ({ctx, input}) => {
+			if (!ctx.request || !ctx.principal) throw new TRPCError({code: 'BAD_REQUEST', message: 'HTTP is required'})
+			ctx.response?.setHeader('Cache-Control', 'no-store')
+			try {
+				return await ctx.umbreld.externalAccess.authorize(input.request, ctx.principal, ctx.request)
+			} catch (error) {
+				throw new TRPCError({
+					code: 'FORBIDDEN',
+					message: error instanceof Error ? error.message : 'Application access denied',
+				})
+			}
+		}),
 	prepareImport: privateProcedure.input(CustomAppInputSchema).mutation(({ctx, input}) => {
 		const prepared = prepareCustomApp(input.definition, input.metadata)
 		return {
@@ -134,6 +152,7 @@ export const apps = router({
 					const showCredentialsBeforeOpen = hasCredentials && !hideCredentialsBeforeOpen
 					return {
 						id: app.id,
+						externalAccess: ctx.umbreld.externalAccess.launchSettings(app.id),
 						name,
 						version,
 						icon: icon ?? `https://getumbrel.github.io/umbrel-apps-gallery/${app.id}/icon.svg`,
