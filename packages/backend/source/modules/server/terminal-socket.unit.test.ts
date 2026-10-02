@@ -4,11 +4,13 @@ import type http from 'node:http'
 import {beforeEach, describe, expect, test, vi} from 'vitest'
 import {WebSocket} from 'ws'
 
-const {$, spawn} = vi.hoisted(() => ({
+const {$, spawn, readFile} = vi.hoisted(() => ({
 	$: vi.fn(),
 	spawn: vi.fn(),
+	readFile: vi.fn(),
 }))
 
+vi.mock('node:fs/promises', () => ({readFile}))
 vi.mock('execa', () => ({$}))
 vi.mock('node-pty', () => ({default: {spawn}}))
 
@@ -47,6 +49,23 @@ describe('terminal WebSocket lifecycle', () => {
 		}
 		spawn.mockReset().mockReturnValue(ptyProcess)
 		$.mockReset().mockResolvedValue({stdout: 'umbrel'})
+		readFile.mockReset().mockResolvedValue('Welcome\n')
+	})
+
+	test('starts the host account login shell without overriding its shell or startup files', async () => {
+		const handler = createTerminalWebSocketHandler({
+			umbreld: {} as never,
+			logger: {error: vi.fn()} as never,
+		})
+		const socket = new TestWebSocket()
+		await handler(socket as unknown as WebSocket, {url: '/terminal?cols=80&rows=24'} as http.IncomingMessage)
+
+		expect(spawn).toHaveBeenCalledWith('sudo', ['--user', 'umbrel', '--login'], {
+			name: 'xterm-color',
+			cols: 80,
+			rows: 24,
+		})
+		expect(socket.send).toHaveBeenCalledWith('Welcome\r\n')
 	})
 
 	test('does not spawn a PTY after the socket disconnects during asynchronous setup', async () => {

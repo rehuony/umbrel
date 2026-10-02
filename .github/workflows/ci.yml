@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [pi4, pi5, arm64, amd64]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.target == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -47,8 +47,8 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           path: |
-            packages/system/build/*.img
-            packages/system/build/*.sha256
+            packages/system/build/images/*.img
+            packages/system/build/images/*.sha256
   virtual-machine:
     if: github.event_name == 'workflow_dispatch'
     needs: images
@@ -62,8 +62,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: system-amd64
-          path: packages/system/build
-      - run: cd packages/system/build && shasum -a 256 -c umbrelos-amd64.img.sha256
+          path: packages/system/build/images
+      - run: cd packages/system/build/images && shasum -a 256 -c umbrelos-amd64.img.sha256
       - run: make deps
       - run: npm exec --prefix packages/backend -- playwright install --with-deps chromium
       - run: make test-vm ARGS='--maxWorkers=1 --minWorkers=1 --exclude **/*.pi.vm.test.ts'

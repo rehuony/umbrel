@@ -40,7 +40,6 @@ if [[ "${1:-}" == "--build-on-host" ]]; then
     echo "Building OS..."
     cd "${WORK_DIR}"
     make image-amd64
-    rm -rf packages/system/rugix/build
     exit 0
 fi
 
@@ -115,7 +114,6 @@ sync_files() {
         --exclude='.git' \
         --exclude='node_modules' \
         --exclude='packages/system/build' \
-        --exclude='packages/system/rugix/.rugix' \
         . "${SSH_HOST}:${REMOTE_DIR}/" || [[ $? -eq 23 ]]
 }
 

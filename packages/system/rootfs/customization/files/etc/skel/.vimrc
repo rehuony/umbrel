@@ -1,0 +1,13 @@
+set nocompatible
+syntax on
+set number
+set nobackup
+set noswapfile
+set expandtab
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+set smarttab
+set autoindent
+set smartindent
+set encoding=utf-8

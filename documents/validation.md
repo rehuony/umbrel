@@ -1,5 +1,35 @@
 # Refactor and Validation Record
 
+## Bash, SSH policy, and Ghostty customization
+
+The current customization selects Bash for both `umbrel` and `root`, seeds Bash aliases and prompts plus Vim defaults, and keeps Zsh installed as an optional shell without selecting it or seeding Zsh defaults. The existing `eza` package selection is retained. SSH permits public-key authentication only; no login keys or panel key-management feature are included. Ghostty 1.3.1 terminfo is compiled into the image's global terminal database.
+
+The customization VM scenario now performs low-level assertions through the existing authenticated owner WebSocket terminal. It does not inject SSH keys or weaken SSH policy for testing. Other VM scenarios using the shared password-based SSH helper require separate test-transport adaptation before they can run against these images; their earlier results below do not validate the new SSH policy.
+
+- Backend type checking, focused formatting, Bash syntax checks, and `git diff --check` passed. The six build orchestration tests and three terminal lifecycle unit tests passed.
+- The exported Ghostty description compiled successfully in a separate Debian 13 container, and `tput colors` returned 256 without a terminal-type error.
+- Generic ARM64, Raspberry Pi 4, and Raspberry Pi 5 images were rebuilt with version `3d7d915-dirty-20261002042813`; all three adjacent SHA-256 files passed independent verification. The successful build cleaned its temporary workspace and lock.
+- The updated `system-customization.vm.test.ts` passed in 183 seconds on the QEMU `umbrel-home` ARM64 profile using the new ARM64 image. It verified owner registration; Bash as the default for `umbrel` and `root`; installed Zsh and eza; aliases and distinct user/root prompt colors; global Ghostty terminfo and terminal capability lookup; effective public-key-only SSH policy with no preinstalled login keys; personal Bash configuration through the actual WebSocket terminal; two guest-initiated reboots; discarded runtime package, root-file, and service changes; persistent user configuration and files; and explicit factory reset. No forced-shutdown fallback occurred.
+- Nested interactive shells in the test run in separate terminal sessions so they cannot take over the Web terminal's TTY. This fixes the test's initial wait timeout without changing production terminal behavior.
+- Physical Raspberry Pi acceptance, a Ghostty-to-device SSH login, and the other SSH-dependent VM suites were not performed. AMD64 and the USB installer remain unverified on this host. No panel SSH key management or online update service was implemented.
+
+## Previous build and customization refactor
+
+The preceding build refactor separated root filesystem sources, image definitions, orchestration, VM tools, and the USB installer. Outputs live under `packages/system/build/images/`. The root overlay is explicitly discarded on reboot. Permanent customizations have a build-time package list, file tree, and setup script; the first customization installs Zsh, selects it for the host account, and seeds personal shell defaults. The panel terminal follows the account shell.
+
+- Six build orchestration tests, three terminal unit tests, and four VM port-retry unit tests passed.
+- Backend type checking, focused formatting, 22 shell syntax checks, Zsh configuration syntax, Makefile command expansion, VM help, and `git diff --check` passed.
+- Generic ARM64, Raspberry Pi 4, and Raspberry Pi 5 image construction and independent SHA-256 verification passed. Build version: `3d7d915-dirty-20261002032628`.
+- The `system-customization.vm.test.ts` scenario passed in 116 seconds on the QEMU `umbrel-home` ARM64 profile. It verified fresh registration, baked-in Zsh, the host account shell, actual authenticated WebSocket terminal output, personal shell startup configuration, two guest-initiated reboots, removal of a temporary Debian package and root-file/service changes, preservation of user data, and explicit factory reset. No forced shutdown fallback was reported in this run.
+- Application-owned TLS VM regression passed on the new ARM64 image in 279 seconds: Compose import, live application HTTPS, panel HTTPS, application restart, power cycle, and uninstall. No forced shutdown fallback was reported.
+- The build exited successfully and removed its temporary workspaces and lock. Physical Raspberry Pi boot, network, storage, and application acceptance have not been performed.
+- AMD64 preflight still fails with a host execution-format error; the AMD64 image and USB installer have not been rebuilt. Host emulation registrations and existing service containers were left unchanged. Image CI now selects native ARM64 runners for ARM targets and an AMD64 runner for AMD64; this workflow has not been dispatched.
+- The upstream online updater remains removed. A/B boot support is retained; a custom update channel, health-gated slot commit, and shared-data rollback still require their own implementation and acceptance tests.
+
+The historical results below predate these build and shell changes.
+
+## Previous foundation validation
+
 This record covers the Web-only system foundation. The backend remains Node.js / TypeScript. Image artifacts are local; no remote publication has been performed.
 
 ## Implemented scope
@@ -31,17 +61,17 @@ These results exercise the restored original application configuration. Results 
 - AMD64 execution remains blocked by the host emulation configuration. OrbStack has not been restarted.
 - Physical Raspberry Pi 4 / 8 GB testing, other hardware boot tests, and actual Hermes Agent / Immich / Tailscale deployments have not been completed.
 
-A writable system root, standalone installation on existing Debian hosts, configurable external reverse-proxy entry URLs, and a self-hosted online system update service remain outside this stage.
+Runtime root persistence is deliberately excluded: system changes belong in the image; user data stays persistent. Standalone installation on existing Debian hosts, configurable external reverse-proxy entry URLs, and a self-hosted online system update service remain outside the current stage.
 
 ## Built artifacts
 
-Paths are relative to the repository root. Images and checksums are local, ignored build outputs; they have not been published.
+Paths are relative to the repository root. All three images below contain the current Bash customization, optional Zsh, public-key-only SSH policy, Ghostty terminfo, and disposable-root configuration, with version `3d7d915-dirty-20261002042813`. Images and checksums are local, ignored build outputs; they have not been published.
 
-| Target                   | Image                                      | Checksum                    |
-| ------------------------ | ------------------------------------------ | --------------------------- |
-| Raspberry Pi 4           | `packages/system/build/umbrelos-pi4.img`   | `umbrelos-pi4.img.sha256`   |
-| Raspberry Pi 5 / tryboot | `packages/system/build/umbrelos-pi.img`    | `umbrelos-pi.img.sha256`    |
-| Generic ARM64            | `packages/system/build/umbrelos-arm64.img` | `umbrelos-arm64.img.sha256` |
+| Target                   | Image                                             | Checksum                    |
+| ------------------------ | ------------------------------------------------- | --------------------------- |
+| Raspberry Pi 4           | `packages/system/build/images/umbrelos-pi4.img`   | `umbrelos-pi4.img.sha256`   |
+| Raspberry Pi 5 / tryboot | `packages/system/build/images/umbrelos-pi.img`    | `umbrelos-pi.img.sha256`    |
+| Generic ARM64            | `packages/system/build/images/umbrelos-arm64.img` | `umbrelos-arm64.img.sha256` |
 
 Successful image construction and checksum verification do not establish hardware boot compatibility or physical Raspberry Pi acceptance.
 

@@ -1,0 +1,4 @@
+# Additional Debian packages, one name per line, from the pinned APT snapshot.
+zsh
+eza
+ncurses-bin

@@ -1,4 +1,5 @@
 import type http from 'node:http'
+import {readFile} from 'node:fs/promises'
 
 import {$} from 'execa'
 import pty, {IPty} from 'node-pty'
@@ -68,18 +69,18 @@ export default function createTerminalWebSocketHandler({
 				)
 			} else {
 				// Get username of first non-root user on the system
-				const {stdout: username} = await $`id -nu 1000`
+				const [{stdout: username}, motd] = await Promise.all([
+					$`id -nu 1000`,
+					readFile('/etc/motd', 'utf8').catch(() => ''),
+				])
 				if (socketClosed || ws.readyState !== WebSocket.OPEN) return
-				// launch terminal with non-root user
-				ptyProcess = pty.spawn(
-					'sudo',
-					['--user', username, '--login', 'bash', '-c', 'if [ -f /etc/motd ]; then cat /etc/motd; fi; exec bash'],
-					{
-						name: 'xterm-color',
-						cols,
-						rows,
-					},
-				)
+				if (motd) ws.send(motd.replace(/\r?\n/g, '\r\n'))
+				// With no command, sudo uses the account's configured login shell and home.
+				ptyProcess = pty.spawn('sudo', ['--user', username, '--login'], {
+					name: 'xterm-color',
+					cols,
+					rows,
+				})
 			}
 			// Stream output from the shell to the WebSocket
 			ptyProcess.onData((data) => {

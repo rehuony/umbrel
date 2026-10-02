@@ -67,7 +67,7 @@ describe('Umbrel Machines host virtualization', () => {
 	beforeAll(async () => {
 		const image = path.resolve(
 			path.dirname(fileURLToPath(import.meta.url)),
-			'../../../../system/build/umbrelos-amd64.img',
+			'../../../../system/build/images/umbrelos-amd64.img',
 		)
 		umbreld = await createTestVm({device: 'umbrel-home', image, memory: 4096})
 		await umbreld.vm.powerOn()

@@ -378,7 +378,7 @@ export async function createTestVm({
 	startupTimeout?: number
 	stateDirectoryName?: string
 } = {}) {
-	const vmScript = path.resolve(currentDirectory, '../../../../system/vm.sh')
+	const vmScript = path.resolve(currentDirectory, '../../../../system/vm/run.sh')
 
 	const directory = temporaryDirectory({parentDirectory: testDataDirectory})
 	await directory.createRoot()
@@ -588,7 +588,7 @@ export async function createTestVm({
 			// Graceful shutdown failed, fall through to force kill
 		}
 
-		// Force kill if still running. QEMU runs as root on Linux (vm.sh boots
+		// Force kill if still running. QEMU runs as root on Linux (the VM launcher boots
 		// it with sudo) so an unprivileged process.kill() can't terminate it,
 		// fall back to sudo kill.
 		console.log('VM did not shut down cleanly, force killing process')
@@ -614,7 +614,7 @@ export async function createTestVm({
 		if (!vmProcessPid) return
 		const pid = vmProcessPid
 		if (process.platform === 'linux') {
-			// vm.sh launches QEMU through sudo on Linux. Signalling the process
+			// The VM launcher launches QEMU through sudo on Linux. Signalling the process
 			// group as the test user can report success after killing only the
 			// unprivileged wrapper, leaving the root-owned QEMU process alive. That
 			// is not a power cut, so always signal the complete group through sudo.
@@ -789,8 +789,8 @@ for password in '${userCredentials.password}' 'umbrel'; do
 	if printf '%s\\n' "$password" | sudo -S -p '' true >/dev/null 2>&1; then
 		set +e
 		printf '%s\\n' "$password" | sudo -S -p '' sh -c "printf '%s' '$encoded_command' | base64 -d | sh" 2>&1
-		status=$?
-		printf '\\n${exitMarker}%s\\n' "$status"
+		command_exit_code=$?
+		printf '\\n${exitMarker}%s\\n' "$command_exit_code"
 		exit 0
 	fi
 done

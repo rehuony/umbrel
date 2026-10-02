@@ -1,0 +1,13 @@
+# Restore the image's system files on every boot. Install permanent tools,
+# service definitions, and defaults at build time; keep user state under /data.
+overlay = "discard"
+
+# If setting up the configured root overlay fails (e.g. the overlay mount point
+# can't be created on the data partition), fall back to an in-memory overlay so
+# the device still boots in a degraded state instead of bricking before systemd.
+# The web UI can then come up and surface the problem to the user. Changes made
+# in this recovery state are temporary.
+overlay-fallback = "in-memory"
+
+[[persist]]
+directory = "/data"

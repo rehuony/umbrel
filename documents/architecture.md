@@ -42,7 +42,7 @@ Browser sessions include browser information and support two-factor authenticati
 
 Apple standalone clients, native-client login/refresh/discovery/pairing, phone photo backup protocols, and historical migrations have been removed. SMB, mobile browsers, browser HTTPS, Web uploads, and local photo indexing remain available.
 
-The system retains Rugix's root filesystem and persistent partition layout. Persisting arbitrary root filesystem modifications is outside this stage. No default upstream online system updater or remote system update script is configured; deployment uses fresh image installation.
+The system retains Rugix's A/B boot layout and resets the writable root overlay on reboot. Permanent packages, services, and defaults are baked into every customized image. User homes and declared application data remain persistent; explicit factory reset restores the image's initial data. The panel host terminal follows the Linux account's login shell. No default upstream online updater is configured, and a self-hosted update channel still requires verified artifacts, health-gated slot commit, and a data rollback policy. See [system builds and upgrade boundaries](../packages/system/README.md) for the build layout, recovery behavior, and future upgrade requirements.
 
 ## Language and translations
 

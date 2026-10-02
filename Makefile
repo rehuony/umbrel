@@ -7,27 +7,28 @@ ARGS ?=
 TEST ?=
 VERSION ?=
 DEV_COMMAND ?= start
+IMAGE_TARGETS ?= pi4 pi5 arm64 amd64
 
 .PHONY: help deps dev frontend backend typecheck format-check format lint translations-check test test-backend test-frontend test-integration test-vm build build-frontend image image-amd64 image-arm64 image-pi4 image-pi5 image-usb-installer vm build-remote test-remote
 
 help:
 	@printf '%s\n' \
-	  'make deps                     Install locked frontend and backend dependencies' \
-	  'make dev [DEV_COMMAND=start]  Manage the Linux development container' \
-	  'make frontend                Run the frontend development backend' \
-	  'make backend ARGS="..."         Run the backend with explicit CLI arguments' \
-	  'make typecheck                Check frontend and backend types' \
-	  'make format-check | format    Check or apply source formatting' \
+	  'make deps												Install locked frontend and backend dependencies' \
+	  'make dev [DEV_COMMAND=start] 		Manage the Linux development container' \
+	  'make frontend										Run the frontend development server' \
+	  'make backend ARGS="..."					Run the backend with explicit CLI arguments' \
+	  'make typecheck                		Check frontend and backend types' \
+	  'make format-check | format    		Check or apply source formatting' \
 	  'make lint | translations-check' \
-	  'make test                     Run unit and frontend tests' \
+	  'make test                     		Run unit and frontend tests' \
 	  'make test-integration TEST="..." Run backend integration tests on Linux' \
-	  'make build                    Check types and build the frontend' \
-	  'make image                    Build all four bootable images and checksums' \
+	  'make build                    		Check types and build the frontend' \
+	  'make image                    		Build all four bootable images and checksums' \
 	  'make image-pi4 | image-pi5 | image-arm64 | image-amd64 [VERSION=...]' \
-	  'make image-usb-installer        Build the optional USB installer' \
-	  'make test-vm TEST="..."        Run VM tests using already built images' \
-	  'make vm ARGS="help"            Manage a QEMU VM' \
-	  'make build-remote ARGS="host"  Sync and build on a chosen SSH host' \
+	  'make image-usb-installer        	Build the optional USB installer' \
+	  'make test-vm TEST="..."        	Run VM tests using already built images' \
+	  'make vm ARGS="help"            	Manage a QEMU VM' \
+	  'make build-remote ARGS="host"  	Sync and build on a chosen SSH host' \
 	  'make test-remote ARGS="host ..." Run tests on that host'
 
 deps:
@@ -63,7 +64,12 @@ translations-check:
 	npm --prefix packages/frontend run translations:check
 	bash .github/scripts/prepare-translations.test.sh
 
-test: test-backend test-frontend
+.PHONY: test-system
+
+test: test-backend test-frontend test-system
+
+test-system:
+	node --test packages/system/scripts/build.test.mjs
 
 test-backend:
 	npm --prefix packages/backend run test -- $(or $(TEST),unit.test) $(ARGS)
@@ -84,25 +90,25 @@ build-frontend:
 	npm --prefix packages/frontend run build
 
 image:
-	./packages/system/build.sh $(VERSION)
+	./packages/system/scripts/build.sh --version "$(VERSION)" $(IMAGE_TARGETS)
 
 image-amd64:
-	SKIP_ARM64=true SKIP_PI=true ./packages/system/build.sh $(VERSION)
+	./packages/system/scripts/build.sh --version "$(VERSION)" amd64
 
 image-arm64:
-	SKIP_AMD64=true SKIP_PI=true ./packages/system/build.sh $(VERSION)
+	./packages/system/scripts/build.sh --version "$(VERSION)" arm64
 
 image-pi4:
-	SKIP_AMD64=true SKIP_ARM64=true SKIP_PI4= SKIP_PI_TRYBOOT=true ./packages/system/build.sh $(VERSION)
+	./packages/system/scripts/build.sh --version "$(VERSION)" pi4
 
 image-pi5:
-	SKIP_AMD64=true SKIP_ARM64=true SKIP_PI4=true ./packages/system/build.sh $(VERSION)
+	./packages/system/scripts/build.sh --version "$(VERSION)" pi5
 
 image-usb-installer:
-	./packages/system/usb-installer/build.sh $(ARGS)
+	./packages/system/installer/build.sh $(ARGS)
 
 vm:
-	./packages/system/vm.sh $(ARGS)
+	./packages/system/vm/run.sh $(ARGS)
 
 build-remote:
 	./scripts/remote-builder build $(ARGS)

@@ -9,9 +9,9 @@ import {createTestVm} from '../test-utilities/create-test-umbreld.js'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 const osDirectory = path.resolve(currentDirectory, '../../../../os')
-const osImage = path.join(osDirectory, 'build/umbrelos-amd64.img')
+const osImage = path.join(osDirectory, 'build/images/umbrelos-amd64.img')
 const installerBuildScript = path.join(osDirectory, 'usb-installer/build.sh')
-const installerIso = path.join(osDirectory, 'build/umbrelos-amd64-usb-installer.iso')
+const installerIso = path.join(osDirectory, 'build/images/umbrelos-amd64-usb-installer.iso')
 
 describe('USB installer auto-flashes an unflashed Umbrel Home', () => {
 	let umbreld: Awaited<ReturnType<typeof createTestVm>>

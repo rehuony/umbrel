@@ -119,7 +119,7 @@ build_os_image() {
       cache_args+=(--cache-to type=gha,mode=max,scope=umbrelos-dev)
     fi
   fi
-  docker buildx build "${cache_args[@]}" --load --file packages/system/umbrelos.Dockerfile --tag "${INSTANCE_ID}" .
+  docker buildx build "${cache_args[@]}" --load --file packages/system/rootfs/Dockerfile --tag "${INSTANCE_ID}" .
 }
 
 create_instance() {
