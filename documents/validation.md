@@ -1,5 +1,20 @@
 # Refactor and Validation Record
 
+## Repository system updater
+
+The system and dashboard now share a repository release and Rugix A/B update. The source is `rehuony/umbrel`; stable release checks, verified bundle installation, durable progress, trial boot health, manual rollback, and a shell recovery fallback have been implemented. Local builds produce update bundles as well as flashable images; tagged CI prepares a draft release. No tags, pushes, or remote releases were created during implementation.
+
+- The live repository query returned no eligible stable release. It was reachable; this was not reported as a connection failure or an installed-version match.
+- Backend unit suite: 131 files passed, 1,548 tests passed, 1 skipped. Five additional update-state tests subsequently passed; the focused update suite totals 37 passing tests.
+- Frontend suite: 116 files and 881 tests passed with four workers; 47 Node tests also passed. The first fully parallel run timed out in an existing RAID onboarding test and produced five related failures. That file's 30 tests passed independently, and the bounded full rerun passed. No RAID source was changed.
+- Seven build and release metadata tests passed. Frontend and backend types, package formatting, frontend lint, translation freshness/tests, production frontend build, shell syntax, workflow YAML parsing, and `git diff --check` passed. The frontend build retains its existing large-chunk warnings.
+- ARM64 baseline and candidate fixtures are built with versions `0.1.0` and `0.1.1` under `packages/system/build/update-baseline/` and `packages/system/build/update-candidate/`. These are local test releases, not published distribution versions.
+- The end-to-end ARM64 QEMU scenario passed in 382 seconds with the `umbrel-home` profile, HVF acceleration, four virtual CPUs, and 2 GB RAM. It checked owner-only access, actual bundle download/verification and inactive-slot writes, trial boot and health commit, explicit restoration of the previous system, and automatic fallback after a deliberately mismatched release version. A Compose application resumed with the same persisted content after each transition, and the uploaded user file remained present. Cleanup shut the VM down without a forced-termination fallback. Only release HTTP transport was replaced by a local fixture; no slot or health result was mocked.
+- Physical Raspberry Pi update/recovery, AMD64, Pi boot flows, a live GitHub release asset download, remote CI execution, power loss during slot writing, and bootloader/kernel failures are not yet validated. The browser inspection tool timed out, so the passing component tests are not recorded as a separate visual browser acceptance run.
+
+The records below are historical and predate this updater unless stated otherwise.
+
+
 ## Bash, SSH policy, and Ghostty customization
 
 The current customization selects Bash for both `umbrel` and `root`, seeds Bash aliases and prompts plus Vim defaults, and keeps Zsh installed as an optional shell without selecting it or seeding Zsh defaults. The existing `eza` package selection is retained. SSH permits public-key authentication only; no login keys or panel key-management feature are included. Ghostty 1.3.1 terminfo is compiled into the image's global terminal database.

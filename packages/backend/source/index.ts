@@ -29,7 +29,6 @@ import Photos from './modules/photos/photos.js'
 import type {CloudStore} from './modules/files/cloud-types.js'
 
 import {
-	commitOsPartition,
 	setupPiCpuGovernor,
 	restoreHostname,
 	restoreWiFi,
@@ -209,6 +208,8 @@ export default class Umbreld {
 		this.photos = new Photos(this)
 	}
 
+	ready = false
+
 	async start() {
 		this.logger.log(`☂️  Starting Umbrel v${this.version}`)
 		this.logger.log()
@@ -218,9 +219,6 @@ export default class Umbreld {
 		this.logger.log()
 
 		await prepareDataDirectory(this)
-
-		// If we've successfully booted then commit to the current OS partition
-		await commitOsPartition(this)
 
 		// Set ondemand cpu governor for Raspberry Pi (non-blocking)
 		setupPiCpuGovernor(this)
@@ -324,6 +322,7 @@ export default class Umbreld {
 		// Start mcp after the other modules because its startup work (file grant
 		// cleanup and the files watcher listener) depends on them being started
 		this.mcp.start().catch((error) => this.logger.error('Failed to start MCP', error))
+		this.ready = true
 	}
 
 	private async setBackupRestoreFirstStartFlag() {
@@ -345,6 +344,7 @@ export default class Umbreld {
 	}
 
 	async stop() {
+		this.ready = false
 		try {
 			await Promise.all([
 				// Stop file consumers and public listeners before module teardown.

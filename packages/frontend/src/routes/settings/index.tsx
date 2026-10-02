@@ -37,6 +37,7 @@ const UsersDialog = React.lazy(() => import('@/routes/settings/users'))
 const SessionsDialog = React.lazy(() => import('@/routes/settings/sessions'))
 const RestartDialog = React.lazy(() => import('@/routes/settings/restart'))
 const ShutdownDialog = React.lazy(() => import('@/routes/settings/shutdown'))
+const SoftwareUpdate = React.lazy(() => import('@/routes/settings/software-update'))
 const DeviceInfoDialog = React.lazy(() => import('@/routes/settings/device-info'))
 const BackupsRestoreDialog = React.lazy(() => import('@/features/backups/index'))
 const Wifi = React.lazy(() => import('@/routes/settings/wifi'))
@@ -143,6 +144,7 @@ export function Settings() {
 				<Suspense>
 					{!userQ.isLoading && (
 						<Routes>
+							{!isMember && <Route path='/software-update' Component={SoftwareUpdate} />}
 							<Route path='/2fa' Component={TwoFactorDialog} />
 							<Route path='/device-info' Component={isMobile ? DeviceInfoDrawer : DeviceInfoDialog} />
 							{isMember && !isMobile && <Route path='/account/change-name' Component={ChangeNameDialog} />}

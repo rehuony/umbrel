@@ -21,7 +21,7 @@ system/
 ├── vm/                    # QEMU management
 ├── installer/             # Optional NixOS USB installer
 └── build/                 # Generated files; never committed
-    ├── images/            # Flashable images and adjacent SHA-256 files
+    ├── images/            # Images, update bundles, metadata, and SHA-256 files
     ├── installer/         # USB installer intermediate files
     ├── vm/                # Local VM state, unless VM_STATE_DIR overrides it
     └── work.*/            # Per-run root archives and Rugix work files
@@ -41,13 +41,13 @@ System files mirror their installed paths inside each `files/` directory. Platfo
 | `make image IMAGE_TARGETS="arm64 pi4"` | Only the selected targets                         |
 | `make image-usb-installer`             | AMD64 installer ISO; requires a built AMD64 image |
 
-Set `VERSION=...` to supply the embedded release version. Otherwise it contains the source revision, a dirty marker when appropriate, and a UTC build timestamp. Each successful image has an adjacent `.img.sha256` file. Existing images for other targets are left untouched, so their existence is not evidence that they were rebuilt.
+Set `VERSION=...` to supply the embedded release version. Otherwise it contains the source revision, a dirty marker when appropriate, and a UTC build timestamp. Each successful image has an adjacent `.img.sha256` file, a `.rugixb` update bundle, its checksum, and a `.update.json` record. Existing images for other targets are left untouched, so their existence is not evidence that they were rebuilt.
 
 The build checks Docker execution support for all requested architectures first, builds each required root filesystem once, and runs Rugix against a fresh working copy of `images/`. Pi 4 and Pi 5 share a root archive. Docker layers and Rugix downloads remain cached; path-keyed Rugix build layers do not cross build runs. Completed artifacts are copied to `build/images/` after checksum generation. A failed target leaves its previous final artifact untouched.
 
 A lock prevents concurrent image builds from sharing an output directory. `SYSTEM_BUILD_DIR` selects a different output directory; consumers then need an explicit image path. Set `KEEP_BUILD_WORK=true` to retain the temporary workspace for diagnostics. Interrupted runs that cannot execute cleanup may leave `.build-lock`; remove it only after confirming no build still uses that directory.
 
-Builds require Docker, Buildx, `shasum`, and permission to run privileged Rugix containers. The host must already support the requested CPU architecture. The AMD64 root also requires SSSE3 support. The scripts never install or replace host emulators. Tool versions and checksums remain pinned in the Dockerfile, package checksum asset, Bakery runner, and image layers according to the tool they configure.
+Builds require Node.js 22, Docker, Buildx, `shasum`, and permission to run privileged Rugix containers. The host must already support the requested CPU architecture. The AMD64 root also requires SSSE3 support. The scripts never install or replace host emulators. Tool versions and checksums remain pinned in the Dockerfile, package checksum asset, Bakery runner, and image layers according to the tool they configure.
 
 ## Image customization
 
@@ -82,17 +82,15 @@ The shared configuration is `images/recipes/setup-rugix/files/state-data.toml`. 
 
 ## Upgrade boundary
 
-The Rugix A/B layout and disposable-root state model remain intact. Future kernel, system-service, and panel changes can be delivered in a new customized image with matching boot artifacts. User and application data stay outside the replaceable base system; arbitrary old root overlays must not be copied over the new image.
+The Rugix A/B layout and disposable-root state model remain intact. The configured repository's stable releases deliver the kernel, system services, and panel together. The owner installs a verified bundle into the inactive group and restarts; persistent user and application data remain in place. A separate health service commits the trial only after sustained core readiness and returns an unhealthy trial to the previous group.
 
-Retaining this foundation does not restore the removed upstream online updater. Builds currently produce flashable images and checksums, not a complete update service. Flashing an image onto an existing disk is a fresh installation and can overwrite its data; it is not the future in-place A/B update procedure.
+Build-time APT snapshots remain pinned; runtime package or kernel upgrades are not the maintained upgrade path. Shared data format changes need a separate migration and recovery design, because switching OS slots cannot undo arbitrary database changes. The updater currently accepts only the same declared data format and update protocol.
 
-A future update channel must provide verified update artifacts for the inactive slot, trial boot, health-gated commit, and tested rollback. The current early boot-slot commit is not an end-to-end service health check. Shared data migrations also need an explicit rollback policy: switching OS slots cannot undo arbitrary database changes. Build-time APT snapshots remain pinned; runtime package or kernel upgrades are not the maintained system upgrade path.
-
-Images require fresh installation and a new system data directory. They do not import legacy systems, Mender, old USB installations, or old backups. Builds do not publish artifacts or execute remote system upgrade scripts.
+See [system updates](../../documents/system-updates.md) for version checks, build artifacts, the draft release workflow, integrity verification, and recovery boundaries. Local builds do not publish artifacts. Flashing a full image is still a fresh installation that can overwrite data; use the update bundle for the supported A/B upgrade procedure. Legacy systems, Mender, old USB installations, and old backups are not imported.
 
 ## Verification
 
-`make test-system` checks target selection, shared root builds, failure preservation, build locking, checksums, and architecture preflight using a fake Docker executable. These are orchestration tests, not image boot tests.
+`make test-system` checks target selection, shared root builds, failure preservation, build locking, checksums, and architecture preflight using a fake Docker executable. Release metadata tests verify all four targets, versions, and bundle checksums. These are orchestration tests, not image boot tests.
 
 After building the native image, run:
 

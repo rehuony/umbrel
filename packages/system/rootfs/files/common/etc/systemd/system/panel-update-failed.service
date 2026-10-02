@@ -1,0 +1,7 @@
+[Unit]
+Description=Record an interrupted update service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/umbreld/node_modules/.bin/tsx /opt/umbreld/source/modules/system/updates/cli.ts failed
+UMask=0077

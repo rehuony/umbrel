@@ -521,18 +521,6 @@ export async function reboot(): Promise<boolean> {
 	return true
 }
 
-export async function commitOsPartition(umbreld: Umbreld): Promise<boolean> {
-	try {
-		umbreld.logger.log('Committing OS partition...')
-		await $`rugix-ctrl system commit`
-		umbreld.logger.log('Successfully commited to new OS partition.')
-		return true
-	} catch (error) {
-		umbreld.logger.error(`Failed to commit OS partition`, error)
-		return false
-	}
-}
-
 export async function detectDevice() {
 	let {manufacturer, model, serial, uuid, sku, version} = await systemInformation.system()
 	let productName = model

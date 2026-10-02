@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+# This fallback must still work when the candidate panel or Node runtime cannot
+# start. Only reboot uncommitted trials, never loop on a failed default system.
+info=$(rugix-ctrl system info)
+if jq -e '.boot.activeGroup != null and .boot.defaultGroup != null and .boot.activeGroup != .boot.defaultGroup' <<< "$info" >/dev/null; then
+    reboot
+fi

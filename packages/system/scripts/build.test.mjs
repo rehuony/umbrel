@@ -30,6 +30,7 @@ if (args[0] === 'buildx') {
   fs.mkdirSync(path.dirname(output), {recursive: true})
   fs.writeFileSync(output, 'root filesystem fixture')
 }
+if (args.includes('bundler')) console.log('sha512-256:' + 'a'.repeat(64))
 if (args.includes('bake')) {
   const project = args.find(arg => arg.endsWith(':/project')).slice(0, -9)
   const system = args.at(-1)
@@ -37,6 +38,7 @@ if (args.includes('bake')) {
   const destination = path.join(project, 'build', system)
   fs.mkdirSync(destination, {recursive: true})
   fs.writeFileSync(path.join(destination, 'system.img'), system)
+  fs.writeFileSync(path.join(destination, 'system.rugixb'), system + '-bundle')
 }
 `,
 		{mode: 0o755},
@@ -77,8 +79,14 @@ test('Pi targets share one root build and publish only their own verified artifa
 	assert.deepEqual((await readdir(path.join(context.build, 'images'))).sort(), [
 		'umbrelos-pi.img',
 		'umbrelos-pi.img.sha256',
+		'umbrelos-pi.rugixb',
+		'umbrelos-pi.rugixb.sha256',
+		'umbrelos-pi.update.json',
 		'umbrelos-pi4.img',
 		'umbrelos-pi4.img.sha256',
+		'umbrelos-pi4.rugixb',
+		'umbrelos-pi4.rugixb.sha256',
+		'umbrelos-pi4.update.json',
 		'unrelated.img',
 	])
 	for (const name of ['umbrelos-pi4', 'umbrelos-pi']) {

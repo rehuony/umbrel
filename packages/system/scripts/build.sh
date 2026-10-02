@@ -115,13 +115,18 @@ for target in "${targets[@]}"; do
     esac
 
     echo "Building $target image (version $version)..."
-    (cd "$work_dir" && "$SYSTEM_DIR/scripts/run-bakery.sh" bake image --release-version "$version" "$system")
+    (cd "$work_dir" && "$SYSTEM_DIR/scripts/run-bakery.sh" bake bundle --release-version "$version" "$system")
     # Publish only after a successful build and checksum. Leave unrelated images
     # from previous builds and their checksums untouched.
     mkdir -p "$work_dir/artifacts"
     mv "$work_dir/build/$system/system.img" "$work_dir/artifacts/$artifact.img"
+    mv "$work_dir/build/$system/system.rugixb" "$work_dir/artifacts/$artifact.rugixb"
+    bundle_hash=$(cd "$work_dir" && "$SYSTEM_DIR/scripts/run-bakery.sh" bundler hash "artifacts/$artifact.rugixb")
+    node "$SYSTEM_DIR/scripts/release.mjs" artifact "$work_dir/artifacts" "$target" "$version" "$bundle_hash"
     (cd "$work_dir/artifacts" && shasum -a 256 "$artifact.img" > "$artifact.img.sha256")
-    mv "$work_dir/artifacts/$artifact.img" "$work_dir/artifacts/$artifact.img.sha256" "$BUILD_DIR/images/"
+    mv "$work_dir/artifacts/$artifact.img" "$work_dir/artifacts/$artifact.img.sha256" \
+        "$work_dir/artifacts/$artifact.rugixb" "$work_dir/artifacts/$artifact.rugixb.sha256" \
+        "$work_dir/artifacts/$artifact.update.json" "$BUILD_DIR/images/"
     built_targets="$built_targets$target "
     echo "Built $BUILD_DIR/images/$artifact.img"
 done

@@ -37,6 +37,9 @@ jobs:
     runs-on: ${{ matrix.target == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
       - uses: docker/setup-buildx-action@v3
       - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
       - name: Build bootable image and checksum
@@ -49,6 +52,8 @@ jobs:
           path: |
             packages/system/build/images/*.img
             packages/system/build/images/*.sha256
+            packages/system/build/images/*.rugixb
+            packages/system/build/images/*.update.json
   virtual-machine:
     if: github.event_name == 'workflow_dispatch'
     needs: images

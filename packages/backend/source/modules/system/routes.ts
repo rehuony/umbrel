@@ -6,6 +6,10 @@ import {z} from 'zod'
 import {$} from 'execa'
 import fse from 'fs-extra'
 import stripAnsi from 'strip-ansi'
+import PQueue from 'p-queue'
+
+import {checkUpdate, readBuild} from './updates/release.js'
+import {assertIdle, queueUpdate, updateStatus} from './updates/state.js'
 
 import {performReset} from './factory-reset.js'
 import {OWNER_USER_ID} from '../user/constants.js'
@@ -42,19 +46,25 @@ import {runAfterResponse} from '../server/run-after-response.js'
 
 type SystemStatus = 'running' | 'shutting-down' | 'restarting' | 'resetting' | 'restoring'
 let systemStatus: SystemStatus = 'running'
+const updateQueue = new PQueue({concurrency: 1})
 
 // Quick hack so we can set system status from migration module until we refactor this
 export function setSystemStatus(status: SystemStatus) {
 	systemStatus = status
 }
 
-function startPowerAction(
+async function startPowerAction(
 	umbreld: Umbreld,
 	response: Parameters<typeof runAfterResponse>[0],
 	status: Extract<SystemStatus, 'restarting' | 'shutting-down'>,
 	action: () => Promise<unknown>,
 ) {
-	systemStatus = status
+	await updateQueue.add(async () => {
+		if (systemStatus !== 'running')
+			throw new TRPCError({code: 'CONFLICT', message: 'A system operation is already running'})
+		await assertIdle()
+		systemStatus = status
+	})
 	runAfterResponse(response, () => {
 		void (async () => {
 			try {
@@ -125,10 +135,42 @@ async function scopeGpuUsageAppsForMember(
 
 export default router({
 	online: publicProcedure.query(() => true),
+	ready: publicProcedure.query(async ({ctx}) => ({
+		ready: ctx.umbreld.ready,
+		version: (await readBuild())?.release.version ?? ctx.umbreld.version,
+	})),
+	checkUpdate: privateProcedure.query(() => checkUpdate()),
+	updateStatus: privateProcedure.query(() => updateStatus()),
+	update: privateProcedure.input(z.object({version: z.string()})).mutation(({input}) =>
+		updateQueue.add(async () => {
+			if (systemStatus !== 'running')
+				throw new TRPCError({code: 'CONFLICT', message: 'A system operation is already running'})
+			await assertIdle()
+			const result = await checkUpdate()
+			if (!result.current || !result.available || !result.release || result.release.version !== input.version)
+				throw new TRPCError({code: 'BAD_REQUEST', message: 'The selected update is no longer available'})
+			if (systemStatus !== 'running')
+				throw new TRPCError({code: 'CONFLICT', message: 'A system operation is already running'})
+			await queueUpdate(result.current, result.release)
+			return true
+		}),
+	),
+	rollback: privateProcedure.mutation(() =>
+		updateQueue.add(async () => {
+			if (systemStatus !== 'running')
+				throw new TRPCError({code: 'CONFLICT', message: 'A system operation is already running'})
+			const build = await readBuild()
+			if (!build)
+				throw new TRPCError({code: 'BAD_REQUEST', message: 'This environment does not support system updates'})
+			await queueUpdate(build, null)
+			return true
+		}),
+	),
 	version: publicProcedure.query(async ({ctx}) => {
+		const build = await readBuild()
 		return {
-			version: ctx.umbreld.version,
-			name: ctx.umbreld.versionName,
+			version: build?.release.version ?? ctx.umbreld.version,
+			name: build ? `System ${build.release.version}` : ctx.umbreld.versionName,
 			previousVersion: await ctx.umbreld.store.get('previousVersion'),
 		}
 	}),
@@ -227,13 +269,13 @@ export default router({
 		)
 		.mutation(async ({ctx, input}) => clearStaticIp(ctx.umbreld, input)),
 	// Public during onboarding and recovery mode so users can shut down during RAID setup or mount failure
-	shutdown: publicProcedureWhenNoUserExists.mutation(({ctx}) => {
-		startPowerAction(ctx.umbreld, ctx.response, 'shutting-down', shutdown)
+	shutdown: publicProcedureWhenNoUserExists.mutation(async ({ctx}) => {
+		await startPowerAction(ctx.umbreld, ctx.response, 'shutting-down', shutdown)
 		return true
 	}),
 	// Public during onboarding and recovery mode
-	restart: publicProcedureWhenNoUserExists.mutation(({ctx}) => {
-		startPowerAction(ctx.umbreld, ctx.response, 'restarting', reboot)
+	restart: publicProcedureWhenNoUserExists.mutation(async ({ctx}) => {
+		await startPowerAction(ctx.umbreld, ctx.response, 'restarting', reboot)
 		return true
 	}),
 	logs: privateProcedure
@@ -261,7 +303,12 @@ export default router({
 					throw new TRPCError({code: 'UNAUTHORIZED', message: 'Invalid password'})
 				}
 			}
-			systemStatus = 'resetting'
+			await updateQueue.add(async () => {
+				if (systemStatus !== 'running')
+					throw new TRPCError({code: 'CONFLICT', message: 'A system operation is already running'})
+				await assertIdle()
+				systemStatus = 'resetting'
+			})
 			try {
 				// Wait for UI to poll status (polls every 10s) and see we're resetting
 				await setTimeout(11000)

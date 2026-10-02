@@ -1,0 +1,14 @@
+[Unit]
+Description=Validate the booted system before committing its A/B slot
+After=network.target
+OnFailure=panel-update-recover.service
+ConditionPathExists=/etc/rugix/system-build-info.json
+
+[Service]
+Type=oneshot
+ExecStart=/opt/umbreld/node_modules/.bin/tsx /opt/umbreld/source/modules/system/updates/cli.ts boot
+TimeoutStartSec=10min
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

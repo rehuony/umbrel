@@ -1,0 +1,6 @@
+[Unit]
+Description=Return an unhealthy trial boot to its previous system
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/panel-update-recover

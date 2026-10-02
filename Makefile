@@ -23,8 +23,9 @@ help:
 	  'make test                     		Run unit and frontend tests' \
 	  'make test-integration TEST="..." Run backend integration tests on Linux' \
 	  'make build                    		Check types and build the frontend' \
-	  'make image                    		Build all four bootable images and checksums' \
+	  'make image                    		Build all four images, update bundles and checksums' \
 	  'make image-pi4 | image-pi5 | image-arm64 | image-amd64 [VERSION=...]' \
+	  'make release-manifest VERSION=x.y.z Generate release metadata from all four bundles' \
 	  'make image-usb-installer        	Build the optional USB installer' \
 	  'make test-vm TEST="..."        	Run VM tests using already built images' \
 	  'make vm ARGS="help"            	Manage a QEMU VM' \
@@ -69,7 +70,7 @@ translations-check:
 test: test-backend test-frontend test-system
 
 test-system:
-	node --test packages/system/scripts/build.test.mjs
+	node --test packages/system/scripts/*.test.mjs
 
 test-backend:
 	npm --prefix packages/backend run test -- $(or $(TEST),unit.test) $(ARGS)
@@ -115,3 +116,7 @@ build-remote:
 
 test-remote:
 	./scripts/remote-builder test $(ARGS)
+
+.PHONY: release-manifest
+release-manifest:
+	node packages/system/scripts/release.mjs manifest packages/system/build/images "$(VERSION)"

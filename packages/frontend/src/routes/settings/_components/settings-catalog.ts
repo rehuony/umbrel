@@ -141,6 +141,16 @@ export function createSettingsCatalog(
 	const pageItems: SettingsPageItem[] = [
 		{
 			kind: 'page',
+			id: 'software-update',
+			category: 'system',
+			command: {},
+			icon: suppliedSettingsIcons.deviceInfo,
+			title: t('system-update.title'),
+			description: t('system-update.description'),
+			to: '/settings/software-update',
+		},
+		{
+			kind: 'page',
 			id: 'wallpaper',
 			category: 'account',
 			command: {default: true},

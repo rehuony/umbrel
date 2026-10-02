@@ -1,0 +1,12 @@
+[Unit]
+Description=Install the selected system update
+After=network-online.target
+OnFailure=panel-update-failed.service
+Wants=network-online.target
+ConditionPathExists=/etc/rugix/system-build-info.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock --nonblock /run/panel-update.lock /opt/umbreld/node_modules/.bin/tsx /opt/umbreld/source/modules/system/updates/cli.ts install
+TimeoutStartSec=2h
+UMask=0077

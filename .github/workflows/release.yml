@@ -1,0 +1,92 @@
+name: Build system release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+      - name: Validate the release identity
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          const source = JSON.parse(fs.readFileSync('packages/backend/source/modules/system/updates/source.json'));
+          if (process.env.GITHUB_REPOSITORY !== source.repository || !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(process.env.RELEASE_TAG)) throw new Error('Invalid release repository or version');
+          JS
+      - run: make deps
+      - run: make typecheck
+      - run: make translations-check
+      - run: npm --prefix packages/backend test -- updates/
+      - run: node --test packages/system/scripts/*.test.mjs
+      - run: make build-frontend
+  images:
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pi4, pi5, arm64, amd64]
+    runs-on: ${{ matrix.target == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+      - uses: docker/setup-buildx-action@v3
+      - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
+      - name: Build matching image and update bundle
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: make "image-$TARGET" VERSION="${RELEASE_TAG#v}"
+      - name: Compress flash images for distribution
+        run: |
+          cd packages/system/build/images
+          for image in *.img; do
+            gzip -1 "$image"
+            sha256sum "$image.gz" > "$image.gz.sha256"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: packages/system/build/images/*
+          compression-level: 0
+          if-no-files-found: error
+  draft:
+    needs: images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: packages/system/build/images
+      - name: Validate all bundles and assemble the release manifest
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: make release-manifest VERSION="${RELEASE_TAG#v}"
+      - name: Create a reviewable draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          const dir = 'packages/system/build/images';
+          for (const file of fs.readdirSync(dir)) if (fs.statSync(`${dir}/${file}`).size >= 2 * 1024 ** 3) throw new Error(`GitHub release asset is too large: ${file}`);
+          JS
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes --title "System ${RELEASE_TAG#v}"
+          gh release upload "$RELEASE_TAG" packages/system/build/images/* --repo "$GITHUB_REPOSITORY"
