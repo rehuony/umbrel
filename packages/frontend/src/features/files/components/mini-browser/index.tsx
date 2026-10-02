@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query'
 import {ChevronRight, FolderPlus, Loader2} from 'lucide-react'
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useEffect, useId, useMemo, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
 
 import {Button} from '@/components/ui/button'
@@ -308,11 +308,11 @@ function MultiRootTree({
 
 // Lists a directory from either the local filesystem or a custom source (e.g. a cloud remote)
 function useBrowserListing(path: string, listDirectory?: (path: string) => Promise<FileSystemItem[]>) {
+	const sourceInstance = useId()
 	const custom = useQuery({
-		// listDirectory is intentionally not part of the key: with staleTime/gcTime 0 the
-		// cache is per-mount, and including the (unstable) function would defeat caching
-		// eslint-disable-next-line @tanstack/query/exhaustive-deps
-		queryKey: ['mini-browser-custom-listing', path],
+		// Custom sources can expose identical paths. Isolate each mounted tree so
+		// an in-flight request from another picker cannot supply its directory data.
+		queryKey: ['mini-browser-custom-listing', sourceInstance, path],
 		queryFn: () => listDirectory!(path),
 		enabled: !!listDirectory,
 		staleTime: 0,

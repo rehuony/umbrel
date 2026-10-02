@@ -22,8 +22,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      # These checks use only Node built-ins, without npm install or API calls.
+          node-version-file: '.nvmrc'
+      # These checks use only Node built-ins, without dependency installation or API calls.
       - run: node --test packages/frontend/scripts/test-translations.mjs
       - run: bash .github/scripts/prepare-translations.test.sh
       - run: node packages/frontend/update-translations.js --validate
@@ -37,5 +37,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.nvmrc'
       - run: node packages/frontend/update-translations.js --check

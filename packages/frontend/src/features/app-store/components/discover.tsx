@@ -1,6 +1,6 @@
 import {ErrorBoundary} from 'react-error-boundary'
 import {useTranslation} from 'react-i18next'
-import {Navigate} from 'react-router-dom'
+import {Navigate, useLocation} from 'react-router-dom'
 
 import {ErrorBoundaryCardFallback} from '@/components/ui/error-boundary-card-fallback'
 import {SectionHeading} from '@/features/app-store/components/section-heading'
@@ -27,6 +27,7 @@ export default function Discover() {
 
 function DiscoverContent() {
 	const {t} = useTranslation()
+	const {search} = useLocation()
 	const availableApps = useAvailableApps()
 	const storefront = useStorefront()
 	const statuses = useAppStatusMap()
@@ -38,7 +39,7 @@ function DiscoverContent() {
 	// Discover is the editorial home; when the feed is definitively unavailable
 	// the complete catalog is the better landing page (the rail's Discover pill
 	// is disabled in that state too)
-	if (storefront.isUnavailable) return <Navigate to={categoryPath('all')} replace />
+	if (storefront.isUnavailable) return <Navigate to={{pathname: categoryPath('all'), search}} replace />
 
 	const allApps = sortApps(availableApps.apps ?? [], sort, storefront.dates)
 

@@ -26,14 +26,14 @@ if [[ "${1:-}" == "--build-on-host" ]]; then
     # Install dependencies if missing
     echo "Checking dependencies..."
     export DEBIAN_FRONTEND=noninteractive
-    command -v npm >/dev/null || (echo "Installing npm..." && apt-get update && apt-get install --yes nodejs npm)
+    command -v node >/dev/null && command -v pnpm >/dev/null || { echo "Install the Node.js version in .nvmrc and enable pnpm with Corepack first." >&2; exit 1; }
     command -v docker >/dev/null || (echo "Installing docker..." && apt-get update && apt-get install --yes docker.io)
     command -v qemu-system-x86_64 >/dev/null || (echo "Installing qemu..." && apt-get update && apt-get install --yes qemu-system-x86)
 
     # Install umbreld dev dependencies
     echo ""
     echo "Installing umbreld dependencies..."
-    cd "${WORK_DIR}/packages/backend" && npm install
+    cd "${WORK_DIR}" && pnpm install --frozen-lockfile
 
     # Build OS
     echo ""
@@ -59,10 +59,10 @@ if [[ "${1:-}" == "--test-on-host" ]]; then
     cd "${WORK_DIR}"
     if [[ $# -eq 0 ]]; then
         # No args: run test:vm
-        npm run test:vm
+        pnpm run test:vm
     else
         # Args provided: pass directly to test
-        npm run test -- "$@"
+        pnpm run test "$@"
     fi
     exit 0
 fi
@@ -75,7 +75,7 @@ show_usage() {
     echo "  build <ssh-host>           Build the OS on the remote host"
     echo "  test <ssh-host> [args]     Run tests on the remote host"
     echo "                             No args: runs test:vm (all VM tests)"
-    echo "                             With args: passes args directly to 'npm run test'"
+    echo "                             With args: passes args directly to 'pnpm run test'"
     echo ""
     echo "Examples:"
     echo "  $0 build umbrel@192.168.1.27"
@@ -122,21 +122,22 @@ case "${COMMAND}" in
         sync_files
         echo ""
         echo "Building on remote host..."
-        ssh -tt "${SSH_HOST}" "sudo ~/${REMOTE_DIR}/scripts/remote-builder --build-on-host '${REMOTE_DIR}'"
+        ssh -tt "${SSH_HOST}" "sudo ~/${REMOTE_DIR}/scripts/remote-builder.sh --build-on-host '${REMOTE_DIR}'"
         ;;
     test)
         sync_files
         echo ""
         echo "Running tests on remote host..."
         if [[ $# -eq 0 ]]; then
-            ssh -tt "${SSH_HOST}" "sudo ~/${REMOTE_DIR}/scripts/remote-builder --test-on-host '${REMOTE_DIR}'"
+            ssh -tt "${SSH_HOST}" "sudo ~/${REMOTE_DIR}/scripts/remote-builder.sh --test-on-host '${REMOTE_DIR}'"
         else
             # Properly escape args for SSH
             ESCAPED_ARGS=""
             for arg in "$@"; do
-                ESCAPED_ARGS+=" '${arg}'"
+                printf -v quoted_arg '%q' "${arg}"
+                ESCAPED_ARGS+=" ${quoted_arg}"
             done
-            ssh -tt "${SSH_HOST}" "sudo ~/${REMOTE_DIR}/scripts/remote-builder --test-on-host '${REMOTE_DIR}'${ESCAPED_ARGS}"
+            ssh -tt "${SSH_HOST}" "sudo ~/${REMOTE_DIR}/scripts/remote-builder.sh --test-on-host '${REMOTE_DIR}'${ESCAPED_ARGS}"
         fi
         ;;
     *)

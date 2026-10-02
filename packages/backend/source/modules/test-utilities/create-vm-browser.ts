@@ -51,7 +51,9 @@ function findChromiumExecutable() {
 	]
 	const executable = candidates.find((candidate): candidate is string => Boolean(candidate && existsSync(candidate)))
 	if (!executable) {
-		throw new Error('Chromium is unavailable; run `npx playwright install chromium` before VM browser tests')
+		throw new Error(
+			'Chromium is unavailable; run `pnpm --dir packages/backend exec playwright install chromium` before VM browser tests',
+		)
 	}
 	return executable
 }

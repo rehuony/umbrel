@@ -59,11 +59,11 @@ The health service and its shell fallback do not depend on the Web UI. They cann
 
 ```sh
 make test-system
-npm --prefix packages/backend test -- updates/ --exclude '**/*.vm.test.ts'
+pnpm --dir packages/backend test updates/ --exclude '**/*.vm.test.ts'
 make test-frontend ARGS=src/routes/settings/software-update.test.tsx
 UPDATE_TEST_IMAGE=/absolute/path/to/baseline.img \
 UPDATE_TEST_ARTIFACT=/absolute/path/to/candidate.update.json \
-  npm --prefix packages/backend test -- updates/system-update.vm.test.ts --maxWorkers=1 --minWorkers=1
+  pnpm --dir packages/backend test updates/system-update.vm.test.ts --maxWorkers=1
 ```
 
 The VM scenario uses two actual images with different stable versions and the `umbrel-home` profile. A local fixture replaces release HTTP transport inside the guest; checksum verification, slot installation, reboot, health commit, manual rollback, automatic fallback on a mismatched release version, and persistent user/application data use the real system. It does not publish a remote release or prove physical Raspberry Pi behavior. See [validation](validation.md) for results actually obtained.

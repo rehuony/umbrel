@@ -253,6 +253,7 @@ describe.sequential('CloudManager', () => {
 
 	test('classifies documented provider authentication and quota failures', () => {
 		expect(classifyCloudFailure(new RcloneAbortedError())).toBe('cancelled')
+		expect(classifyCloudFailure(new DOMException('The operation was aborted', 'AbortError'))).toBe('cancelled')
 
 		const cases: {provider: Provider; kind: 'auth' | 'quota'; messages: string[]}[] = [
 			{

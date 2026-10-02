@@ -56,9 +56,9 @@ function CategoryContent() {
 	const isAll = categoryId === 'all'
 	const categoryApps = isAll ? (apps ?? []) : (appsGroupedByCategory?.[categoryId] ?? [])
 
-	// Unknown category, or one that (no longer) has apps — e.g. a predefined
-	// category whose apps have all been recategorized upstream
-	if (categoryApps.length === 0) return <Navigate to={DISCOVER_PATH} replace />
+	// Empty named categories return to Discover. The complete catalog must stay
+	// here when empty because offline Discover redirects back to this page.
+	if (!isAll && categoryApps.length === 0) return <Navigate to={DISCOVER_PATH} replace />
 
 	const sortedApps = sortApps(categoryApps, sort, storefront.dates)
 	const icon = categoryIcon(categoryId)

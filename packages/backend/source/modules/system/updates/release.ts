@@ -2,7 +2,7 @@ import fse from 'fs-extra'
 import semver from 'semver'
 import {z} from 'zod'
 
-import source from './source.json'
+import source from './source.json' with {type: 'json'}
 
 export const repository = source.repository
 export const releasesUrl = `https://github.com/${repository}/releases`

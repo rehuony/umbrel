@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-# Package-local npm manifests own JavaScript dependencies. Make owns the
+# The pnpm workspace owns JavaScript dependencies. Make owns the
 # repository's development, verification, and image-building entry points.
 ARGS ?=
 TEST ?=
@@ -33,36 +33,35 @@ help:
 	  'make test-remote ARGS="host ..." Run tests on that host'
 
 deps:
-	npm --prefix packages/backend ci
-	npm --prefix packages/frontend ci
+	pnpm install --frozen-lockfile
 
 dev:
-	./scripts/umbrel-dev $(DEV_COMMAND) $(ARGS)
+	./scripts/umbrel-dev.sh $(DEV_COMMAND) $(ARGS)
 
 frontend:
-	npm --prefix packages/frontend run dev -- $(ARGS)
+	pnpm --dir packages/frontend run dev $(ARGS)
 
 backend:
-	npm --prefix packages/backend start -- $(ARGS)
+	pnpm --dir packages/backend start $(ARGS)
 
 typecheck:
-	npm --prefix packages/backend run typecheck
-	npm --prefix packages/frontend run typecheck
+	pnpm --dir packages/backend run typecheck
+	pnpm --dir packages/frontend run typecheck
 
 format-check:
-	npm --prefix packages/backend run format:check
-	npm --prefix packages/frontend run format:check
+	pnpm --dir packages/backend run format:check
+	pnpm --dir packages/frontend run format:check
 
 format:
-	npm --prefix packages/backend run format
-	npm --prefix packages/frontend run format
+	pnpm --dir packages/backend run format
+	pnpm --dir packages/frontend run format
 
 lint:
-	npm --prefix packages/frontend run lint
+	pnpm --dir packages/frontend run lint
 
 translations-check:
-	npm --prefix packages/frontend run translations:test
-	npm --prefix packages/frontend run translations:check
+	pnpm --dir packages/frontend run translations:test
+	pnpm --dir packages/frontend run translations:check
 	bash .github/scripts/prepare-translations.test.sh
 
 .PHONY: test-system
@@ -73,22 +72,22 @@ test-system:
 	node --test packages/system/scripts/*.test.mjs
 
 test-backend:
-	npm --prefix packages/backend run test -- $(or $(TEST),unit.test) $(ARGS)
+	pnpm --dir packages/backend run test $(or $(TEST),unit.test) $(ARGS)
 
 test-frontend:
-	npm --prefix packages/frontend test -- $(ARGS)
-	npm --prefix packages/frontend run test:unit
+	pnpm --dir packages/frontend test $(ARGS)
+	pnpm --dir packages/frontend run test:unit
 
 test-integration:
-	npm --prefix packages/backend run test -- $(or $(TEST),integration.test) $(ARGS)
+	pnpm --dir packages/backend run test $(or $(TEST),integration.test) $(ARGS)
 
 test-vm:
-	npm --prefix packages/backend run test -- $(or $(TEST),vm.test) $(ARGS)
+	pnpm --dir packages/backend run test $(or $(TEST),vm.test) $(ARGS)
 
 build: typecheck build-frontend
 
 build-frontend:
-	npm --prefix packages/frontend run build
+	pnpm --dir packages/frontend run build
 
 image:
 	./packages/system/scripts/build.sh --version "$(VERSION)" $(IMAGE_TARGETS)
@@ -112,10 +111,10 @@ vm:
 	./packages/system/vm/run.sh $(ARGS)
 
 build-remote:
-	./scripts/remote-builder build $(ARGS)
+	./scripts/remote-builder.sh build $(ARGS)
 
 test-remote:
-	./scripts/remote-builder test $(ARGS)
+	./scripts/remote-builder.sh test $(ARGS)
 
 .PHONY: release-manifest
 release-manifest:

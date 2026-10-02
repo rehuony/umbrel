@@ -55,7 +55,7 @@ function renderEntries() {
 	let entries: CmdkEntry[] = []
 	act(() =>
 		root.render(
-			<MemoryRouter future={{v7_startTransition: true, v7_relativeSplatPath: true}}>
+			<MemoryRouter>
 				<Probe onEntries={(rendered) => (entries = rendered)} />
 			</MemoryRouter>,
 		),

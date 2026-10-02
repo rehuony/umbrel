@@ -48,15 +48,16 @@ jobs:
       - name: Reuse the open translation PR
         id: prepare
         run: bash .github/scripts/prepare-translations.sh
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.nvmrc'
       - name: Show pending translations
         run: node packages/frontend/update-translations.js --plan
       - name: Install dependencies
         if: ${{ !inputs.plan_only }}
         working-directory: packages/frontend
-        run: npm ci
+        run: pnpm --filter frontend install --frozen-lockfile
       - name: Generate translations
         if: ${{ !inputs.plan_only }}
         working-directory: packages/frontend
@@ -65,16 +66,16 @@ jobs:
           TRANSLATIONS_OPENAI_MODEL: ${{ secrets.TRANSLATIONS_OPENAI_MODEL }}
           TRANSLATIONS_SYSTEM_PROMPT: ${{ secrets.TRANSLATIONS_SYSTEM_PROMPT }}
           TRANSLATIONS_USER_PROMPT: ${{ secrets.TRANSLATIONS_USER_PROMPT }}
-        run: npm run translations:generate
+        run: pnpm run translations:generate
       # GITHUB_TOKEN pushes don't trigger the regular push CI. Validate the
       # generated data here before publishing it, including on repeated runs.
       - name: Validate generated translations
         if: ${{ !inputs.plan_only }}
         working-directory: packages/frontend
         run: |
-          npm run translations:test
-          npm run translations:check
-          npx prettier --check translations/last-translated.en.json
+          pnpm run translations:test
+          pnpm run translations:check
+          pnpm exec prettier --check translations/last-translated.en.json
       - name: Check source and translation branches have not moved
         if: ${{ !inputs.plan_only }}
         env:

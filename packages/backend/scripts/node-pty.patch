@@ -1,0 +1,14 @@
+diff --git a/scripts/prebuild.js b/scripts/prebuild.js
+index 17f1d980e62e017d77058627a7a15c4c29f9470c..07cb9cc90f77cd1bf36cff66b4a850bab0551f14 100644
+--- a/scripts/prebuild.js
++++ b/scripts/prebuild.js
+@@ -31,4 +31,9 @@ if (!fs.existsSync(PREBUILD_DIR)) {
+   process.exit(1);
+ }
+ 
++// The stable macOS tarball omits this mode (microsoft/node-pty#850).
++if (process.platform === 'darwin') {
++  fs.chmodSync(path.join(PREBUILD_DIR, 'spawn-helper'), 0o755);
++}
++
+ process.exit(0);

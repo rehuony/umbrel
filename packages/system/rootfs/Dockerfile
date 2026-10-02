@@ -19,9 +19,9 @@ ARG YQ_VERSION=4.24.5
 ARG YQ_SHA256_amd64=c93a696e13d3076e473c3a43c06fdb98fafd30dc2f43bc771c4917531961c760
 ARG YQ_SHA256_arm64=8879e61c0b3b70908160535ea358ec67989ac4435435510e1fcb2eda5d74a0e9
 
-ARG NODE_VERSION=22.13.0
-ARG NODE_SHA256_amd64=9a33e89093a0d946c54781dcb3ccab4ccf7538a7135286528ca41ca055e9b38f  
-ARG NODE_SHA256_arm64=e0cc088cb4fb2e945d3d5c416c601e1101a15f73e0f024c9529b964d9f6dce5b
+ARG NODE_VERSION=24.18.0
+ARG NODE_SHA256_amd64=783130984963db7ba9cbd01089eaf2c2efb055c7c1693c943174b967b3050cb8
+ARG NODE_SHA256_arm64=6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508
 
 ARG KOPIA_VERSION=0.19.0
 ARG KOPIA_SHA256_amd64=c07843822c82ec752e5ee749774a18820b858215aabd7da448ce665b9b9107aa
@@ -51,24 +51,18 @@ ARG LIBHEIF_SNAPSHOT_DATE=20260921T000000Z
 # architecture. This also avoids running esbuild's Go binary under emulation.
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-bookworm-slim AS ui-build
 
-# Set the working directory
-WORKDIR /app
+WORKDIR /workspace
 
-# Install locked dependencies separately so source edits reuse the same cache.
-COPY packages/frontend/package.json packages/frontend/package-lock.json ./
-RUN npm ci
-
-COPY packages/frontend/ .
-
-# The ui-build stage only has 'packages/frontend' in '/app', but the ui imports runtime values
-# via a relative path ('../../../backend/source/modules/server/trpc/common') that resolves outside '/app'.
-# We copy the target file to the expected path for the build to succeed.
-COPY packages/backend/source/modules/server/trpc/common.ts /backend/source/modules/server/trpc/common.ts
-COPY packages/backend/source/modules/user/wallpapers.ts /backend/source/modules/user/wallpapers.ts
-COPY packages/backend/source/modules/machines/input-motion.ts /backend/source/modules/machines/input-motion.ts
-
-# Build the shared dashboard and app-auth frontend
-RUN npm run build
+# Resolve the same workspace graph as local development without backend builds.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/backend/scripts/node-pty.patch ./packages/backend/scripts/node-pty.patch
+COPY packages/frontend/package.json ./packages/frontend/package.json
+COPY packages/backend/package.json ./packages/backend/package.json
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    corepack enable && pnpm --filter frontend install --frozen-lockfile
+COPY packages/frontend ./packages/frontend
+COPY packages/backend/source ./packages/backend/source
+RUN pnpm --filter frontend build
 
 
 #########################################################################
@@ -496,6 +490,11 @@ RUN NODE_ARCH=$([ "${TARGETARCH}" = "arm64" ] && echo "arm64" || echo "x64") && 
     tar -xz -f node.tar.gz -C /usr/local --strip-components=1 && \
     rm -rf node.tar.gz
 
+# Pin development tooling to the workspace's packageManager declaration.
+COPY package.json /usr/share/panel/toolchain/package.json
+RUN corepack enable && \
+    corepack install --global "$(node -p "require('/usr/share/panel/toolchain/package.json').packageManager")"
+
 # Install yq from binary
 # Debian repos have kislyuk/yq but we want mikefarah/yq
 RUN YQ_SHA256=$(eval echo \$YQ_SHA256_${TARGETARCH}) && \
@@ -577,14 +576,25 @@ RUN usermod -aG umbrel libvirt-qemu
 # Preload images
 COPY --from=bundled-images /images /images
 
-# Install locked server dependencies before copying source and dashboard output.
-WORKDIR /opt/umbreld
-COPY packages/backend/package.json packages/backend/package-lock.json packages/backend/umbreld ./
-RUN npm clean-install --omit dev && npm link && test -x "$(command -v umbreld)"
-COPY packages/backend /opt/umbreld
-COPY LICENSE.md /usr/share/doc/panel/LICENSE.md
-COPY --from=ui-build /app/dist /opt/umbreld/ui
+# Deploy a self-contained production backend. Workspace symlinks must never
+# point back into the temporary build tree removed from the shipped image.
+WORKDIR /tmp/panel-workspace
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/backend/scripts/node-pty.patch ./packages/backend/scripts/node-pty.patch
+COPY packages/backend/package.json ./packages/backend/package.json
+COPY packages/frontend/package.json ./packages/frontend/package.json
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm --filter backend install --prod --frozen-lockfile
+COPY packages/backend ./packages/backend
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm --filter backend deploy --prod /opt/umbreld && \
+    ln -s /opt/umbreld/umbreld /usr/local/bin/umbreld && \
+    test -x "$(command -v umbreld)"
 WORKDIR /
+RUN rm -rf /tmp/panel-workspace && \
+    node /opt/umbreld/scripts/check-runtime.mjs
+COPY LICENSE.md /usr/share/doc/panel/LICENSE.md
+COPY --from=ui-build /workspace/packages/frontend/dist /opt/umbreld/ui
 
 # Copy in filesystem overlay
 COPY packages/system/rootfs/files/common /

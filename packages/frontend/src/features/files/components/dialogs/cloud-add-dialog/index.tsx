@@ -625,6 +625,7 @@ export default function CloudAddDialog() {
 			{/* Cloud folder picker */}
 			{provider && accountId && locations && (
 				<MiniBrowser
+					key={accountId}
 					open={dialogProps.open && cloudPickerOpen}
 					onOpenChange={(open) => {
 						if (open) return

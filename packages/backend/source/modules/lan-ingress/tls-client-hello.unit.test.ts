@@ -316,7 +316,7 @@ describe('ClientHelloReader', () => {
 		}
 		for (let iteration = 0; iteration < 512; iteration++) {
 			const wire = Buffer.from(original)
-			for (let mutation = 0; mutation < 3; mutation++) wire[random() % wire.length] ^= 1 << random() % 8
+			for (let mutation = 0; mutation < 3; mutation++) wire[random() % wire.length] ^= 1 << (random() % 8)
 			expect(read(wire, 1 + (random() % 17))).toEqual(read(wire, wire.length))
 		}
 	})

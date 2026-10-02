@@ -148,7 +148,7 @@ beforeEach(async () => {
 	root = createRoot(container)
 	await act(async () =>
 		root.render(
-			<MemoryRouter initialEntries={['/files/Home']} future={{v7_startTransition: true, v7_relativeSplatPath: true}}>
+			<MemoryRouter initialEntries={['/files/Home']}>
 				<Harness />
 			</MemoryRouter>,
 		),

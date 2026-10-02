@@ -221,7 +221,7 @@ function PickerOptions({
 			aria-label={label}
 			aria-busy={loading}
 			className={cn(
-				'min-h-0 overflow-y-auto overscroll-contain [scrollbar-color:rgb(255_255_255/0.15)_transparent] [scrollbar-width:thin]',
+				'min-h-0 [scrollbar-width:thin] [scrollbar-color:rgb(255_255_255/0.15)_transparent] overflow-y-auto overscroll-contain',
 				items.length === 0 && 'hidden',
 				scrollerClass,
 			)}

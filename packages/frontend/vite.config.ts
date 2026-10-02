@@ -1,6 +1,7 @@
 import path from 'node:path'
+import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
+import react, {reactCompilerPreset} from '@vitejs/plugin-react'
 import {defineConfig} from 'vite'
 import {imagetools} from 'vite-imagetools'
 
@@ -13,56 +14,44 @@ export default defineConfig({
 		// at build time. No need to manually add useMemo/useCallback/React.memo.
 		// useMemo/useCallback can still be used as escape hatches for precise control.
 		// If a component behaves unexpectedly, add "use no memo" directive to opt it out.
-		react({
-			babel: {
-				plugins: ['babel-plugin-react-compiler'],
-			},
-		}),
+		react(),
+		babel({presets: [reactCompilerPreset()]}),
 		imagetools({
 			// Currently we only convert SVGs in features/files/assets/file-items-thumbnails
 			include: /src\/features\/files\/assets\/file-items-thumbnails\/[^?]+\.svg(\?.*)?$/,
 		}),
 	],
-	// Vite 4.4.8+ blocks requests from unrecognized hosts to prevent DNS rebinding attacks.
-	// Allow all hosts since the dev server runs inside a local Docker container and is
-	// accessed via dynamic *.local hostnames (e.g. umbrel-dev.local, umbrel-dev-apps.local).
-	// This only affects the dev server, not production builds.
+	// Development containers use mDNS names. Keep Vite's host check enabled
+	// while allowing those names alongside its default localhost and IP support.
 	server: {
-		allowedHosts: true,
+		allowedHosts: ['.local'],
 	},
 	resolve: {
 		alias: {
-			'@/': `${path.resolve(__dirname, 'src')}/`,
+			'@/': `${path.resolve(import.meta.dirname, 'src')}/`,
 		},
 	},
 	build: {
-		rollupOptions: {
+		rolldownOptions: {
 			// Build separate HTML entrypoints while keeping their shared dependencies
 			// in one set of chunks. The server chooses which document to serve, so the
 			// restricted app-auth origin never has to select an entrypoint at runtime.
 			input: {
-				dashboard: path.resolve(__dirname, 'index.html'),
-				appAuth: path.resolve(__dirname, 'app-auth/index.html'),
+				dashboard: path.resolve(import.meta.dirname, 'index.html'),
+				appAuth: path.resolve(import.meta.dirname, 'app-auth/index.html'),
 			},
 			output: {
 				minifyInternalExports: true,
-				manualChunks: {
-					// remeda: ['remeda'],
-					// motion: ['framer-motion'],
-					// bignumber: ['bignumber.js'],
-					// other: ['react-helmet-async', 'react-error-boundary'],
-					// toaster: ['sonner'],
-					react: ['react', 'react-dom'],
-					i18n: ['i18next', 'react-i18next', 'i18next-browser-languagedetector', 'i18next-http-backend'],
-					fetch: ['@tanstack/react-query', '@trpc/react-query', '@trpc/client'],
-					css: ['tailwind-merge', 'clsx'],
-					reactRouter: ['react-router-dom'],
-					dev: ['@tanstack/react-query-devtools', 'react-json-tree'],
-					// sorter: ['match-sorter'],
-					// icons: ['react-icons', 'lucide-react'],
-					// qr: ['react-qr-code'],
-					// pin: ['rci'],
-					colorThief: ['colorthief'],
+				codeSplitting: {
+					groups: [
+						{name: 'react', test: /node_modules\/(?:react|react-dom|scheduler)\//},
+						{name: 'i18n', test: /node_modules\/(?:i18next(?:-[^/]+)?|react-i18next)\//},
+						{name: 'fetch', test: /node_modules\/(?:@tanstack\/react-query|@trpc\/(?:react-query|client))\//},
+						{name: 'css', test: /node_modules\/(?:tailwind-merge|clsx)\//},
+						{name: 'reactRouter', test: /node_modules\/react-router(?:-dom)?\//},
+						{name: 'dev', test: /node_modules\/(?:@tanstack\/react-query-devtools|react-json-tree)\//},
+						{name: 'colorThief', test: /node_modules\/colorthief\//},
+					],
 				},
 			},
 		},

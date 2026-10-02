@@ -18,6 +18,7 @@ INSTANCE_OPTIONS="${UMBREL_DEV_OPTIONS:-}"
 # mounted from persistent writable state in the /data volume at boot (see container-init).
 WRITABLE_STATE_DIR="/data/umbrel-dev-writable"
 WRITABLE_DIRS=(
+  "node_modules"
   "packages/backend/node_modules"
   "packages/backend/ui"
   "packages/backend/data"
@@ -46,30 +47,25 @@ ensure_mount_points() {
   done
 }
 
-# Install a package's dependencies inside the container if the last completed install
-# doesn't match its lockfile. npm can't self-heal a partially written node_modules, an
-# interrupted install leaves packages fully extracted but never re-runs their native
-# build scripts, so installs are all-or-nothing: wipe and reinstall whenever the
-# previous install didn't complete or is stale, and stamp the result only on success.
+# Install the shared workspace only when its locked inputs or runtime changed.
+# All dependency directories are writable mounts; the source stays read-only.
 install_dependencies() {
-  local package_directory="${1}"
-  local node_modules="${package_directory}/node_modules"
-  local stamp_file="${node_modules}/.umbrel-dev-install-stamp"
+  local workspace="/umbrel-dev"
+  local stamp_file="${workspace}/node_modules/.umbrel-dev-install-stamp"
   local stamp
-  stamp="$(node --version) $(sha256sum "${package_directory}/package-lock.json" | awk '{print $1}')"
-
-  # Skip the install entirely when the last one completed against the same lockfile
+  stamp="$(node --version) $(pnpm --version) $(cat "${workspace}/pnpm-lock.yaml" "${workspace}/pnpm-workspace.yaml" "${workspace}/package.json" "${workspace}/packages/backend/package.json" "${workspace}/packages/frontend/package.json" | sha256sum | awk '{print $1}')"
   if [[ -f "${stamp_file}" ]] && [[ "$(cat "${stamp_file}")" = "${stamp}" ]]
   then
     return 0
   fi
 
-  # Clear any stale or partially installed state
-  find "${node_modules}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-
-  # --no-save because the source tree is read-only, the container must never modify
-  # package.json or package-lock.json.
-  npm --prefix "${package_directory}" install --no-save
+  # Never reuse incomplete native builds from an interrupted installation.
+  local directory
+  for directory in node_modules packages/backend/node_modules packages/frontend/node_modules
+  do
+    find "${workspace}/${directory}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  done
+  pnpm --dir "${workspace}" install --frozen-lockfile
   echo "${stamp}" > "${stamp_file}"
 }
 
@@ -350,7 +346,7 @@ fi
 if [[ "${command}" = "client" ]]
 then
     shift
-    exec_in_instance npm --prefix /umbrel-dev/packages/backend run start -- client ${@}
+    exec_in_instance pnpm --dir /umbrel-dev/packages/backend run start client "$@"
 
     exit
 fi
@@ -462,27 +458,26 @@ then
 
     # Install dependencies
     echo "Installing dependencies..."
-    install_dependencies /umbrel-dev/packages/backend
-    install_dependencies /umbrel-dev/packages/frontend
+    install_dependencies
 
     # Check if we're in production mode
     if [[ ! -f "${PRODUCTION_MODE_FLAG_FILE}" ]]
     then
         # Run umbreld and ui in development mode with live reload
         echo "Starting umbreld and ui..."
-        npm --prefix /umbrel-dev/packages/backend run dev &
-        CHOKIDAR_USEPOLLING=true npm --prefix /umbrel-dev/packages/frontend run dev &
+        pnpm --dir /umbrel-dev/packages/backend run dev &
+        CHOKIDAR_USEPOLLING=true pnpm --dir /umbrel-dev/packages/frontend run dev &
         wait
     else
         # Build static production ui bundle and serve from umbreld
         echo "Building production ui..."
-        npm --prefix /umbrel-dev/packages/frontend run build
+        pnpm --dir /umbrel-dev/packages/frontend run build
         # Copy contents instead of moving the directory because both paths are mount points.
         # The dashboard and app-auth page are selected from this one build at runtime.
         rm -rf /umbrel-dev/packages/backend/ui/*
         cp --archive /umbrel-dev/packages/frontend/dist/. /umbrel-dev/packages/backend/ui/
         echo "Starting umbreld in production mode..."
-        npm --prefix /umbrel-dev/packages/backend run dev:production-mode
+        pnpm --dir /umbrel-dev/packages/backend run dev:production-mode
     fi
 
     exit

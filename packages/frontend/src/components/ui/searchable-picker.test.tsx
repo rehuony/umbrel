@@ -203,7 +203,7 @@ describe('searchable picker', () => {
 	test('the custom onboarding trigger opens the language picker and selects a language', async () => {
 		await act(async () =>
 			root.render(
-				<MemoryRouter future={{v7_startTransition: true, v7_relativeSplatPath: true}}>
+				<MemoryRouter>
 					<OnboardingFooter action={OnboardingAction.CREATE_ACCOUNT} />
 				</MemoryRouter>,
 			),

@@ -71,10 +71,7 @@ describe('Storage device info row', () => {
 	it('links non-Pro devices to Storage Manager', () => {
 		act(() =>
 			root.render(
-				<MemoryRouter
-					initialEntries={['/settings/device-info']}
-					future={{v7_startTransition: true, v7_relativeSplatPath: true}}
-				>
+				<MemoryRouter initialEntries={['/settings/device-info']}>
 					<Routes>
 						<Route
 							path='/settings/device-info'

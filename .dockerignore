@@ -1,5 +1,7 @@
 **/node_modules
 packages/backend/data
+packages/backend/ui
+packages/frontend/public/generated-tabler-icons
 packages/system/build
 
 .git

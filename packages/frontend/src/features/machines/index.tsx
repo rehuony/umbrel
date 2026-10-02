@@ -125,7 +125,7 @@ function MachinesLayoutContent() {
 			// stable both-edges: pages taller than the viewport (catalog) and shorter
 			// ones (index) would otherwise toggle the scrollbar and shift the centered
 			// column; both-edges reserves symmetric gutters so it stays centered
-			className='fixed inset-0 z-30 overflow-y-auto overscroll-contain bg-black/50 backdrop-blur-xl [scrollbar-gutter:stable_both-edges]'
+			className='fixed inset-0 z-30 [scrollbar-gutter:stable_both-edges] overflow-y-auto overscroll-contain bg-black/50 backdrop-blur-xl'
 			onClick={!closing && canImplicitlyDismiss ? close : undefined}
 		>
 			<motion.div

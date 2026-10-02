@@ -1,7 +1,3 @@
-// TODO: Re-enable this, we temporarily disable TS here since we broke tests
-// and have since changed the API. We'll refactor these later.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
 import {describe, afterEach, expect, test, vi} from 'vitest'
 
 // Mocks
@@ -17,7 +13,7 @@ vi.mock('execa')
 vi.mock('fs-extra')
 
 afterEach(() => {
-	vi.restoreAllMocks()
+	vi.resetAllMocks()
 })
 
 describe('getCpuTemperature', () => {
@@ -33,13 +29,13 @@ describe('getCpuTemperature', () => {
 
 	test('should throw error when system does not support cpu temperature', async () => {
 		vi.mocked(systemInformation.cpuTemperature).mockResolvedValue({main: null} as any)
-		expect(getCpuTemperature()).rejects.toThrow('Could not get CPU temperature')
+		await expect(getCpuTemperature()).rejects.toThrow('Could not get CPU temperature')
 	})
 })
 
 describe('getDiskUsageByPath', () => {
 	test('should return disk usage for specified path', async () => {
-		vi.mocked(execa.$).mockResolvedValue({
+		vi.mocked(execa.$, {partial: true}).mockResolvedValue({
 			stdout: `   1B-blocks         Used        Avail
 290821033984 126167117824 164653916160`,
 		})
@@ -53,7 +49,7 @@ describe('getDiskUsageByPath', () => {
 
 describe('getDiskUsage', () => {
 	test('keeps filesystem capacity live while using Files and app directory aggregates', async () => {
-		vi.mocked(execa.$).mockResolvedValue({
+		vi.mocked(execa.$, {partial: true}).mockResolvedValue({
 			stdout: `1B-blocks Used Avail
 1000 800 200`,
 		})
@@ -100,7 +96,7 @@ describe('getMemoryUsage', () => {
 			}
 			throw new Error('ENOENT')
 		})
-		vi.mocked(execa.$).mockResolvedValue({
+		vi.mocked(execa.$, {partial: true}).mockResolvedValue({
 			stdout: '1 100',
 		})
 		expect(await getMemoryUsage(umbreld)).toMatchObject({
@@ -117,7 +113,7 @@ describe('getMemoryUsage', () => {
 				getContainerNames: async () => ['test_web_1'],
 			},
 		]
-		vi.mocked(execa.$).mockImplementation(async (...args: any[]) => {
+		vi.mocked(execa.$, {partial: true}).mockImplementation(async (...args: any[]) => {
 			const template = args[0]
 			const str = Array.isArray(template) ? template.join('') : String(template)
 			if (str.includes('docker ps')) {
@@ -167,7 +163,7 @@ describe('shutdown', () => {
 	})
 
 	test('should throw error when "poweroff" command fails', async () => {
-		vi.mocked(execa.$).mockRejectedValue(new Error('Failed'))
+		vi.mocked(execa.$, {partial: true}).mockRejectedValue(new Error('Failed'))
 		await expect(shutdown()).rejects.toThrow()
 	})
 })
@@ -179,7 +175,7 @@ describe('reboot', () => {
 	})
 
 	test('should throw error when "shutdown" command fails', async () => {
-		vi.mocked(execa.$).mockRejectedValue(new Error('Failed'))
+		vi.mocked(execa.$, {partial: true}).mockRejectedValue(new Error('Failed'))
 		await expect(reboot()).rejects.toThrow()
 	})
 })

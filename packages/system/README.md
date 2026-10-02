@@ -47,7 +47,7 @@ The build checks Docker execution support for all requested architectures first,
 
 A lock prevents concurrent image builds from sharing an output directory. `SYSTEM_BUILD_DIR` selects a different output directory; consumers then need an explicit image path. Set `KEEP_BUILD_WORK=true` to retain the temporary workspace for diagnostics. Interrupted runs that cannot execute cleanup may leave `.build-lock`; remove it only after confirming no build still uses that directory.
 
-Builds require Node.js 22, Docker, Buildx, `shasum`, and permission to run privileged Rugix containers. The host must already support the requested CPU architecture. The AMD64 root also requires SSSE3 support. The scripts never install or replace host emulators. Tool versions and checksums remain pinned in the Dockerfile, package checksum asset, Bakery runner, and image layers according to the tool they configure.
+Builds require Node.js 24 (see `.nvmrc`), Corepack-enabled pnpm, Docker, Buildx, `shasum`, and permission to run privileged Rugix containers. The host must already support the requested CPU architecture. The AMD64 root also requires SSSE3 support. The scripts never install or replace host emulators. Tool versions and checksums remain pinned in the Dockerfile, package checksum asset, Bakery runner, and image layers according to the tool they configure.
 
 ## Image customization
 

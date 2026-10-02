@@ -1,0 +1,34 @@
+packages:
+  - packages/backend
+  - packages/frontend
+
+# Keep native builds serial: node-gyp shares its header cache between packages.
+childConcurrency: 1
+engineStrict: true
+# The source checkout is read-only inside the development container.
+verifyDepsBeforeRun: false
+allowBuilds:
+  '@parcel/watcher': true
+  '@tailwindcss/oxide': true
+  better-sqlite3: true
+  blake3-wasm-rs: true
+  cpu-features: true
+  drivelist: true
+  esbuild: true
+  node-pty: true
+  # Registry packages already contain the built Git server and protobuf runtime.
+  node-git-server: false
+  protobufjs: false
+  sharp: true
+  ssh2: true
+minimumReleaseAgeExclude:
+  - '@types/node@24.19.1'
+  - vite@8.3.2
+
+overrides:
+  '@types/node': 24.19.1
+  # Patched transitive releases until upstream consumers refresh their ranges.
+  'dockerode>uuid': 11.1.1
+  'sharp@<0.35.4': 0.35.5
+patchedDependencies:
+  node-pty@1.1.0: packages/backend/scripts/node-pty.patch

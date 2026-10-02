@@ -9,6 +9,7 @@ import {test} from 'node:test'
 
 const exec = promisify(execFile)
 const script = fileURLToPath(new URL('./build.sh', import.meta.url))
+const remoteScript = fileURLToPath(new URL('../../../scripts/remote-builder.sh', import.meta.url))
 
 async function fixture(t) {
 	const directory = await mkdtemp(path.join(tmpdir(), 'system-build-test-'))
@@ -137,4 +138,48 @@ test('concurrent builds cannot share an output directory', async (t) => {
 	await assert.rejects(context.run(['arm64']), /Another image build/)
 	assert.ok(!(await context.calls()).some((args) => args[0] === 'buildx'))
 	assert.ok((await readdir(context.build)).includes('.build-lock'))
+})
+
+async function remoteFixture(t) {
+	const directory = await mkdtemp(path.join(tmpdir(), 'panel-remote-builder-'))
+	t.after(() => rm(directory, {recursive: true, force: true}))
+	const bin = path.join(directory, 'bin')
+	await mkdir(bin)
+	const log = path.join(directory, 'calls.jsonl')
+	const env = {...process.env, PATH: `${bin}:${process.env.PATH}`, PANEL_CALL_LOG: log}
+	const capture = `#!/usr/bin/env node\nrequire('node:fs').appendFileSync(process.env.PANEL_CALL_LOG, JSON.stringify(process.argv.slice(2)) + '\\n')\n`
+	return {directory, bin, log, env, capture}
+}
+
+test('remote test arguments survive SSH shell parsing without expansion', async (t) => {
+	const {bin, log, env, capture} = await remoteFixture(t)
+	await writeFile(path.join(bin, 'ssh'), capture, {mode: 0o755})
+	await writeFile(path.join(bin, 'rsync'), '#!/bin/sh\nexit 0\n', {mode: 0o755})
+	const args = ['unit.test', '-t', "owner's file has spaces", 'literal; $HOME $(id) `id`', '']
+	await exec('bash', [remoteScript, 'test', 'test-builder', ...args], {env})
+	const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse)
+	const command = calls.at(-1).at(-1)
+	const suffix = command.slice(command.indexOf("'", command.indexOf('--test-on-host')))
+	const parsed = await exec('bash', ['-c', `set -- ${suffix}; shift; printf '%s\\0' "$@"`])
+	assert.deepEqual(parsed.stdout.split('\0').slice(0, -1), args)
+})
+
+test('the remote runner invokes pnpm and preserves test arguments', async (t) => {
+	const {directory, bin, log, env, capture} = await remoteFixture(t)
+	await mkdir(path.join(directory, 'checkout', 'packages', 'backend'), {recursive: true})
+	await writeFile(path.join(bin, 'pnpm'), capture, {mode: 0o755})
+	await writeFile(
+		path.join(bin, 'getent'),
+		'#!/bin/sh\nprintf "tester:x:1000:1000::%s:/bin/bash\\n" "$PANEL_TEST_HOME"\n',
+		{mode: 0o755},
+	)
+	const args = ['unit.test', '-t', "owner's file has spaces"]
+	const options = {env: {...env, SUDO_USER: 'tester', PANEL_TEST_HOME: directory}}
+	await exec('bash', [remoteScript, '--test-on-host', 'checkout', ...args], options)
+	await exec('bash', [remoteScript, '--test-on-host', 'checkout'], options)
+	const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse)
+	assert.deepEqual(calls, [
+		['run', 'test', ...args],
+		['run', 'test:vm'],
+	])
 })

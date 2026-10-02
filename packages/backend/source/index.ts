@@ -2,8 +2,7 @@ import path from 'node:path'
 import {setTimeout} from 'node:timers/promises'
 import fse from 'fs-extra'
 
-// TODO: import packageJson from '../package.json' assert {type: 'json'}
-const packageJson = (await import('../package.json', {assert: {type: 'json'}})).default
+import packageJson from '../package.json' with {type: 'json'}
 
 import {BACKUP_RESTORE_FIRST_START_FLAG, UMBREL_APP_STORE_REPO} from './constants.js'
 import createLogger, {type LogLevel} from './modules/utilities/logger.js'

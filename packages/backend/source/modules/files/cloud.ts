@@ -3,7 +3,7 @@ import type {Dirent} from 'node:fs'
 import nodePath from 'node:path'
 
 import fse from 'fs-extra'
-import PQueue, {AbortError as QueueAbortError} from 'p-queue'
+import PQueue from 'p-queue'
 import stripAnsi from 'strip-ansi'
 
 import type Umbreld from '../../index.js'
@@ -253,7 +253,7 @@ const resumePause = (sync: CloudSync): CloudSync => {
 }
 
 export const classifyCloudFailure = (error: unknown, provider?: Provider): CloudFailureKind => {
-	if (error instanceof RcloneAbortedError || error instanceof QueueAbortError) return 'cancelled'
+	if (error instanceof RcloneAbortedError || (error instanceof Error && error.name === 'AbortError')) return 'cancelled'
 	if (error instanceof CloudProviderHttpError) {
 		if (error.statusCode === 401) return 'auth'
 		if (error.statusCode === 429) return 'quota'
@@ -1566,8 +1566,8 @@ export default class CloudManager {
 		const controller = new AbortController()
 		runtime.controller = controller
 		runtime.phase = 'queued'
-		// p-queue 7 does not release its pending counter when a signalled task is
-		// aborted before starting, so cancellation is checked inside both tasks.
+		// Check cancellation inside each task so the queue owns the full transfer
+		// lifetime, including cleanup after an active transfer is aborted.
 		const queued = this.globalSyncQueue.add(async () => {
 			if (controller.signal.aborted) return 'retained'
 			return accountRuntime.queue.add(async () => {

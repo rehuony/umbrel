@@ -10,9 +10,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version-file: '.nvmrc'
       - name: Install application runner test dependencies
         run: |
           sudo apt-get update
@@ -39,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version-file: '.nvmrc'
       - uses: docker/setup-buildx-action@v3
       - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
       - name: Build bootable image and checksum
@@ -60,9 +61,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version-file: '.nvmrc'
       - run: sudo apt-get update && sudo apt-get install --yes qemu-system-x86 qemu-utils ovmf
       - uses: actions/download-artifact@v4
         with:
@@ -70,5 +72,5 @@ jobs:
           path: packages/system/build/images
       - run: cd packages/system/build/images && shasum -a 256 -c umbrelos-amd64.img.sha256
       - run: make deps
-      - run: npm exec --prefix packages/backend -- playwright install --with-deps chromium
-      - run: make test-vm ARGS='--maxWorkers=1 --minWorkers=1 --exclude **/*.pi.vm.test.ts'
+      - run: pnpm --dir packages/backend exec playwright install --with-deps chromium
+      - run: make test-vm ARGS='--maxWorkers=1 --exclude **/*.pi.vm.test.ts'

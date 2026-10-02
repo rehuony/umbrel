@@ -536,12 +536,12 @@ export default class PhotosRepository {
 		// hashes. Compound filters retain their existing candidate selection.
 		const sourceOnly = Boolean(
 			filter.sourceIds?.length &&
-				!filter.kind &&
-				!filter.subKind &&
-				filter.favorite === undefined &&
-				!filter.albumIds?.length &&
-				!filter.dates?.length &&
-				!filter.query,
+			!filter.kind &&
+			!filter.subKind &&
+			filter.favorite === undefined &&
+			!filter.albumIds?.length &&
+			!filter.dates?.length &&
+			!filter.query,
 		)
 		const sourceRows = sourceOnly
 			? (database

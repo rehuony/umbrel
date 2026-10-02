@@ -79,7 +79,7 @@ export function MachinesTabBar({machines}: {machines: Machine[]}) {
 			// so a negative right margin here would overflow the page sideways)
 			className={cn(
 				scrollerClass,
-				'-mt-1 -mb-3 flex scroll-px-6 items-center gap-2 overflow-x-auto py-1 pr-2 [scrollbar-width:none] md:pr-0 [&::-webkit-scrollbar]:hidden',
+				'-mt-1 -mb-3 flex scroll-px-6 [scrollbar-width:none] items-center gap-2 overflow-x-auto py-1 pr-2 md:pr-0 [&::-webkit-scrollbar]:hidden',
 			)}
 		>
 			<DarkTooltip label={t('machines.all-machines')} side='bottom'>

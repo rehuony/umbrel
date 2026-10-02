@@ -55,7 +55,9 @@ const wrapHandlersWithAsyncHandler = (router: express.Router) => {
 	// Loop over each layer of the router stack
 	for (const layer of router.stack) {
 		// If we have a nested router, recursively wrap its handlers
-		if (layer.name === 'router') wrapHandlersWithAsyncHandler(layer.handle)
+		if (layer.name === 'router' && 'stack' in layer.handle && Array.isArray(layer.handle.stack)) {
+			wrapHandlersWithAsyncHandler(layer.handle as express.Router)
+		}
 		// If we have a route, wrap its handlers
 		else if (layer.route) {
 			for (const routeLayer of layer.route.stack) routeLayer.handle = asyncHandler(routeLayer.handle)

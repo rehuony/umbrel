@@ -9,9 +9,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version-file: '.nvmrc'
       - name: Validate the release identity
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -24,7 +25,7 @@ jobs:
       - run: make deps
       - run: make typecheck
       - run: make translations-check
-      - run: npm --prefix packages/backend test -- updates/
+      - run: pnpm --dir packages/backend test updates/
       - run: node --test packages/system/scripts/*.test.mjs
       - run: make build-frontend
   images:
@@ -38,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version-file: '.nvmrc'
       - uses: docker/setup-buildx-action@v3
       - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
       - name: Build matching image and update bundle
@@ -68,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.0'
+          node-version-file: '.nvmrc'
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*

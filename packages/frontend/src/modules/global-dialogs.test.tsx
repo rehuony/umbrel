@@ -41,7 +41,7 @@ afterEach(() => {
 async function renderAt(url: string) {
 	await act(async () =>
 		root.render(
-			<MemoryRouter key={url} initialEntries={[url]} future={{v7_startTransition: true, v7_relativeSplatPath: true}}>
+			<MemoryRouter key={url} initialEntries={[url]}>
 				<GlobalDialogs />
 			</MemoryRouter>,
 		),
