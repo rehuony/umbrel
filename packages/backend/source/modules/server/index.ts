@@ -1,0 +1,366 @@
+import http from 'node:http'
+import process from 'node:process'
+import {promisify} from 'node:util'
+import {fileURLToPath} from 'node:url'
+import {dirname, join} from 'node:path'
+import {createGzip} from 'node:zlib'
+import {pipeline} from 'node:stream/promises'
+
+import {$} from 'execa'
+import fse from 'fs-extra'
+import express from 'express'
+import cookieParser from 'cookie-parser'
+import helmet from 'helmet'
+
+import {WebSocketServer} from 'ws'
+import {createProxyMiddleware} from 'http-proxy-middleware'
+
+import type Umbreld from '../../index.js'
+import type {Principal, WebSocketTarget} from '../auth/auth.js'
+import {trpcExpressHandler, trpcWssHandler} from './trpc/index.js'
+import createTerminalWebSocketHandler from './terminal-socket.js'
+import createMachineConsoleWebSocketHandler from './machine-console-socket.js'
+import MachineConsoleSessions from './machine-console-sessions.js'
+import createMachineAudioWebSocketHandler from './machine-audio-socket.js'
+import createAppAuthRouter from './app-auth.js'
+import {authorizeHttpRequest} from '../auth/http-request.js'
+import {getSystemDiskUsage} from '../system/system.js'
+import UploadDiskPreflight from './upload-disk-preflight.js'
+import createErrorHandler from './error-handler.js'
+
+import fileApi from '../files/api.js'
+import photosApi from '../photos/api.js'
+import accountAvatarApi from '../user/avatar-api.js'
+
+// Keep known-size internal uploads from collectively consuming the platform's
+// last gigabyte. This matches the web UI's low-storage warning threshold.
+const uploadDiskReserve = 1_000_000_000
+
+export type ServerOptions = {umbreld: Umbreld}
+
+export type AuthenticatedWebSocketRequest = http.IncomingMessage & {authPrincipal?: Principal}
+
+export const MAX_WEBSOCKET_PAYLOAD_BYTES = 1024 * 1024
+
+// Safely wrapps async request handlers in logic to catch errors and pass them to the errror handling middleware
+const asyncHandler = (
+	handler: (request: express.Request, response: express.Response, next: express.NextFunction) => Promise<any>,
+) =>
+	function asyncHandlerWrapper(request: express.Request, response: express.Response, next: express.NextFunction) {
+		return Promise.resolve(handler(request, response, next)).catch(next)
+	}
+
+// Iterate over all routes and wrap them in an async handler
+const wrapHandlersWithAsyncHandler = (router: express.Router) => {
+	// Loop over each layer of the router stack
+	for (const layer of router.stack) {
+		// If we have a nested router, recursively wrap its handlers
+		if (layer.name === 'router') wrapHandlersWithAsyncHandler(layer.handle)
+		// If we have a route, wrap its handlers
+		else if (layer.route) {
+			for (const routeLayer of layer.route.stack) routeLayer.handle = asyncHandler(routeLayer.handle)
+		}
+	}
+}
+
+class Server {
+	umbreld: Umbreld
+	logger: Umbreld['logger']
+	readonly uploadDiskPreflight: UploadDiskPreflight
+	port: number | undefined
+	app?: express.Express
+	server?: http.Server
+	webSocketRouter = new Map<string, WebSocketServer>()
+
+	constructor({umbreld}: ServerOptions) {
+		this.umbreld = umbreld
+		const {name} = this.constructor
+		this.logger = umbreld.logger.createChildLogger(name.toLowerCase())
+		// Every route writing to internal storage shares this coordinator so
+		// concurrent uploads reserve the same available bytes.
+		this.uploadDiskPreflight = new UploadDiskPreflight({
+			getAvailableBytes: async () => (await getSystemDiskUsage(this.umbreld)).available,
+			reserveBytes: uploadDiskReserve,
+		})
+	}
+
+	// Creates an isolated WebSocket server and mounts it at a specific path
+	// All WebSocket servers require a valid auth token to connect
+	mountWebSocketServer(path: string, setupHandler: (wss: WebSocketServer) => void) {
+		// Create the WebSocket server
+		const wss = new WebSocketServer({noServer: true, maxPayload: MAX_WEBSOCKET_PAYLOAD_BYTES})
+
+		// Pass the WebSocket server to the setup handler so it can do whatever it needs
+		setupHandler(wss)
+
+		// Add the WebSocket server to the router
+		this.webSocketRouter.set(path, wss)
+	}
+
+	async start() {
+		// Create the handler and server
+		this.app = express()
+		// LAN ingress is the browser-facing entry point. Only trust forwarded
+		// headers from the loopback proxy path, not arbitrary client requests.
+		this.app.set('trust proxy', 'loopback')
+		this.server = http.createServer(this.app)
+
+		// Don't timeout for slow uploads/downloads
+		// TODO: Ideally we'd only remove timeout for authed upload/download
+		// requests not globally to better protect against potential DoS attacks.
+		// However Node.js only allows us to set the timeout globally. Risk is also
+		// very low since this server is not exposed publically.
+		// Looks like Bun supports per request timeout so if we move we could lock this
+		// down a little tighter: https://bun.sh/docs/api/http#server-timeout-request-seconds-custom-request-timeouts
+		this.server.requestTimeout = 0
+
+		// Setup cookie parser
+		this.app.use(cookieParser())
+
+		// Security hardening, CSP
+		this.app.use(
+			helmet.contentSecurityPolicy({
+				directives: {
+					// Allow inline scripts ONLY in development for vite dev server
+					scriptSrc: this.umbreld.developmentMode ? ["'self'", "'unsafe-inline'"] : null,
+					// Allow 3rd party app images (remove this if we serve them locally in the future)
+					// Also allow blob: URLs for images being uploaded in Files (since their thumbnails don't exist yet)
+					// and data: URLs for browser-rendered VM cursor images from noVNC.
+					imgSrc: ['*', 'blob:', 'data:'],
+					// Allow fetching data from our apps API (e.g., for Discover page in App Store)
+					connectSrc: ["'self'"],
+					// Allow plain text access over the local network
+					upgradeInsecureRequests: null,
+				},
+			}),
+		)
+		this.app.use(helmet.referrerPolicy({policy: 'no-referrer'}))
+		this.app.disable('x-powered-by')
+
+		// Attach the umbreld and logger instances so they're accessible to routes
+		this.app.set('umbreld', this.umbreld)
+		this.app.set('logger', this.logger)
+
+		// Log requests
+		this.app.use((request, response, next) => {
+			const path = request.path.startsWith('/api/machines/first-boot/')
+				? '/api/machines/first-boot/[redacted]'
+				: request.path
+			this.logger.verbose(`${request.method} ${path}`)
+			next()
+		})
+
+		// This server owns every upgrade. Letting the HTTP proxy auto-register
+		// another listener races asynchronous ticket validation and steals tRPC sockets.
+		const uiProxy = process.env.UMBREL_UI_PROXY
+			? createProxyMiddleware({
+					target: process.env.UMBREL_UI_PROXY,
+					ws: false,
+					logProvider: () => ({
+						log: this.logger.verbose,
+						debug: this.logger.verbose,
+						info: this.logger.verbose,
+						warn: this.logger.verbose,
+						error: this.logger.error,
+					}),
+				})
+			: undefined
+
+		// Handle WebSocket upgrade requests
+		// We add a single upgrade handler for all WebSocket servers and check
+		// for their existence in a router so we can be sure we destroy the socket
+		// immediately if a match isn't found instead of keeping it open. This prevents
+		// slowloris style DoS attacks.
+		this.server?.on('upgrade', async (request, socket, head) => {
+			try {
+				// Grab the path and search params from the request
+				const {pathname, searchParams} = new URL(`https://localhost${request.url}`)
+
+				// See if we have a WebSocket server for this path in our router
+				const wss = this.webSocketRouter.get(pathname)
+
+				// If this path isn't in the router stop and destroy the socket to prevent
+				// DoS attacks.
+				if (!wss) {
+					// However we don't destroy the socket in development mode because
+					// we want to allow WebSocket connections to be proxied through to
+					// the vite HMR client.
+					if (this.umbreld.developmentMode && uiProxy) {
+						// HPM uses older Express/Socket types for Node's raw HTTP upgrade.
+						uiProxy.upgrade!(request as express.Request, socket as import('node:net').Socket, head)
+						return
+					}
+
+					throw new Error(`No WebSocket server mounted for ${pathname}`)
+				}
+
+				// Verify the auth token before doing anything
+				// We require passing the token like this because it's unsafe to rely on cookies
+				// since they get leaked to other apps running on different ports on the same hostname
+				// due to relaxed browser sandboxing.
+				// We can't set custom headers because that not allowed by the WebSocket browser spec.
+				const ticket = searchParams.get('ticket')
+				if (!ticket) throw new Error('Missing WebSocket ticket')
+				let target: WebSocketTarget = 'trpc'
+				if (pathname === '/terminal') target = 'terminal'
+				if (pathname === '/machines/console' || pathname === '/machines/audio') target = 'machines'
+				const principal = await this.umbreld.auth.consumeWebSocketTicket(ticket, target)
+				;(request as AuthenticatedWebSocketRequest).authPrincipal = principal
+
+				this.logger.verbose(`WS upgrade for ${pathname}`)
+				// Upgrade connection to WebSocket and fire the connection handler
+				wss.handleUpgrade(request, socket, head, (ws) => {
+					// Authentication contains asynchronous account checks. Atomically
+					// re-check the session while registering so a socket cannot arrive
+					// immediately after its revocation sweep has completed.
+					if (!this.umbreld.auth.registerWebSocket(principal, ws)) return
+					wss.emit('connection', ws, request)
+				})
+			} catch (error) {
+				this.logger.error(`Error upgrading websocket`, error)
+				socket.destroy()
+			}
+		})
+
+		// App authentication is served by umbreld. LAN ingress rewrites traffic
+		// from the dedicated browser-facing app-auth port onto this private prefix.
+		this.app.use('/app-auth', createAppAuthRouter(this.umbreld))
+
+		// Handle tRPC routes
+		this.app.use('/trpc', trpcExpressHandler)
+		this.mountWebSocketServer('/trpc', (wss) => {
+			trpcWssHandler({wss, umbreld: this.umbreld, logger: this.logger})
+		})
+
+		// Handle terminal WebSocket routes
+		this.mountWebSocketServer('/terminal', (wss) => {
+			const logger = this.logger.createChildLogger('terminal')
+			wss.on('connection', createTerminalWebSocketHandler({umbreld: this.umbreld, logger}))
+		})
+
+		// Proxy authenticated noVNC traffic to the per-machine QEMU VNC Unix
+		// socket. QEMU never opens a TCP listener on the host.
+		const machineConsoleSessions = new MachineConsoleSessions()
+		this.mountWebSocketServer('/machines/console', (wss) => {
+			const logger = this.logger.createChildLogger('machine-console')
+			wss.on(
+				'connection',
+				createMachineConsoleWebSocketHandler({umbreld: this.umbreld, logger, sessions: machineConsoleSessions}),
+			)
+		})
+		this.mountWebSocketServer('/machines/audio', (wss) => {
+			const logger = this.logger.createChildLogger('machine-audio')
+			wss.on(
+				'connection',
+				createMachineAudioWebSocketHandler({umbreld: this.umbreld, logger, sessions: machineConsoleSessions}),
+			)
+		})
+
+		// Every file endpoint is mounted beneath an authentication-first subrouter.
+		this.app.use('/api/files', fileApi(this.umbreld, this.uploadDiskPreflight))
+		// Photos serves account-scoped thumbnails, originals, downloads and uploads
+		// over Files' authorization, enrichment and streaming primitives.
+		this.app.use('/api/photos', photosApi(this.umbreld, this.uploadDiskPreflight))
+		// Account avatars use raw request streams for writes and public,
+		// content-addressed reads for the pre-login account picker.
+		this.app.use('/api/accounts', accountAvatarApi(this.umbreld))
+		// MCP has its own static bearer authentication and is deliberately
+		// mounted before the dashboard SPA fallback.
+		this.app.use('/mcp', this.umbreld.mcp.router)
+
+		// Handle log file downloads
+		this.app.get('/logs/', async (request, response) => {
+			try {
+				await authorizeHttpRequest(this.umbreld, request, 'logs-download')
+			} catch {
+				return response.status(401).send('Unauthorized')
+			}
+
+			try {
+				// Force the browser to treat the request as a file download
+				response.set('Content-Disposition', `attachment;filename=umbrel-${Date.now()}.log.gz`)
+				const journal = $`journalctl`
+				await pipeline(journal.stdout!, createGzip(), response)
+			} catch (error) {
+				this.logger.error(`Error streaming logs`, error)
+			}
+		})
+
+		// Handle local HTTPS CA certificate downloads. Serving the certificate MIME
+		// type from a real URL (instead of a forced attachment download) lets iOS
+		// Safari offer its configuration profile install flow. Other browsers
+		// download the file as normal, named from the URL path.
+		this.app.get('/lan-ingress/umbrel-local-ca.crt', async (request, response) => {
+			try {
+				await authorizeHttpRequest(this.umbreld, request, 'ca-download')
+			} catch {
+				return response.status(401).send('Unauthorized')
+			}
+
+			try {
+				const caCertificate = await fse.readFile(this.umbreld.lanIngress.caCertificatePath)
+				// Send a Buffer, not a string: express rewrites string bodies' Content-Type
+				// to append "; charset=utf-8", and iOS profile-install detection needs the
+				// bare certificate MIME type.
+				response.set('Content-Type', 'application/x-x509-ca-cert')
+				response.send(caCertificate)
+			} catch (error) {
+				this.logger.error(`Error serving CA certificate`, error)
+				response.status(500).send('Internal Server Error')
+			}
+		})
+
+		// If we have no API route hits then serve the ui at the root.
+		// We proxy through to the ui dev server during development with
+		// process.env.UMBREL_UI_PROXY otherwise in production we
+		// statically serve the built ui.
+		if (uiProxy) {
+			this.app.use('/', uiProxy)
+		} else {
+			const currentFilename = fileURLToPath(import.meta.url)
+			const currentDirname = dirname(currentFilename)
+			const uiPath = join(currentDirname, '../../../ui')
+
+			// Built assets include a hash of the contents in the filename and
+			// wallpapers do not ever change, so we can cache these aggressively
+			const cacheAggressively: express.RequestHandler = (_, response, next) => {
+				const approximatelyOneYearInSeconds = 365 * 24 * 60 * 60 // RFC 2616, 14.21
+				response.set('Cache-Control', `public, max-age=${approximatelyOneYearInSeconds}, immutable`)
+				next()
+			}
+			this.app.get('/assets/*', cacheAggressively)
+			this.app.get('/wallpapers/*', cacheAggressively)
+
+			// Other files without a hash in their filename should revalidate based on
+			// ETag and Last-Modified instead to force the browser to automatically
+			// refresh their contents after an OTA update for example.
+			const staticOptions = {cacheControl: true, etag: true, lastModified: true, maxAge: 0}
+			this.app.use('/', express.static(uiPath, staticOptions))
+
+			// SPA fallback: serve index.html for all unmatched routes
+			this.app.get('*', (request, response) => {
+				response.sendFile(join(uiPath, 'index.html'), staticOptions)
+			})
+		}
+
+		// All errors should be handled by their own middleware but if they aren't we'll catch
+		// them here and log them.
+		this.app.use(createErrorHandler(this.logger))
+
+		// Wrap all request handlers with a safe async handler
+		// TODO: We can remove this if we move to express 5
+		wrapHandlersWithAsyncHandler(this.app._router)
+
+		// Start the server. The internal server only ever binds loopback: LAN
+		// ingress is the sole network entry point and proxies browser traffic
+		// here over 127.0.0.1. Use an SSH tunnel to debug it directly.
+		const listen = promisify(this.server.listen.bind(this.server)) as (port: number, host: string) => Promise<void>
+		await listen(this.umbreld.port, '127.0.0.1')
+		this.port = (this.server.address() as any).port
+		this.logger.log(`Listening on 127.0.0.1:${this.port}`)
+
+		return this
+	}
+}
+
+export default Server

@@ -1,4 +1,10 @@
 **/node_modules
-packages/umbreld/data
-packages/os/build
-packages/os/rugix/build
+packages/backend/data
+packages/system/build
+packages/system/rugix/build
+
+.git
+.codegraph
+.agents
+**/dist
+packages/system/rugix/.rugix

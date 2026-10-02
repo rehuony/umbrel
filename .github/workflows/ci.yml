@@ -1,600 +1,69 @@
-name: CI
-
-on: push
-
+name: Verify system
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
-  # Detect if only UI files changed to skip heavy tests
-  detect-changes:
-    name: Detect changes
+  checks:
     runs-on: ubuntu-24.04
-    outputs:
-      ui-only: ${{ steps.check.outputs.ui-only }}
-      ui-changed: ${{ steps.check.outputs.ui-changed }}
-      apple-changed: ${{ steps.check.outputs.apple-changed }}
-      run-pi-tests: ${{ steps.pi.outputs.run-pi-tests }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-      - id: check
+          node-version: '22.13.0'
+      - name: Install application runner test dependencies
         run: |
-          set -euo pipefail
-
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-
-          # On default branch, always run all tests
-          if [[ "${{ github.ref }}" == "refs/heads/${DEFAULT_BRANCH}" || "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "ui-only=false" >> $GITHUB_OUTPUT
-            echo "ui-changed=true" >> $GITHUB_OUTPUT
-            echo "apple-changed=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Get changed files for the entire PR/branch, not just the latest push.
-          # This workflow currently runs on push events, so compare non-default
-          # branches against their merge base with the default branch. If the
-          # workflow is later run on pull_request events, use the PR base/head.
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            git fetch origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
-            DIFF_BASE=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
-            DIFF_HEAD=HEAD
-          else
-            git fetch origin "${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
-            DIFF_BASE=$(git merge-base "origin/${DEFAULT_BRANCH}" HEAD)
-            DIFF_HEAD=HEAD
-          fi
-
-          CHANGED_FILES=$(git diff --name-only "$DIFF_BASE" "$DIFF_HEAD")
-
-          # Check whether all changed files are in packages/ui/, and whether
-          # anything that can affect the UI changed.
-          UI_ONLY="true"
-          UI_CHANGED="false"
-          APPLE_CHANGED="false"
-          while IFS= read -r file; do
-            if [[ -n "$file" && ! "$file" =~ ^packages/ui/ ]]; then
-              UI_ONLY="false"
-            fi
-
-            case "$file" in
-              packages/ui/*|packages/umbreld/*|.github/workflows/ci.yml)
-                UI_CHANGED="true"
-                ;;
-            esac
-
-            case "$file" in
-              clients/apple/*|.github/workflows/ci.yml)
-                APPLE_CHANGED="true"
-                ;;
-            esac
-          done <<< "$CHANGED_FILES"
-
-          if [[ -z "$CHANGED_FILES" ]]; then
-            UI_ONLY="false"
-          fi
-
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-          echo "UI only: $UI_ONLY"
-          echo "UI changed: $UI_CHANGED"
-          echo "Apple changed: $APPLE_CHANGED"
-          echo "ui-only=$UI_ONLY" >> $GITHUB_OUTPUT
-          echo "ui-changed=$UI_CHANGED" >> $GITHUB_OUTPUT
-          echo "apple-changed=$APPLE_CHANGED" >> $GITHUB_OUTPUT
-      # The Pi VM tests boot the production Pi image in an emulated Raspberry
-      # Pi 4. Emulation is TCG-only (no hardware acceleration exists for the
-      # raspi4b machine) so they're the slowest jobs in CI and only run on
-      # master/staging/tags, or on branches whose open PR has the "pi-tests"
-      # label.
-      #
-      # IMPORTANT: make sure to add the "pi-tests" label to PRs that should be
-      # tested against Pi-specific logic — anything touching packages/os
-      # boot/storage behaviour, the pi handling in vm.sh, device detection, or
-      # the *.pi.vm.test.ts suites — so it's exercised on the emulated Pi
-      # before merge instead of breaking on staging. This workflow only runs on
-      # push events, so after labelling an already-pushed PR use "Re-run all
-      # jobs" (the label is read live from the API, not the event payload).
-      - id: pi
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          if [[ "${{ github.ref }}" == "refs/heads/master" || "${{ github.ref }}" == "refs/heads/staging" || "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "run-pi-tests=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          labels=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" --state open --json labels --jq '.[].labels[].name' || true)
-          if grep --quiet --line-regexp 'pi-tests' <<< "$labels"; then
-            echo "run-pi-tests=true" >> $GITHUB_OUTPUT
-          else
-            echo "run-pi-tests=false" >> $GITHUB_OUTPUT
-          fi
-
-  # These jobs simply serve as architecture native cache steps to load up the Docker cache for umbrelOS.
-  # We must cache to unique scopes per architecture otherwise only one of the architectures gets cached.
-  umbrelos-amd64-cache:
-    name: Build umbrelOS amd64
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubicloud-standard-4-ubuntu-2404
+          sudo apt-get update
+          sudo apt-get install --yes gettext-base jq
+          curl --fail --location --retry 3 https://github.com/mikefarah/yq/releases/download/v4.24.5/yq_linux_amd64 --output /tmp/panel-test-yq
+          echo 'c93a696e13d3076e473c3a43c06fdb98fafd30dc2f43bc771c4917531961c760  /tmp/panel-test-yq' | sha256sum --check
+          sudo install -m 0755 /tmp/panel-test-yq /usr/local/bin/yq
+      - run: make deps
+      - run: make typecheck
+      - run: make format-check
+      - run: make lint
+      - run: make translations-check
+      - run: make test
+      - run: make build-frontend
+      - run: git diff --check
+  images:
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pi4, pi5, arm64, amd64]
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - name: Build amd64 Docker image
-        working-directory: packages/os
-        run: docker buildx build --platform linux/amd64 --file umbrelos.Dockerfile --cache-from type=gha,scope=umbrelos-amd64 --cache-to type=gha,mode=max,scope=umbrelos-amd64 ../../
-  umbrelos-arm64-cache:
-    name: Build umbrelOS arm64
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubicloud-standard-4-arm-ubuntu-2404
-    steps:
-      - uses: actions/checkout@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - name: Build arm64 Docker image
-        working-directory: packages/os
-        run: docker buildx build --platform linux/arm64 --file umbrelos.Dockerfile --cache-from type=gha,scope=umbrelos-arm64 --cache-to type=gha,mode=max,scope=umbrelos-arm64 ../../
-  umbrelos-pi-cache:
-    name: Build umbrelOS Pi
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubicloud-standard-4-arm-ubuntu-2404
-    steps:
-      - uses: actions/checkout@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - name: Build Pi Docker image
-        working-directory: packages/os
-        run: docker buildx build --platform linux/arm64 --build-arg BASE_VARIANT=-pi --file umbrelos.Dockerfile --cache-from type=gha,scope=umbrelos-pi --cache-to type=gha,mode=max,scope=umbrelos-pi ../../
-
-  # Build the image for the VM tests
-  # We run this in a seperate step so we only build it once and reuse for all VM runners to reduce billed minutes.
-  umbrelos-amd64-vm-image-build:
-    name: Build umbrelOS amd64 VM image
-    needs: [detect-changes, umbrelos-amd64-cache]
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubicloud-standard-4-ubuntu-2404
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
+      - name: Build bootable image and checksum
+        run: make image-${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
         with:
-          submodules: recursive
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 22
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Expose GitHub Actions runtime for Docker cache
-        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - name: Build OS image
-        working-directory: packages/os
-        # SKIP_CACHE_EXPORT: the umbrelos-amd64-cache job (a dependency of this
-        # job) has already exported these layers to the gha cache, so skip the
-        # redundant re-export. It can intermittently fail the build with cache
-        # backend errors, which would block every VM test that depends on this
-        # image; the --cache-from import keeps the build fast regardless.
-        run: SKIP_AMD64_RUGIX_BUNDLE=true SKIP_CACHE_EXPORT=true npm run build:amd64:rugix
-      # Hack to pass the image to the next job. We used to use upload-artifact but network performance
-      # is terrible between GitHub <> Ubicloud. Just abuse the cache for now which is local and fast.
-      - name: Cache OS image
-        uses: actions/cache/save@v4
-        with:
-          path: packages/os/build/umbrelos-amd64.img
-          key: umbrelos-amd64-image-${{ github.run_id }}
-
-  umbrelos-pi-vm-image-build:
-    name: Build umbrelOS Pi VM image
-    needs: [detect-changes, umbrelos-pi-cache]
-    if: needs.detect-changes.outputs.ui-only != 'true' && needs.detect-changes.outputs.run-pi-tests == 'true'
-    runs-on: ubicloud-standard-4-ubuntu-2404
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 22
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Expose GitHub Actions runtime for Docker cache
-        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - name: Build OS image
-        working-directory: packages/os
-        # SKIP_CACHE_EXPORT: the umbrelos-pi-cache job (a dependency of this job)
-        # has already exported these layers to the gha cache, so skip the
-        # redundant re-export. It can intermittently fail the build with cache
-        # backend errors, which would block the Pi VM test that depends on this
-        # image; the --cache-from import keeps the build fast regardless.
-        run: SKIP_CACHE_EXPORT=true npm run build:pi5
-      - name: Cache OS image
-        uses: actions/cache/save@v4
-        with:
-          path: packages/os/build/umbrelos-pi.img
-          key: umbrelos-pi-image-${{ github.run_id }}
-
-  # Discover all MV test files so we can run the result as a build matrix
-  discover-vm-tests:
-    name: Discover VM tests
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-only != 'true'
+          name: system-${{ matrix.target }}
+          if-no-files-found: error
+          compression-level: 0
+          path: |
+            packages/system/build/*.img
+            packages/system/build/*.sha256
+  virtual-machine:
+    if: github.event_name == 'workflow_dispatch'
+    needs: images
     runs-on: ubuntu-24.04
-    outputs:
-      tests: ${{ steps.find.outputs.tests }}
     steps:
-      - uses: actions/checkout@v3
-      - id: find
-        run: |
-          tests=$(
-            find packages/umbreld/source -name "*.vm.test.ts" ! -name "*.pi.vm.test.ts" |
-              while IFS= read -r test_path; do
-                relative_path="${test_path#packages/umbreld/}"
-                name="$(basename "${test_path}" .vm.test.ts)"
-                requires_playwright=false
-                if grep --quiet '^// @vm-requires-playwright$' "${test_path}"; then
-                  requires_playwright=true
-                fi
-                jq --null-input --compact-output \
-                  --arg path "${relative_path}" \
-                  --arg name "${name}" \
-                  --argjson requiresPlaywright "${requires_playwright}" \
-                  '{path: $path, name: $name, requiresPlaywright: $requiresPlaywright}'
-              done |
-              jq --slurp --compact-output
-          )
-          echo "tests=$tests" >> $GITHUB_OUTPUT
-
-  # Pi VM tests run from the Pi image in an emulated Raspberry Pi 4 so they get
-  # their own matrix instead of the generic amd64 image one.
-  discover-pi-vm-tests:
-    name: Discover Pi VM tests
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-only != 'true' && needs.detect-changes.outputs.run-pi-tests == 'true'
-    runs-on: ubuntu-24.04
-    outputs:
-      tests: ${{ steps.find.outputs.tests }}
-    steps:
-      - uses: actions/checkout@v3
-      - id: find
-        run: |
-          tests=$(find packages/umbreld/source -name "*.pi.vm.test.ts" | sed 's|packages/umbreld/||' | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({path: ., name: (. | split("/") | last | sub("\\.pi\\.vm\\.test\\.ts$"; ""))})')
-          echo "tests=$tests" >> $GITHUB_OUTPUT
-
-  # Run each VM test in a different runner
-  umbrelos-amd64-vm:
-    name: VM test (${{ matrix.test.name }})
-    needs: [detect-changes, umbrelos-amd64-vm-image-build, discover-vm-tests]
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubicloud-standard-4-ubuntu-2404
-    strategy:
-      fail-fast: false
-      matrix:
-        test: ${{ fromJSON(needs.discover-vm-tests.outputs.tests) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          submodules: recursive
-      - name: Setup node
-        uses: actions/setup-node@v3
+          node-version: '22.13.0'
+      - run: sudo apt-get update && sudo apt-get install --yes qemu-system-x86 qemu-utils ovmf
+      - uses: actions/download-artifact@v4
         with:
-          node-version: 22
-      - name: Restore OS image from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: packages/os/build/umbrelos-amd64.img
-          key: umbrelos-amd64-image-${{ github.run_id }}
-          fail-on-cache-miss: true
-      - name: Install QEMU
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
-      - name: Install umbreld dependencies
-        working-directory: packages/umbreld
-        run: npm clean-install
-      - name: Install browser for LAN ingress end-to-end test
-        if: matrix.test.requiresPlaywright
-        working-directory: packages/umbreld
-        run: npx playwright install --with-deps chromium
-      - name: Run VM test
-        working-directory: packages/umbreld
-        run: npm run test -- ${{ matrix.test.path }}
-
-  umbrelos-pi-vm:
-    name: Pi VM test (${{ matrix.test.name }})
-    needs: [umbrelos-pi-vm-image-build, discover-pi-vm-tests]
-    runs-on: ubicloud-standard-4-ubuntu-2404
-    env:
-      # nixpkgs revision QEMU is built from (nixos-26.05 as of 2026-07). Bump
-      # deliberately to change the emulator version — the cache key below
-      # picks up the new revision automatically.
-      NIXPKGS_REV: bd0ff2d3eac24699c3664d5966b9ef36f388e2ca
-    strategy:
-      fail-fast: false
-      matrix:
-        test: ${{ fromJSON(needs.discover-pi-vm-tests.outputs.tests) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 22
-      - name: Restore OS image from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: packages/os/build/umbrelos-pi.img
-          key: umbrelos-pi-image-${{ github.run_id }}
-          fail-on-cache-miss: true
-      - name: Prepare Nix store for caching
-        run: sudo mkdir -p /nix && sudo chown "$(id -un)" /nix
-      - name: Cache QEMU from nixpkgs
-        id: nix-qemu-cache
-        uses: actions/cache@v4
-        with:
-          path: /nix
-          key: nix-qemu-${{ runner.os }}-${{ env.NIXPKGS_REV }}
-      - name: Install QEMU
-        # QEMU's raspi4b machine needs QEMU >= 9.0 but Ubuntu 24.04 only
-        # packages 8.2, so QEMU comes from nixpkgs pinned to the exact
-        # revision above — the emulator and its whole dependency closure are
-        # deterministic, unlike a rolling package manager. The store is cached
-        # so Nix itself only runs on a cache miss; /nix/qemu is a stable
-        # symlink into the store so PATH works on both hit and miss (the
-        # closure is self-contained, no Nix needed at runtime).
-        run: |
-          sudo apt-get update && sudo apt-get install -y fdisk mtools device-tree-compiler
-          if [[ "${{ steps.nix-qemu-cache.outputs.cache-hit }}" != "true" ]]; then
-            curl --proto '=https' --tlsv1.2 -sSf -L https://nixos.org/nix/install | sh -s -- --no-daemon
-            . "$HOME/.nix-profile/etc/profile.d/nix.sh"
-            nix build --extra-experimental-features 'nix-command flakes' \
-              "github:NixOS/nixpkgs/${NIXPKGS_REV}#qemu" --out-link /nix/qemu
-          fi
-          echo "/nix/qemu/bin" >> "$GITHUB_PATH"
-          /nix/qemu/bin/qemu-system-aarch64 --version
-      - name: Install umbreld dependencies
-        working-directory: packages/umbreld
-        run: npm clean-install
-      - name: Run Pi VM test
-        working-directory: packages/umbreld
-        run: npm run test -- ${{ matrix.test.path }}
-
-  # Discover all integration test files so we can run the result as a build matrix
-  discover-integration-tests:
-    name: Discover integration tests
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubuntu-24.04
-    outputs:
-      tests: ${{ steps.find.outputs.tests }}
-    steps:
-      - uses: actions/checkout@v3
-      - id: find
-        run: |
-          tests=$(find packages/umbreld/source -name "*.integration.test.ts" | sed 's|packages/umbreld/||' | jq -R -s -c 'split("\n") | map(select(length > 0)) | map({path: ., name: (. | split("/") | last | sub("\\.integration\\.test\\.ts$"; ""))})')
-          echo "tests=$tests" >> $GITHUB_OUTPUT
-
-  # Run each integration test in a different runner
-  umbreld-integration:
-    name: Integration test (${{ matrix.test.name }})
-    needs: [detect-changes, discover-integration-tests, umbrelos-amd64-cache]
-    if: needs.detect-changes.outputs.ui-only != 'true'
-    runs-on: ubicloud-standard-4-ubuntu-2404
-    strategy:
-      fail-fast: false
-      matrix:
-        test: ${{ fromJSON(needs.discover-integration-tests.outputs.tests) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Expose GitHub Actions runtime for Docker cache
-        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - run: npm run dev rebuild
-        env:
-          # The umbrelos-amd64-cache job has already exported these layers to the
-          # gha cache. Re-exporting them from every integration job in parallel
-          # overwhelms the cache backend and intermittently fails the build with
-          # 429/504/not_found errors, which surfaced as flaky integration tests.
-          UMBREL_DEV_SKIP_CACHE_EXPORT: 'true'
-      - run: npm run dev start
-      - run: npm run --prefix packages/umbreld test:umbrel-dev:prepare
-      - run: npm run --prefix packages/umbreld test:umbrel-dev ${{ matrix.test.path }}
-
-  # Run umbreld checks
-  umbreld:
-    name: umbreld checks
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: packages/umbreld
-    strategy:
-      fail-fast: false
-      matrix:
-        task:
-          - format:check
-          - typecheck
-          - test:unit -- --coverage
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-      - name: Install dependencies
-        run: sudo npm clean-install
-      - run: sudo npm run ${{ matrix.task }}
-
-  # Run the shared Apple client tests and compile both native apps. The macOS 26
-  # runner includes the iOS 26.5 SDK required by the generated iOS project.
-  apple:
-    name: Apple client checks
-    needs: detect-changes
-    if: needs.detect-changes.outputs.apple-changed == 'true'
-    runs-on: macos-26
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Test UmbrelKit
-        run: swift test --package-path clients/apple/UmbrelKit
-      - name: Generate macOS project
-        working-directory: clients/apple/macos
-        run: xcodegen generate
-      - name: Build macOS app
-        working-directory: clients/apple/macos
-        run: >-
-          xcodebuild
-          -project Umbrel.xcodeproj
-          -scheme Umbrel
-          -configuration Release
-          -destination 'generic/platform=macOS'
-          ARCHS='arm64 x86_64'
-          ONLY_ACTIVE_ARCH=NO
-          CODE_SIGNING_ALLOWED=NO
-          build
-      - name: Generate iOS project
-        working-directory: clients/apple/ios
-        run: xcodegen generate
-      - name: Build iOS app
-        working-directory: clients/apple/ios
-        run: >-
-          xcodebuild
-          -project Umbrel.xcodeproj
-          -scheme Umbrel
-          -destination 'generic/platform=iOS Simulator'
-          CODE_SIGNING_ALLOWED=NO
-          build
-
-  # Run ui checks
-  ui:
-    name: ui checks
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ui-changed == 'true'
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: packages/ui
-    strategy:
-      fail-fast: false
-      matrix:
-        task:
-          - lint
-          - format:check
-          - test:unit
-          - typecheck
-          - test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 22
-      - name: Install Umbreld dependencies
-        if: ${{ matrix.task == 'typecheck' || matrix.task == 'test' }}
-        run: npm --prefix ../umbreld clean-install
-      - name: Install dependencies
-        run: npm clean-install
-      - run: npm run ${{ matrix.task }}
-
-  # If the current build is tagged, build all release assets, push to Cloudflare R2 and create a GitHub Release
-  create-release:
-    name: Create release on tag
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [umbrelos-amd64-cache, umbrelos-arm64-cache, umbrelos-pi-cache]
-    runs-on: ubicloud-standard-16-ubuntu-2404
-    defaults:
-      run:
-        working-directory: packages/os
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Expose GitHub Actions runtime for Docker cache
-        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
-      - run: echo "VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-      # We need this to namespace Docker images on forks
-      - run: echo "VERSION_IS_SEMVER=$(if [[ '${{ env.VERSION }}' =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then echo 'true'; else echo 'false'; fi)" >> $GITHUB_ENV
-      - run: echo "PREFIX=$(if [ '${{ env.VERSION_IS_SEMVER }}' = 'true' ]; then echo ''; else echo $(basename ${{ github.repository }})-; fi)" >> $GITHUB_ENV
-      - run: echo "TAG=${{ github.repository_owner }}/${{ env.PREFIX }}umbrelos:${{ env.VERSION }}" >> $GITHUB_ENV
-      - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
-      - name: Build and push Docker image
-        run: docker buildx build --platform linux/amd64,linux/arm64 --file umbrelos.Dockerfile --tag ghcr.io/${{env.TAG }} --push --cache-from type=gha,scope=umbrelos-amd64 --cache-from type=gha,scope=umbrelos-arm64 ../../
-      - run: mkdir -p build && docker buildx imagetools inspect ghcr.io/${{ env.TAG }} > build/docker-umbrelos-${{ env.VERSION }}
-      # Build OS images
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 18
-      - name: Build OS images
-        # Awkward hack to run in parallel but correctly handle errors.
-        # The USB installer base ISO doesn't depend on the OS images and builds
-        # in ~90s, so we build it concurrently (hidden under the much longer OS
-        # builds) and inject the OS image into it at the end.
-        run: |
-          npm run build:amd64 "${{ env.VERSION }}" &
-          pid1=$!
-          npm run build:pi "${{ env.VERSION }}" &
-          pid2=$!
-          npm run build:amd64:usb-installer:base &
-          pid3=$!
-          wait $pid1 || exit 1
-          wait $pid2 || exit 1
-          wait $pid3 || exit 1
-      # TODO: Use .img.xz for all release assets once https://github.com/balena-io/etcher/issues/4064 is fixed
-      - name: Compress release assets
-        # Awkward hack to run in parallel but correctly handle errors
-        run: |
-          cd build
-          zip umbrelos-pi.img.zip umbrelos-pi.img &
-          pid1=$!
-          sudo xz --keep --threads=0 umbrelos-amd64.img &
-          pid2=$!
-          wait $pid1 || exit 1
-          wait $pid2 || exit 1
-      - name: Create USB installer (inject umbrelOS image into base ISO)
-        run: npm run build:amd64:usb-installer:inject
-      - name: Create release directory
-        run: |
-          mkdir -p release
-          mv build/docker-umbrelos-* release/
-          mv build/*.update release/
-          mv build/*.img.zip release/
-          mv build/*.img.xz release/
-          mv build/*.img release/
-          mv build/umbrelos-amd64-usb-installer.iso release/
-      - name: Create SHASUM
-        run: cd release && shasum -a 256 * | tee SHA256SUMS
-      - name: OpenTimestamps
-        run: npm ci && npx ots-cli.js stamp release/SHA256SUMS
-      - name: Nuke uncompressed images (we just wanted them covered by the SHASUMs)
-        run: rm -rf release/*.img
-      - name: Upload to R2
-        uses: ryand56/r2-upload-action@b801a390acbdeb034c5e684ff5e1361c06639e7c # v1.4
-        with:
-          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
-          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          r2-bucket: ${{ secrets.R2_BUCKET }}
-          source-dir: packages/os/release
-          destination-dir: ./${{ env.VERSION }}
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v0.1.15
-        with:
-          draft: true
-          name: umbrelOS ${{ github.ref_name }}
-          files: |
-            packages/os/release/SHA256SUMS*
+          name: system-amd64
+          path: packages/system/build
+      - run: cd packages/system/build && shasum -a 256 -c umbrelos-amd64.img.sha256
+      - run: make deps
+      - run: npm exec --prefix packages/backend -- playwright install --with-deps chromium
+      - run: make test-vm ARGS='--maxWorkers=1 --minWorkers=1 --exclude **/*.pi.vm.test.ts'

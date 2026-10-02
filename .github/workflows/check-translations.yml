@@ -24,9 +24,9 @@ jobs:
         with:
           node-version: '22'
       # These checks use only Node built-ins, without npm install or API calls.
-      - run: node --test packages/ui/scripts/test-translations.mjs
+      - run: node --test packages/frontend/scripts/test-translations.mjs
       - run: bash .github/scripts/prepare-translations.test.sh
-      - run: node packages/ui/update-translations.js --validate
+      - run: node packages/frontend/update-translations.js --validate
 
   release-freshness:
     name: Translations up to date
@@ -38,4 +38,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node packages/ui/update-translations.js --check
+      - run: node packages/frontend/update-translations.js --check

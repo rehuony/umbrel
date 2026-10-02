@@ -1,28 +1,39 @@
-# Umbrel Monorepo Agent Guide
+# Repository Instructions
 
-## Skills
+## Working Approach
 
-- Before starting work, check `.agents/skills/` for any skill relevant to the task. If a skill matches the work, read its `SKILL.md` and follow it.
+- Use current source, tests, executable configuration, dependency manifests, and component contracts as evidence. Resolve conflicting sources explicitly and update stale documentation.
+- When `.codegraph/` exists, use CodeGraph for initial navigation and relationship discovery, then verify against current files. Fall back to text search when the index is incomplete or stale.
+- Prefer the simplest correct solution. Reuse existing code and dependencies; keep changes coherent and preserve unrelated work.
+- Check `.agents/skills/` for relevant repository skills before changing their subject areas.
 
-## Worktrees
+## Architecture and Contracts
 
-- Start every new piece of work in its own git worktree under `worktrees/`, named after the branch it holds:
+- Keep system image construction, server behavior, and dashboard presentation separate. Update affected callers, tests, configuration, and documentation together when changing a boundary.
+- Keep the frontend coupled to public backend contracts, not backend internals. Read `documents/README.md` for maintained component references.
+- Treat APIs, persisted data, operator configuration, and image formats as explicit contracts. Define compatibility deliberately; remove obsolete implementations instead of retaining unrequested adapters.
+- Reject unsupported data without silently erasing it. Preserve authentication, account isolation, data integrity, and artifact verification when refactoring.
+- Generate derived files through the designated workflow and keep its inputs, outputs, and checks consistent.
+- Preserve supported hardware targets. Distinguish emulated tests from physical-device validation.
 
-  ```sh
-  git worktree add worktrees/<branch> -b <branch> origin/staging
-  ```
+## Implementation and Verification
 
-- Don't work directly in the root checkout, and don't create worktrees anywhere else. One branch, one worktree, matching names, all in `worktrees/`.
-- There's nothing to set up: `git worktree add` creates `worktrees/` if it's missing, and the directory is gitignored, so nothing inside it is ever committed.
-- Remove the worktree once its branch is merged:
+- Follow the current toolchain and nearby conventions unless the task intentionally changes them. Prefer focused modules over speculative abstractions.
+- Keep UI changes consistent with shared components and design tokens, responsive, accessible, and stable during loading and feedback.
+- Review authoritative upstream guidance for substantial integrations or upgrades. Keep dependency manifests, lockfiles, licenses, and required notices consistent.
+- Reuse existing tests. Add coverage for important behavior at risk, including permissions, failure handling, and persistence. Do not add tests merely to mirror implementation details.
+- Start with focused checks and broaden verification according to the change's impact. Use repository workflows, inspect affected UI when possible, and run `git diff --check`.
+- Report checks actually performed, failures, and unverified targets. A successful build is not evidence of successful boot or real hardware operation.
 
-  ```sh
-  git worktree remove worktrees/<branch>
-  ```
+## Working Directory and Git
 
-## Pull requests
+- Work in the current checkout. Start a new task branch from the current branch using `codex/<short-kebab-case-description>`; continue an ongoing task on its existing branch. Do not create git worktrees.
+- Preserve existing uncommitted changes. Use Git for source history and recovery; do not create duplicate source snapshots or rollback archives unless requested. Product data backup and recovery mechanisms are unaffected.
+- Do not stage, commit, amend, reset, rebase, push, or open a pull request unless explicitly requested. Authorized task-branch creation is the exception. Leave changes available for review.
+- When a pull request is requested, target the repository configured as `origin` unless directed otherwise, and pass `--repo` explicitly. Describe the final behavior and validation, not the conversation history.
 
-- Open the PR against the same repository as `git origin` unless you're asked to target another remote. Either way pass `--repo` explicitly, since `gh` infers a target when it's omitted.
-- Push regularly rather than saving everything for one commit at the end. Each commit should be atomic: one self-contained change that leaves the tree working on its own.
-- Write the PR title and description as an overview of the overall change and its implications — what it does and what it means for the rest of the system, not a replay of the commits. **The title and description become the commit message when the PR is squash-merged**, so they are what everyone reads in `git log` later.
-- Keep the description current as the implementation changes. When it's merged it must describe what the PR actually does, not what it originally set out to do.
+## Instruction Maintenance
+
+- Write project documentation and code comments in English; retain localized interface text and Unicode test fixtures.
+- Keep these instructions concise, in English, and limited to durable project rules. Put feature specifications and implementation details in maintained component documentation or source.
+- Remove superseded guidance instead of accumulating history. Do not record secrets, personal information, debugging notes, or task progress here.

@@ -1,0 +1,212 @@
+import {
+	createTRPCClient,
+	createTRPCReact,
+	createWSClient,
+	httpLink,
+	loggerLink,
+	splitLink,
+	TRPCClientErrorLike,
+	wsLink,
+} from '@trpc/react-query'
+import {inferRouterInputs, inferRouterOutputs} from '@trpc/server'
+
+import {finishLogoutOnUnauthorized} from '@/modules/auth/logout'
+import {AUTH_TOKEN_LOCAL_STORAGE_KEY} from '@/modules/auth/shared'
+import {queryClient} from '@/trpc/query-client'
+import {IS_DEV} from '@/utils/misc'
+
+import {httpOnlyPaths, type AppRouter} from '../../../backend/source/modules/server/trpc/common'
+import {createReconnectResyncController} from './reconnect-resync'
+
+const {protocol, hostname, port} = location
+
+// do not pass colon when port is empty
+const portPart = port ? `:${port}` : ''
+const httpOrigin = `${protocol}//${hostname}${portPart}`
+
+// Some browsers now allow http(s):// schemes to be used in the websocket constructor and will silently rewrite to ws(s)://
+// but there are still some browsers, and older versions of now-compatible browsers, that will not do this:
+// https://caniuse.com/mdn-api_websocket_websocket_url_parameter_http_https_relative
+// So we explicitly build the websocket url with the correct scheme to maintain compatibility
+export const trpcHttpUrl = `${httpOrigin}/trpc`
+const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
+const trpcWsUrl = `${wsProtocol}//${hostname}${portPart}/trpc`
+
+// TODO: Getting the auth token from localStorage like this means auth flow requires a page refresh.
+const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_LOCAL_STORAGE_KEY)
+
+const webSocketTicketClient = createTRPCClient<AppRouter>({
+	links: [
+		httpLink({
+			url: trpcHttpUrl,
+			headers: () => {
+				const token = getAuthToken()
+				return token ? {Authorization: `Bearer ${token}`} : {}
+			},
+		}),
+	],
+})
+
+// Missed events can leave query data stale, so refetch after reconnecting.
+// Skip external App Store feeds, which intentionally do not refresh mid-session,
+// and appStore.registry, which already refetches on focus and is expensive to rebuild.
+function isExcludedFromReconnectResync(queryKey: readonly unknown[]) {
+	if (queryKey[0] === 'app-store') return true
+	if (Array.isArray(queryKey[0]) && queryKey[0].join('.') === 'appStore.registry') return true
+	return false
+}
+
+// Ignore the initial open. Coalesce reconnect bursts to avoid refetch storms,
+// but always resync after the last connection gap.
+const RECONNECT_RESYNC_COOLDOWN_MS = 5_000
+const reconnectResync = createReconnectResyncController({
+	cooldownMs: RECONNECT_RESYNC_COOLDOWN_MS,
+	onResync: () => {
+		queryClient.invalidateQueries({predicate: (query) => !isExcludedFromReconnectResync(query.queryKey)})
+	},
+})
+
+const wsClient = createWSClient({
+	url: async () => {
+		try {
+			const ticket = await webSocketTicketClient.user.createWebSocketTicket.mutate({target: 'trpc'})
+			return `${trpcWsUrl}?ticket=${ticket}`
+		} catch (error) {
+			// A server-side revocation closes the live socket. If reconnecting then
+			// proves this browser session is invalid, clear the stale token instead
+			// of leaving every WS operation queued behind an endless retry loop.
+			finishLogoutOnUnauthorized(error, localStorage, (path) => window.location.replace(path))
+			throw error
+		}
+	},
+	// Do not mint tickets or open a socket on login/onboarding pages. The first
+	// WS-routed operation opens it; active subscriptions keep it alive.
+	lazy: {enabled: true, closeMs: 30_000},
+	// Detect dead connections and keep NAT/proxy tables alive. The client is the
+	// primary keepAlive driver in foreground tabs; the server takes over in background
+	// tabs where browsers throttle setTimeout to ~1/minute.
+	keepAlive: {
+		enabled: true,
+		intervalMs: 10_000, // must be shorter than the most aggressive home router NAT timeout (~60s)
+		pongTimeoutMs: 3_000, // conservative over trpc default (1s) to avoid false positives
+	},
+	onClose: reconnectResync.onClose,
+	onOpen: reconnectResync.onOpen,
+})
+
+export const links = [
+	loggerLink({
+		enabled: () => IS_DEV,
+	}),
+	// Split 1: subscriptions vs everything else
+	// httpLink is request/response only and cannot carry subscriptions, so we
+	// route ALL subscription operations to WebSocket unconditionally (e.g. `eventBus.listen(files:operation-progress)`)
+	splitLink({
+		condition: (op) => op.type === 'subscription',
+		true: wsLink({client: wsClient}),
+		// Split 2: HTTP vs WebSocket for queries/mutations
+		// We route over HTTP when there is no auth token (public/onboarding, no WS auth yet) or the procedure is in `httpOnlyPaths` (needs request/response semantics like cookies/headers)
+		// Otherwise we use WebSocket
+		false: splitLink({
+			condition: (operation) => {
+				const noToken = !getAuthToken()
+				const isHttpOnlyPath = httpOnlyPaths.includes(operation.path as (typeof httpOnlyPaths)[number])
+				return noToken || isHttpOnlyPath
+			},
+			true: httpLink({
+				url: trpcHttpUrl,
+				headers: () => {
+					const token = getAuthToken()
+					return token ? {Authorization: `Bearer ${token}`} : {}
+				},
+			}),
+			false: wsLink({client: wsClient}),
+		}),
+	}),
+]
+
+// React client
+export const trpcReact = createTRPCReact<AppRouter>()
+
+// Vanilla client for imperative (non-hook) tRPC calls. HTTP-only so its operation IDs
+// can never collide with the React client's active WebSocket subscriptions.
+/** Use sparingly — prefer trpcReact.useUtils() in React components */
+export const trpcClient = createTRPCClient<AppRouter>({
+	links: [
+		loggerLink({enabled: () => IS_DEV}),
+		httpLink({
+			url: trpcHttpUrl,
+			headers: () => {
+				const token = getAuthToken()
+				return token ? {Authorization: `Bearer ${token}`} : {}
+			},
+		}),
+	],
+})
+
+// Types ----------------------------
+
+export type RouterInput = inferRouterInputs<AppRouter>
+export type RouterOutput = inferRouterOutputs<AppRouter>
+export type RouterError = TRPCClientErrorLike<AppRouter>
+
+// ---
+
+export type AppState = RouterOutput['apps']['state']['state']
+export const appStates = [
+	'unknown',
+	'installing',
+	'starting',
+	'running',
+	'stopping',
+	'stopped',
+	'restarting',
+	'uninstalling',
+	'updating',
+	'ready',
+] satisfies AppState[]
+
+export const installStates = ['installing', 'uninstalling', 'updating'] satisfies AppState[]
+export type InstallState = (typeof installStates)[number]
+export const installedStates = ['running', 'stopped', 'ready', 'restarting', 'starting'] satisfies AppState[]
+export type InstalledState = (typeof installedStates)[number]
+
+export const progressStates = [
+	// 'not-installed',
+	'installing',
+	'starting',
+	'running',
+	'stopping',
+	'restarting',
+	'uninstalling',
+	'updating',
+] satisfies AppState[]
+
+export const progressBarStates = ['installing', 'updating'] satisfies AppState[]
+
+// `loading` means the frontend is currently fetching the state from the backend
+export type AppStateOrLoading = 'loading' | AppState
+
+// Omitting `active` because we get the connection status from `WifiStatus` since it's more detailed and
+// don't wanna get confused on the frontend with two different ways of getting the connection status
+export type WifiNetwork = Omit<RouterOutput['wifi']['networks'][number], 'active'>
+export type WifiStatus = Exclude<RouterOutput['wifi']['connected'], undefined>['status']
+// `loading` is not returned by the backend, but is used in the frontend
+export type WifiStatusUi = WifiStatus | 'loading'
+
+// ---
+
+/**
+ * App in the registry as returned by the backend.
+ */
+export type RegistryApp = RouterOutput['appStore']['registry'][number]['apps'][number]
+
+/**
+ * Installed app as returned by the backend, no error.
+ */
+export type UserApp = Exclude<RouterOutput['apps']['list'][number], {error: string}>
+
+/**
+ * Installed app as returned by the backend, with error.
+ */
+export type UserAppError = Extract<RouterOutput['apps']['list'][number], {error: string}>

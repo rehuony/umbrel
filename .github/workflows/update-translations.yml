@@ -52,14 +52,14 @@ jobs:
         with:
           node-version: '22'
       - name: Show pending translations
-        run: node packages/ui/update-translations.js --plan
+        run: node packages/frontend/update-translations.js --plan
       - name: Install dependencies
         if: ${{ !inputs.plan_only }}
-        working-directory: packages/ui
+        working-directory: packages/frontend
         run: npm ci
       - name: Generate translations
         if: ${{ !inputs.plan_only }}
-        working-directory: packages/ui
+        working-directory: packages/frontend
         env:
           TRANSLATIONS_OPENAI_API_KEY: ${{ secrets.TRANSLATIONS_OPENAI_API_KEY }}
           TRANSLATIONS_OPENAI_MODEL: ${{ secrets.TRANSLATIONS_OPENAI_MODEL }}
@@ -70,7 +70,7 @@ jobs:
       # generated data here before publishing it, including on repeated runs.
       - name: Validate generated translations
         if: ${{ !inputs.plan_only }}
-        working-directory: packages/ui
+        working-directory: packages/frontend
         run: |
           npm run translations:test
           npm run translations:check
@@ -100,8 +100,8 @@ jobs:
           branch: ${{ steps.prepare.outputs.translation-branch }}
           base: ${{ inputs.target_branch }}
           add-paths: |
-            packages/ui/public/locales/*.json
-            packages/ui/translations/last-translated.en.json
+            packages/frontend/public/locales/*.json
+            packages/frontend/translations/last-translated.en.json
           commit-message: Update translations
           title: Update translations for ${{ inputs.target_branch }}
           body: |

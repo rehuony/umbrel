@@ -26,8 +26,8 @@ if [[ -n "$pr_number" ]]; then
   patch_file=$(mktemp)
   trap 'rm -f "$patch_file"' EXIT
   git diff --binary "HEAD...refs/remotes/origin/${translation_branch}" -- \
-    packages/ui/public/locales/ ':!packages/ui/public/locales/en.json' \
-    packages/ui/translations/last-translated.en.json > "$patch_file"
+    packages/frontend/public/locales/ ':!packages/frontend/public/locales/en.json' \
+    packages/frontend/translations/last-translated.en.json > "$patch_file"
   if [[ -s "$patch_file" ]]; then
     if ! git apply --3way "$patch_file"; then
       echo "Translation PR #${pr_number} conflicts with ${TARGET_BRANCH}. Resolve its conflicts before running again." >&2

@@ -1,0 +1,8 @@
+# .gitignore contents
+node_modules
+coverage
+.DS_Store
+data
+
+# Deliberately malformed YAML used to test registry validation.
+source/modules/test-utilities/fixtures/community-repo/app-with-invalid-manifest/umbrel-app.yml

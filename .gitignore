@@ -40,14 +40,8 @@ app-data/*
 data/
 
 # Source modules for the app store, not runtime service data
-!packages/ui/src/features/app-store/data/
-!packages/ui/src/features/app-store/data/**
-
-# Git worktrees (see AGENTS.md). Git creates this on demand and does not
-# ignore nested worktrees on its own, so it only needs ignoring, not tracking.
-# Anchored so a worktrees/ directory elsewhere in the tree isn't caught.
-
-/worktrees/
+!packages/frontend/src/features/app-store/data/
+!packages/frontend/src/features/app-store/data/**
 
 # Commit these files
 

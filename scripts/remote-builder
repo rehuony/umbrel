@@ -33,14 +33,14 @@ if [[ "${1:-}" == "--build-on-host" ]]; then
     # Install umbreld dev dependencies
     echo ""
     echo "Installing umbreld dependencies..."
-    cd "${WORK_DIR}/packages/umbreld" && npm install
+    cd "${WORK_DIR}/packages/backend" && npm install
 
     # Build OS
     echo ""
     echo "Building OS..."
     cd "${WORK_DIR}"
-    npm --prefix packages/os run build:amd64:rugix
-    rm -rf packages/os/rugix/build
+    make image-amd64
+    rm -rf packages/system/rugix/build
     exit 0
 fi
 
@@ -52,7 +52,7 @@ if [[ "${1:-}" == "--test-on-host" ]]; then
     fi
     shift 2
     USER_HOME="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
-    WORK_DIR="${USER_HOME}/${REMOTE_DIR_ARG}/packages/umbreld"
+    WORK_DIR="${USER_HOME}/${REMOTE_DIR_ARG}/packages/backend"
 
     # Disable spinners and fancy progress output
     export CI=true
@@ -114,8 +114,8 @@ sync_files() {
         --filter=':- .gitignore' \
         --exclude='.git' \
         --exclude='node_modules' \
-        --exclude='packages/os/build' \
-        --exclude='packages/os/rugix/.rugix' \
+        --exclude='packages/system/build' \
+        --exclude='packages/system/rugix/.rugix' \
         . "${SSH_HOST}:${REMOTE_DIR}/" || [[ $? -eq 23 ]]
 }
 

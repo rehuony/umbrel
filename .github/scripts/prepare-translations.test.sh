@@ -15,7 +15,7 @@ git init --quiet --bare "$test_dir/origin.git"
 git init --quiet -b staging "$test_dir/work"
 cd "$test_dir/work"
 git remote add origin "$test_dir/origin.git"
-mkdir -p packages/ui/public/locales packages/ui/translations "$test_dir/bin"
+mkdir -p packages/frontend/public/locales packages/frontend/translations "$test_dir/bin"
 cat > "$test_dir/bin/gh" <<'GH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -27,13 +27,13 @@ export TARGET_BRANCH=staging
 export GH_REPO=example/umbrel
 export GITHUB_OUTPUT="$test_dir/output"
 
-cat > packages/ui/public/locales/en.json <<'JSON'
+cat > packages/frontend/public/locales/en.json <<'JSON'
 {"message":"New English", "stable":"Stable"}
 JSON
-cat > packages/ui/translations/last-translated.en.json <<'JSON'
+cat > packages/frontend/translations/last-translated.en.json <<'JSON'
 {"message":"Old English", "stable":"Stable"}
 JSON
-cat > packages/ui/public/locales/de.json <<'JSON'
+cat > packages/frontend/public/locales/de.json <<'JSON'
 {
   "message": "Old translation",
   "a": "a",
@@ -59,20 +59,20 @@ grep -q 'translation-branch=automation/translations/staging' "$GITHUB_OUTPUT"
 
 # Model a completed, unmerged batch plus a reviewer correction on its branch.
 git checkout --quiet -b automation/translations/staging
-sed 's/Old translation/Reviewed translation/' packages/ui/public/locales/de.json > "$test_dir/locale"
-cp "$test_dir/locale" packages/ui/public/locales/de.json
-cp packages/ui/public/locales/en.json packages/ui/translations/last-translated.en.json
+sed 's/Old translation/Reviewed translation/' packages/frontend/public/locales/de.json > "$test_dir/locale"
+cp "$test_dir/locale" packages/frontend/public/locales/de.json
+cp packages/frontend/public/locales/en.json packages/frontend/translations/last-translated.en.json
 printf 'Unrelated PR change\n' > unrelated.txt
 # An English edit on the automation branch must never overwrite source English.
-printf '{"message":"Do not import this"}\n' > packages/ui/public/locales/en.json
+printf '{"message":"Do not import this"}\n' > packages/frontend/public/locales/en.json
 git add .
 git commit --quiet -m 'Translate and review'
 git push --quiet origin automation/translations/staging
 git checkout --quiet staging
 
 # Meanwhile the target branch received an independent human locale correction.
-sed 's/Stable translation/Target human correction/' packages/ui/public/locales/de.json > "$test_dir/locale"
-cp "$test_dir/locale" packages/ui/public/locales/de.json
+sed 's/Stable translation/Target human correction/' packages/frontend/public/locales/de.json > "$test_dir/locale"
+cp "$test_dir/locale" packages/frontend/public/locales/de.json
 git add .
 git commit --quiet -m 'Independent correction'
 git push --quiet origin staging
@@ -81,10 +81,10 @@ export TEST_OPEN_PR=true
 for attempt in 1 2; do
   git reset --quiet --hard "$source_sha"
   bash "$script"
-  grep -q 'Reviewed translation' packages/ui/public/locales/de.json
-  grep -q 'Target human correction' packages/ui/public/locales/de.json
-  grep -q 'New English' packages/ui/translations/last-translated.en.json
-  git diff --exit-code HEAD -- packages/ui/public/locales/en.json
+  grep -q 'Reviewed translation' packages/frontend/public/locales/de.json
+  grep -q 'Target human correction' packages/frontend/public/locales/de.json
+  grep -q 'New English' packages/frontend/translations/last-translated.en.json
+  git diff --exit-code HEAD -- packages/frontend/public/locales/en.json
   test ! -e unrelated.txt
 done
 
@@ -95,8 +95,8 @@ bash "$script"
 test -z "$(git status --porcelain)"
 
 # Concurrent edits to the same translation must fail rather than overwrite.
-sed 's/Old translation/Conflicting correction/' packages/ui/public/locales/de.json > "$test_dir/locale"
-cp "$test_dir/locale" packages/ui/public/locales/de.json
+sed 's/Old translation/Conflicting correction/' packages/frontend/public/locales/de.json > "$test_dir/locale"
+cp "$test_dir/locale" packages/frontend/public/locales/de.json
 git add .
 git commit --quiet -m 'Conflicting correction'
 export TEST_OPEN_PR=true
