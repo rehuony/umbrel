@@ -275,7 +275,7 @@ export function BackupsSetupWizard() {
 		<FormProvider {...form}>
 			<div className='flex h-full flex-col'>
 				{/* Header */}
-				<div className='mb-4'>
+				<div className='mb-4 pr-8'>
 					{(() => {
 						const h = headerMetaForStep(step)
 						return (

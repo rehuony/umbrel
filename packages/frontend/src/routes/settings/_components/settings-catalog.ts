@@ -7,6 +7,7 @@ import {HiMiniRectangleStack} from 'react-icons/hi2'
 import {IoIosSettings} from 'react-icons/io'
 import {
 	PiAppWindowFill,
+	PiArrowCircleUpFill,
 	PiClockCounterClockwiseFill,
 	PiDevicesFill,
 	PiKeyFill,
@@ -76,8 +77,8 @@ const SETTINGS_PAGE_ITEM_ORDER: SettingsItemId[] = [
 	'software-update',
 	'wifi',
 	'device-info',
-	'mcp',
 	'advanced',
+	'mcp',
 	'troubleshoot',
 	'support',
 ]
@@ -144,7 +145,7 @@ export function createSettingsCatalog(
 			id: 'software-update',
 			category: 'system',
 			command: {},
-			icon: suppliedSettingsIcons.deviceInfo,
+			icon: PiArrowCircleUpFill,
 			title: t('system-update.title'),
 			description: t('system-update.description'),
 			to: '/settings/software-update',

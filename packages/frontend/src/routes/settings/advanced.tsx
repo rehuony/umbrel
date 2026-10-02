@@ -179,10 +179,10 @@ export default function AdvancedSettingsDrawerOrDialog() {
 
 	return (
 		<Dialog {...dialogProps}>
-			<DialogScrollableContent showClose>
+			<DialogScrollableContent showClose className='sm:max-w-[800px]'>
 				<AnimatedHeight>
 					<div className='space-y-6 px-5 py-6'>
-						<DialogHeader className={cn(!showOverview && 'sr-only')}>
+						<DialogHeader className={cn('pr-8', !showOverview && 'sr-only')}>
 							<DialogTitle>{title}</DialogTitle>
 						</DialogHeader>
 						{content}

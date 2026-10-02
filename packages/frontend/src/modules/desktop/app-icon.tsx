@@ -260,6 +260,15 @@ export function AppIconConnected({appId}: {appId: string}) {
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent>
+					{/* Uninstall */}
+					<ContextMenuItem
+						className={contextMenuClasses.item.rootDestructive}
+						disabled={uninstallDisabled}
+						onSelect={uninstallDisabled ? undefined : promptUninstall}
+					>
+						{t('desktop.app.context.uninstall')}
+					</ContextMenuItem>
+
 					{/* Start / Stop */}
 					{state !== 'stopped' ? (
 						<ContextMenuItem disabled={stopDisabled} onSelect={stopDisabled ? undefined : appInstall.stop}>
@@ -300,15 +309,6 @@ export function AppIconConnected({appId}: {appId: string}) {
 
 					{/* Go to app store page */}
 					<ContextMenuItemLinkToAppStore appId={appId} />
-
-					{/* Uninstall */}
-					<ContextMenuItem
-						className={contextMenuClasses.item.rootDestructive}
-						disabled={uninstallDisabled}
-						onSelect={uninstallDisabled ? undefined : promptUninstall}
-					>
-						{t('desktop.app.context.uninstall')}
-					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
 

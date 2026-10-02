@@ -86,7 +86,7 @@ export function BackupsConfigureWizard() {
 
 	return (
 		<div className='flex h-full flex-col gap-4'>
-			<div>
+			<div className='pr-8'>
 				<h2 className='text-24 font-medium text-white'>{t('backups')}</h2>
 			</div>
 			<ImmersiveDialogSeparator />

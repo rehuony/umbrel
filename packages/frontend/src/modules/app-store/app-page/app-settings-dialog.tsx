@@ -26,7 +26,12 @@ import {
 	AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {Button} from '@/components/ui/button'
-import {ImmersiveDialog, ImmersiveDialogSplitContent} from '@/components/ui/immersive-dialog'
+import {DialogPortal} from '@/components/ui/dialog'
+import {DialogCloseButton} from '@/components/ui/dialog-close-button'
+import {ImmersiveDialog, ImmersiveDialogOverlay} from '@/components/ui/immersive-dialog'
+import {ScrollArea} from '@/components/ui/scroll-area'
+import {preventDialogDismissForToasts} from '@/components/ui/shared/dialog'
+import {SheetContent} from '@/components/ui/sheet'
 import {Switch} from '@/components/ui/switch'
 import {toast} from '@/components/ui/toast'
 import {registryAppPath} from '@/constants/app-store'
@@ -132,41 +137,53 @@ export function AppSettingsDialog({
 				else (closeRequestRef.current ?? closeNow)()
 			}}
 		>
-			<ImmersiveDialogSplitContent
-				side={showApp ? <div ref={setSideSlot} className='contents' /> : <AppSettingsListSidebar />}
-				footer={<div ref={setFooterSlot} className='contents' />}
-				onOpenAutoFocus={(e) => {
-					// `preventDefault` to prevent focus on first input
-					e.preventDefault()
-				}}
-			>
-				<SettingsViewTransition viewKey={showApp ? `app-${app!.id}` : 'list'} depth={showApp ? 1 : 0}>
-					{showApp ? (
-						<AppSettingsDialogForApp
-							// Switching apps starts a fresh form. Settings refreshes for the same
-							// app are reconciled by field below so unrelated drafts survive.
-							key={app!.id}
-							app={app!}
-							userApps={userApps!}
-							userAppsKeyed={userAppsKeyed!}
-							availableApps={availableApps!}
-							availableAppsKeyed={availableAppsKeyed!}
-							ambiguousAppIds={ambiguousAppIds!}
-							openDependency={dependencyId}
-							openView={openView}
-							onInstallDependency={onInstallDependency}
-							makeDependencyPath={makeDependencyPath}
-							sideSlot={sideSlot}
-							footerSlot={footerSlot}
-							closeRequestRef={closeRequestRef}
-							onRequestClose={closeNow}
-							onBack={listMode ? () => navigate('/settings/apps') : undefined}
-						/>
-					) : (
-						<AppSettingsListContent />
-					)}
-				</SettingsViewTransition>
-			</ImmersiveDialogSplitContent>
+			<DialogPortal>
+				<SheetContent
+					side='bottom-zoom'
+					className='z-50 mx-auto flex h-[calc(100dvh-var(--sheet-top))] max-w-[1120px] gap-0 md:h-[min(760px,calc(100dvh-80px))] md:w-[calc(100vw-50px)] lg:w-[calc(100vw-120px)]'
+					backdrop={<ImmersiveDialogOverlay />}
+					closeButton={<DialogCloseButton className='absolute top-3 right-3 z-[60] md:top-5 md:right-5' />}
+					onOpenAutoFocus={(e) => e.preventDefault()}
+					onPointerDownOutside={preventDialogDismissForToasts}
+				>
+					<aside className='hidden w-[220px] shrink-0 flex-col items-center justify-center overflow-y-auto border-r border-white/6 bg-black/20 py-8 md:flex'>
+						{showApp ? <div ref={setSideSlot} className='contents' /> : <AppSettingsListSidebar />}
+					</aside>
+					<div className='flex min-h-0 min-w-0 flex-1 flex-col'>
+						<ScrollArea dialogInset className='min-h-0 flex-1'>
+							<div className='flex flex-col gap-6 px-6 py-8 md:p-8'>
+								<SettingsViewTransition viewKey={showApp ? `app-${app!.id}` : 'list'} depth={showApp ? 1 : 0}>
+									{showApp ? (
+										<AppSettingsDialogForApp
+											// Switching apps starts a fresh form. Settings refreshes for the same
+											// app are reconciled by field below so unrelated drafts survive.
+											key={app!.id}
+											app={app!}
+											userApps={userApps!}
+											userAppsKeyed={userAppsKeyed!}
+											availableApps={availableApps!}
+											availableAppsKeyed={availableAppsKeyed!}
+											ambiguousAppIds={ambiguousAppIds!}
+											openDependency={dependencyId}
+											openView={openView}
+											onInstallDependency={onInstallDependency}
+											makeDependencyPath={makeDependencyPath}
+											sideSlot={sideSlot}
+											footerSlot={footerSlot}
+											closeRequestRef={closeRequestRef}
+											onRequestClose={closeNow}
+											onBack={listMode ? () => navigate('/settings/apps') : undefined}
+										/>
+									) : (
+										<AppSettingsListContent />
+									)}
+								</SettingsViewTransition>
+							</div>
+						</ScrollArea>
+						<div ref={setFooterSlot} className='contents' />
+					</div>
+				</SheetContent>
+			</DialogPortal>
 		</ImmersiveDialog>
 	)
 }
@@ -458,7 +475,7 @@ function AppSettingsDialogForApp({
 			) : null}
 
 			{/* The identity pane is hidden below md, so small screens get it inline */}
-			<div className='flex items-center gap-3 md:hidden'>
+			<div className='flex items-center gap-3 pr-8 md:hidden'>
 				<AppIcon src={app.icon} size={40} className='rounded-8' />
 				<div className='min-w-0'>
 					<div className='truncate text-15 font-medium'>{app.name}</div>
@@ -470,18 +487,22 @@ function AppSettingsDialogForApp({
 
 			<SettingsViewHeader title={t('app-settings.title')} description={t('app-settings.description')} />
 
-			<div className='flex flex-col gap-y-3'>
-				<SettingsControlRow
-					title={t('app-settings.auth.row-title')}
-					description={appProxyAuthSupported ? t('app-settings.auth.description') : t('app-settings.auth.unsupported')}
-					icon={TbLock}
-					tone={1}
-					control={
-						appProxyAuthSupported ? (
-							<Switch checked={authEnabled} disabled={setAuthMut.isPending} onCheckedChange={onAuthToggle} />
-						) : undefined
-					}
-				/>
+			<div className='grid gap-3 lg:grid-cols-2'>
+				<div className='lg:col-span-2'>
+					<SettingsControlRow
+						title={t('app-settings.auth.row-title')}
+						description={
+							appProxyAuthSupported ? t('app-settings.auth.description') : t('app-settings.auth.unsupported')
+						}
+						icon={TbLock}
+						tone={1}
+						control={
+							appProxyAuthSupported ? (
+								<Switch checked={authEnabled} disabled={setAuthMut.isPending} onCheckedChange={onAuthToggle} />
+							) : undefined
+						}
+					/>
+				</div>
 				<SettingsNavigationRow
 					title={t('app-settings.storage.title')}
 					description={storageDescription}
@@ -594,11 +615,11 @@ function AppSettingsDialogForApp({
 					transition={{duration: 0.2, ease: 'easeOut'}}
 					className='border-t border-white/6 bg-black/30'
 				>
-					<div className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 md:px-8'>
+					<div className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-8'>
 						<div className='text-13 text-white/50'>
 							{t('app-settings.pending-changes', {count: changedSectionCount})}
 						</div>
-						<div className='flex items-center gap-2'>
+						<div className='ml-auto flex items-center gap-2'>
 							<Button size='dialog' className='w-auto' disabled={mutationInProgress} onClick={resetChanges}>
 								{t('app-settings.discard')}
 							</Button>

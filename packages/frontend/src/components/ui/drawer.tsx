@@ -2,7 +2,7 @@ import * as React from 'react'
 import {Drawer as DrawerPrimitive} from 'vaul'
 
 import {FadeScroller} from '@/components/fade-scroller'
-import {preventDialogDismissForToasts} from '@/components/ui/shared/dialog'
+import {dialogBackdropClass, preventDialogDismissForToasts} from '@/components/ui/shared/dialog'
 import {cn} from '@/lib/utils'
 
 const Drawer = ({shouldScaleBackground = false, ...props}: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
@@ -22,7 +22,13 @@ function DrawerOverlay({
 }: React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Overlay> & {
 	ref?: React.Ref<React.ComponentRef<typeof DrawerPrimitive.Overlay>>
 }) {
-	return <DrawerPrimitive.Overlay ref={ref} className={cn('fixed inset-0 z-50 bg-black/50', className)} {...props} />
+	return (
+		<DrawerPrimitive.Overlay
+			ref={ref}
+			className={cn('fixed inset-0 z-50', dialogBackdropClass, className)}
+			{...props}
+		/>
+	)
 }
 
 function DrawerContent({

@@ -33,6 +33,7 @@ import {createSettingsCatalog, getSettingsPage, SettingsPageItem} from './settin
 import {SettingsItemsGroup} from './settings-page-controls'
 import {useSettingsFilterLabels} from './settings-taxonomy'
 import {SettingsAccountAvatar} from './shared'
+import {SoftwareUpdateListRow} from './software-update-list-row'
 import {StorageCardContent} from './storage-card-content'
 
 const statCardClass = 'settings-edge-material h-full min-h-[104px] !rounded-24 !p-4'
@@ -92,6 +93,7 @@ export function SettingsContentMobile({isMember = false}: {isMember?: boolean}) 
 	)
 
 	const renderSettingsItem = (item: SettingsPageItem) => {
+		if (item.id === 'software-update') return <SoftwareUpdateListRow icon={item.icon} mobile />
 		const navigateToItem = () => {
 			if (item.id === 'wifi' && wifiSupportedQ.data === false) navigate('/settings/wifi-unsupported')
 			else if (item.external) window.open(item.to, '_blank', 'noopener,noreferrer')

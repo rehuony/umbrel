@@ -38,6 +38,7 @@ import {createSettingsCatalog, getSettingsPage, SettingsPageItem} from './settin
 import {SettingsFilterPills, SettingsItemsGroup} from './settings-page-controls'
 import {SettingsFilterId, useSettingsFilterLabels} from './settings-taxonomy'
 import {SettingsAccountAvatar} from './shared'
+import {SoftwareUpdateListRow} from './software-update-list-row'
 import {StorageCardContent} from './storage-card-content'
 import {WallpaperPicker} from './wallpaper-picker'
 
@@ -266,16 +267,16 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 										</Button>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent align='end' className='min-w-[280px]'>
-										<DropdownMenuItem onSelect={() => navigate('/settings/backups/setup?backups-setup-tab=nas')}>
-											<div className='flex flex-col'>
-												<div className='text-14 font-medium'>{t('backups-setup-umbrel-or-nas')}</div>
-												<div className='text-12 text-white/40'>{t('backups-setup-nas-or-umbrel-description')}</div>
-											</div>
-										</DropdownMenuItem>
 										<DropdownMenuItem onSelect={() => navigate('/settings/backups/setup?backups-setup-tab=external')}>
 											<div className='flex flex-col'>
 												<div className='text-14 font-medium'>{t('external-drive')}</div>
 												<div className='text-12 text-white/40'>{t('backups-setup-external-description')}</div>
+											</div>
+										</DropdownMenuItem>
+										<DropdownMenuItem onSelect={() => navigate('/settings/backups/setup?backups-setup-tab=nas')}>
+											<div className='flex flex-col'>
+												<div className='text-14 font-medium'>{t('backups-setup-umbrel-or-nas')}</div>
+												<div className='text-12 text-white/40'>{t('backups-setup-nas-or-umbrel-description')}</div>
 											</div>
 										</DropdownMenuItem>
 									</DropdownMenuContent>
@@ -308,6 +309,8 @@ export function SettingsContent({isMember = false}: {isMember?: boolean}) {
 						</div>
 					</ListRow>
 				)
+			case 'software-update':
+				return <SoftwareUpdateListRow icon={item.icon} isActive={settingsDialog === 'software-update'} />
 			case 'support':
 				return (
 					<ListRow

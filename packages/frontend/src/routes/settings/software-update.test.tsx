@@ -3,6 +3,7 @@ import {act, type PropsWithChildren} from 'react'
 import {createRoot} from 'react-dom/client'
 import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 
+import {SoftwareUpdateListRow} from './_components/software-update-list-row'
 import SoftwareUpdate from './software-update'
 
 const mocks = vi.hoisted(() => ({
@@ -27,7 +28,9 @@ vi.mock('@/components/ui/drawer', () => ({
 	DrawerHeader: 'div',
 	DrawerTitle: 'div',
 }))
-vi.mock('@/components/ui/button-link', () => ({ButtonLink: ({children}: PropsWithChildren) => <a>{children}</a>}))
+vi.mock('@/components/ui/button-link', () => ({
+	ButtonLink: ({children, to}: PropsWithChildren<{to: string}>) => <a href={to}>{children}</a>,
+}))
 vi.mock('@/trpc/trpc', () => {
 	const utils = {
 		system: {
@@ -113,4 +116,56 @@ test('refreshes installed and available versions after a completed boot', () => 
 	render()
 	expect(mocks.invalidateCheck).toHaveBeenCalledOnce()
 	expect(mocks.invalidateVersion).toHaveBeenCalledOnce()
+})
+
+const renderRow = (mobile = false) =>
+	act(() => root.render(<SoftwareUpdateListRow icon='/update.svg' mobile={mobile} />))
+
+test('checks for updates in the row, keeps the version visible, and disables duplicate checks', () => {
+	mocks.check.data.available = false
+	renderRow()
+	expect(container.textContent).toContain('umbrelOS 1.0.0')
+	expect(container.textContent).toContain('system-update.up-to-date')
+	act(() => button('system-update.check')!.click())
+	expect(mocks.check.refetch).toHaveBeenCalledOnce()
+	expect(container.querySelector('a')).toBeNull()
+	expect(mocks.update).not.toHaveBeenCalled()
+	mocks.check.isFetching = true
+	renderRow()
+	expect(button('system-update.checking')?.disabled).toBe(true)
+	expect(container.textContent).toContain('umbrelOS 1.0.0')
+})
+
+test('offers a review link only when a new version is available, on desktop and mobile', () => {
+	for (const mobile of [false, true]) {
+		renderRow(mobile)
+		expect(container.textContent).toContain('system-update.available')
+		expect(container.querySelector('a')?.getAttribute('href')).toBe('/settings/software-update')
+		expect(container.querySelector('a')?.textContent).toBe('system-update.view')
+		expect(mocks.update).not.toHaveBeenCalled()
+	}
+})
+
+test('does not report an unverified update check as up to date', () => {
+	for (const [data, expected] of [
+		[undefined, 'check-for-latest-version'],
+		[{supported: false, available: false, release: null}, 'system-update.no-update'],
+		[{supported: true, available: false, release: null}, 'system-update.no-release'],
+	] as const) {
+		mocks.check.data = data
+		renderRow()
+		expect(container.textContent).toContain(expected)
+		expect(container.textContent).not.toContain('system-update.up-to-date')
+		expect(container.querySelector('a')).toBeNull()
+	}
+})
+
+test('shows an inline retry after a failed refresh even when an earlier check succeeded', () => {
+	mocks.check.isError = true
+	mocks.check.error = new Error('Network unavailable')
+	renderRow()
+	expect(container.querySelector('[role=alert]')?.textContent).toContain('system-update.check-error')
+	expect(container.querySelector('a')).toBeNull()
+	act(() => button('system-update.check')!.click())
+	expect(mocks.check.refetch).toHaveBeenCalledOnce()
 })

@@ -228,12 +228,7 @@ export {
 }
 
 function BlurOverlay({ref}: {ref?: React.Ref<HTMLDivElement>}) {
-	return (
-		<DialogPrimitive.DialogOverlay
-			ref={ref}
-			className={cn(dialogOverlayClass, 'z-[999] bg-black/30 backdrop-blur-xl contrast-more:backdrop-blur-none')}
-		/>
-	)
+	return <DialogPrimitive.DialogOverlay ref={ref} className={cn(dialogOverlayClass, 'z-[999]')} />
 }
 
 const CommandCloseButton = () => (

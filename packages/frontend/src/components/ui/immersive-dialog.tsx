@@ -1,6 +1,7 @@
 import {Dialog, DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogTrigger} from '@radix-ui/react-dialog'
 import {motion} from 'motion/react'
 import {Children, ComponentPropsWithoutRef, ReactNode, useEffect} from 'react'
+import {useTranslation} from 'react-i18next'
 import {RiCloseLine} from 'react-icons/ri'
 
 import {ScrollArea} from '@/components/ui/scroll-area'
@@ -17,7 +18,7 @@ import {tw} from '@/utils/tw'
 
 import {IconTypes} from './icon'
 
-export const immersiveDialogTitleClass = tw`text-24 font-bold leading-none -tracking-4 text-white/80`
+export const immersiveDialogTitleClass = tw`pr-8 text-24 font-bold leading-none -tracking-4 text-white/80`
 export const immersiveDialogDescriptionClass = tw`text-15 font-normal leading-tight -tracking-2 text-white/40`
 
 export function ImmersiveDialogSeparator() {
@@ -159,24 +160,19 @@ const immersiveContentTallClass = tw`top-[calc(50%-30px)] max-h-[800px] w-[calc(
 const immersiveScrollAreaContentsClass = tw`flex h-full flex-col gap-6 px-6 py-4 md:p-8`
 
 export function ImmersiveDialogOverlay({ref}: {ref?: React.Ref<HTMLDivElement>}) {
-	return (
-		<DialogOverlay
-			ref={ref}
-			className={cn(dialogOverlayClass, 'transform-gpu bg-black/30 backdrop-blur-xl contrast-more:backdrop-blur-none')}
-		/>
-	)
+	return <DialogOverlay ref={ref} className={dialogOverlayClass} />
 }
 
 function ImmersiveDialogClose() {
+	const {t} = useTranslation()
 	return (
-		<div className='absolute top-full left-1/2 mt-5 -translate-x-1/2'>
-			{/* Note, because this parent has a backdrop, this button won't have a backdrop */}
-			{/* Plain button rather than IconButton: the button variant's border and
-			    shadow utilities would override the settings-edge-material surface */}
-			<DialogClose className='settings-edge-material umbrel-material flex h-[36px] w-[36px] items-center justify-center rounded-full bg-white/6 text-white transition-[background-color,transform] duration-200 hover:bg-white/12 focus:outline-hidden focus-visible:ring-3 focus-visible:ring-white/20 active:scale-90'>
-				<RiCloseLine className='size-5 opacity-90' />
-			</DialogClose>
-		</div>
+		// Keep the close control above the panel chrome and outside its scrolling content.
+		<DialogClose
+			aria-label={t('close')}
+			className='settings-edge-material umbrel-material absolute top-3 right-3 z-[60] flex h-[36px] w-[36px] items-center justify-center rounded-full bg-white/6 text-white transition-[background-color,transform] duration-200 hover:bg-white/12 focus:outline-hidden focus-visible:ring-3 focus-visible:ring-white/20 active:scale-90 md:top-4 md:right-4'
+		>
+			<RiCloseLine className='size-5 opacity-90' aria-hidden />
+		</DialogClose>
 	)
 }
 
