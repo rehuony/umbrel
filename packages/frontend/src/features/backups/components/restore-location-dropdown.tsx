@@ -52,22 +52,16 @@ export function RestoreLocationDropdown({onSelect, isExternalStorageSupported = 
 				</DropdownMenuTrigger>
 				{/* p-1 overrides the dropdown's default p-2.5 for the tighter context-menu look */}
 				<DropdownMenuContent align='end' className='min-w-[320px] p-1'>
-					<DropdownMenuItem className='block' onSelect={() => onSelect('/Network')}>
-						<div className='flex w-full flex-col items-start'>
-							<div className='text-sm font-medium'>{t('backups-restore.browse-nas-title')}</div>
-							<div className='text-xs opacity-60'>{t('backups-restore.browse-nas-subtitle')}</div>
-						</div>
-					</DropdownMenuItem>
 					<DropdownMenuItem className='block' onSelect={handleExternalClick}>
 						<div className='flex w-full flex-col items-start'>
 							<div className='text-sm font-medium'>{t('backups-restore.browse-external-title')}</div>
 							<div className='text-xs opacity-60'>{t('backups-restore.browse-external-subtitle')}</div>
 						</div>
 					</DropdownMenuItem>
-					<DropdownMenuItem disabled className='block cursor-not-allowed opacity-60'>
+					<DropdownMenuItem className='block' onSelect={() => onSelect('/Network')}>
 						<div className='flex w-full flex-col items-start'>
-							<div className='text-sm font-medium'>{t('backups-restore.browse-cloud-title')}</div>
-							<div className='text-xs opacity-60'>{t('backups-restore.browse-cloud-subtitle')}</div>
+							<div className='text-sm font-medium'>{t('backups-restore.browse-nas-title')}</div>
+							<div className='text-xs opacity-60'>{t('backups-restore.browse-nas-subtitle')}</div>
 						</div>
 					</DropdownMenuItem>
 				</DropdownMenuContent>

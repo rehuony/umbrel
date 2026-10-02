@@ -1,4 +1,7 @@
+const repositoryUrl = 'https://github.com/rehuony/umbrel'
+
 export const links = {
-	support: 'https://umbrel.com/support',
-	umbrelOS: 'https://umbrel.com/umbrelos',
+	support: `${repositoryUrl}/issues`,
+	downloads: `${repositoryUrl}/releases`,
+	applicationDocs: `${repositoryUrl}/blob/main/documents/applications.md`,
 }

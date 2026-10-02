@@ -37,7 +37,12 @@ export function DesktopContextMenu({children}: {children: React.ReactNode}) {
 
 	return (
 		<>
-			<ContextMenu modal={false}>
+			<ContextMenu
+				modal={false}
+				onOpenChange={(open) => {
+					if (open) void import('@/routes/edit-widgets')
+				}}
+			>
 				<ContextMenuTrigger disabled={isShowingDialog}>{children}</ContextMenuTrigger>
 				<ContextMenuContent ref={contentRef}>
 					<ContextMenuItem

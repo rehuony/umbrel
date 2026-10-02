@@ -5,7 +5,7 @@ import {useEffect, useMemo, useState} from 'react'
 import {FormProvider, useForm, useFormContext, type Resolver, type SubmitHandler} from 'react-hook-form'
 import {Trans, useTranslation} from 'react-i18next'
 import {FaRegSave} from 'react-icons/fa'
-import {TbAlertTriangleFilled, TbExternalLink, TbPassword, TbShoppingBag} from 'react-icons/tb'
+import {TbAlertTriangleFilled, TbPassword, TbShoppingBag} from 'react-icons/tb'
 import {useNavigate} from 'react-router-dom'
 import {useCopyToClipboard} from 'react-use'
 import {z} from 'zod'
@@ -16,7 +16,6 @@ import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form'
 import {ImmersiveDialogSeparator} from '@/components/ui/immersive-dialog'
 import {Input, PasswordInput} from '@/components/ui/input'
-import umbrelPrivateCloudIcon from '@/features/backups/assets/umbrel-private-cloud-icon.png'
 import {BackupDeviceIcon} from '@/features/backups/components/backup-device-icon'
 import {BackupsExclusions} from '@/features/backups/components/backups-exclusions'
 import {AlreadyConfiguredModal} from '@/features/backups/components/modals/already-configured-modal'
@@ -408,13 +407,7 @@ function DestinationStep({
 	const initialTabParam = params.get('backups-setup-tab')
 	const isMobile = useIsMobile()
 
-	const [tab, setTab] = useState<'nas' | 'external' | 'umbrel-private-cloud'>(
-		initialTabParam === 'external'
-			? 'external'
-			: initialTabParam === 'umbrel-private-cloud'
-				? 'umbrel-private-cloud'
-				: 'nas',
-	)
+	const [tab, setTab] = useState<'nas' | 'external'>(initialTabParam === 'external' ? 'external' : 'nas')
 	const [isAddNasOpen, setAddNasOpen] = useState(false)
 
 	// Prefer the selected destination type to drive the tab (so Back returns to the right tab)
@@ -438,7 +431,7 @@ function DestinationStep({
 
 	const currentDest = form.watch('destination')
 
-	const switchTab = (tab: 'nas' | 'external' | 'umbrel-private-cloud') => {
+	const switchTab = (tab: 'nas' | 'external') => {
 		setTab(tab)
 		const search = addLinkSearchParams({'backups-setup-tab': tab})
 		// Update URL without navigating
@@ -453,13 +446,7 @@ function DestinationStep({
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button variant='default' className='flex items-center gap-2'>
-								<span>
-									{tab === 'nas'
-										? t('backups-setup-umbrel-or-nas')
-										: tab === 'external'
-											? t('external-drive')
-											: t('backups-setup-umbrel-private-cloud')}
-								</span>
+								<span>{tab === 'nas' ? t('backups-setup-umbrel-or-nas') : t('external-drive')}</span>
 								<ChevronDown className='h-3 w-3' />
 							</Button>
 						</DropdownMenuTrigger>
@@ -476,12 +463,6 @@ function DestinationStep({
 									<div className='text-12 text-white/40'>{t('backups-setup-external-description')}</div>
 								</div>
 							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={() => switchTab('umbrel-private-cloud')}>
-								<div className='flex flex-col'>
-									<div className='text-14 font-medium'>{t('backups-setup-umbrel-private-cloud')}</div>
-									<div className='text-12 text-white/40'>{t('backups-setup-umbrel-private-cloud-description')}</div>
-								</div>
-							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
@@ -490,11 +471,10 @@ function DestinationStep({
 					options={[
 						{id: 'nas', label: t('backups-setup-umbrel-or-nas')},
 						{id: 'external', label: t('external-drive')},
-						{id: 'umbrel-private-cloud', label: t('backups-setup-umbrel-private-cloud')},
 					]}
 					value={tab}
 					onChange={(v) => {
-						switchTab(v as 'nas' | 'external' | 'umbrel-private-cloud')
+						switchTab(v as 'nas' | 'external')
 					}}
 				/>
 			)}
@@ -533,121 +513,89 @@ function DestinationStep({
 						]
 					)}
 				</div>
-			) : tab === 'external' ? (
-				!isExternalStorageSupported ? (
-					// External storage not supported on Raspberry Pi
-					<div className='flex flex-col items-center justify-center gap-4 rounded-20 border border-white/10 bg-black/30 px-6 py-8'>
-						<div className='relative'>
-							<img src={externalStorageIcon} alt={t('external-drive')} className='size-16' draggable={false} />
-							<div className='absolute -top-2 -right-2'>
-								<TbAlertTriangleFilled className='size-8 text-yellow-400' />
-							</div>
-						</div>
-						<div className='flex flex-col items-center gap-1 text-center'>
-							<span className='text-15 font-medium text-white'>{t('files-external-storage.unsupported.title')}</span>
-							<span className='max-w-sm text-13 text-white/60'>
-								{t('files-external-storage.unsupported.description-general')}
-							</span>
+			) : !isExternalStorageSupported ? (
+				// External storage not supported on Raspberry Pi
+				<div className='flex flex-col items-center justify-center gap-4 rounded-20 border border-white/10 bg-black/30 px-6 py-8'>
+					<div className='relative'>
+						<img src={externalStorageIcon} alt={t('external-drive')} className='size-16' draggable={false} />
+						<div className='absolute -top-2 -right-2'>
+							<TbAlertTriangleFilled className='size-8 text-yellow-400' />
 						</div>
 					</div>
-				) : (
-					<div className='grid grid-cols-[repeat(auto-fill,125px)] gap-3'>
-						{isLoadingExternalStorage ? (
-							<div className='col-span-full flex items-center justify-start gap-2 py-2 text-sm text-white/60'>
-								<Loader2 className='size-4 animate-spin will-change-transform' />
-								<span>{t('backups.scanning-for-external-drives')}</span>
-							</div>
-						) : !disks || disks.length === 0 ? (
-							<div className='col-span-full flex items-center justify-start py-2'>
-								<span className='text-sm text-white/40'>{t('backups.no-external-drives-detected')}</span>
-							</div>
-						) : (
-							<>
-								{/* Normal external drives that don't need formatting */}
-								{disks
-									.filter((disk) => disk.isMounted && !disk.isFormatting)
-									.flatMap((disk) =>
-										disk.partitions.flatMap((p) => {
-											const firstMount = p.mountpoints?.[0]
-											if (!firstMount) return []
-											const label = p.label || disk.name || t('unknown')
-											const selected = currentDest?.type === 'external' && currentDest.mountpoint === firstMount
-											return [
-												<ServerCard
-													key={`${disk.id}-${p.id}-${firstMount}`}
-													selected={!!selected}
-													onClick={() => onChangeDestination({type: 'external', mountpoint: firstMount})}
-												>
-													<div className='mb-2 flex h-12 w-12 items-center justify-center'>
-														<BackupDeviceIcon path={firstMount} connected className='size-11' />
-													</div>
-													<div className='w-full truncate text-center text-[12px]'>{label}</div>
-													<div className='w-full truncate text-center text-[11px] text-white/40'>
-														{formatFilesystemSize(p.size)}
-													</div>
-												</ServerCard>,
-											]
-										}),
-									)}
-								{/* External drives that need formatting */}
-								{disks
-									.filter((disk) => !disk.isMounted || disk.isFormatting)
-									.map((disk) => {
-										const label = disk.name || t('unknown')
-										return (
+					<div className='flex flex-col items-center gap-1 text-center'>
+						<span className='text-15 font-medium text-white'>{t('files-external-storage.unsupported.title')}</span>
+						<span className='max-w-sm text-13 text-white/60'>
+							{t('files-external-storage.unsupported.description-general')}
+						</span>
+					</div>
+				</div>
+			) : (
+				<div className='grid grid-cols-[repeat(auto-fill,125px)] gap-3'>
+					{isLoadingExternalStorage ? (
+						<div className='col-span-full flex items-center justify-start gap-2 py-2 text-sm text-white/60'>
+							<Loader2 className='size-4 animate-spin will-change-transform' />
+							<span>{t('backups.scanning-for-external-drives')}</span>
+						</div>
+					) : !disks || disks.length === 0 ? (
+						<div className='col-span-full flex items-center justify-start py-2'>
+							<span className='text-sm text-white/40'>{t('backups.no-external-drives-detected')}</span>
+						</div>
+					) : (
+						<>
+							{/* Normal external drives that don't need formatting */}
+							{disks
+								.filter((disk) => disk.isMounted && !disk.isFormatting)
+								.flatMap((disk) =>
+									disk.partitions.flatMap((p) => {
+										const firstMount = p.mountpoints?.[0]
+										if (!firstMount) return []
+										const label = p.label || disk.name || t('unknown')
+										const selected = currentDest?.type === 'external' && currentDest.mountpoint === firstMount
+										return [
 											<ServerCard
-												key={`${disk.id}-requires-format`}
-												selected={false}
-												onClick={() => {
-													if (disk.isFormatting) return
-													navigate(`/files/Home?dialog=files-format-drive&deviceId=${disk.id}`)
-												}}
+												key={`${disk.id}-${p.id}-${firstMount}`}
+												selected={!!selected}
+												onClick={() => onChangeDestination({type: 'external', mountpoint: firstMount})}
 											>
 												<div className='mb-2 flex h-12 w-12 items-center justify-center'>
-													<BackupDeviceIcon path='' connected={false} className='size-11' />
+													<BackupDeviceIcon path={firstMount} connected className='size-11' />
 												</div>
 												<div className='w-full truncate text-center text-[12px]'>{label}</div>
 												<div className='w-full truncate text-center text-[11px] text-white/40'>
-													{disk.isFormatting ? t('files-format.formatting') : t('files-format.title-requires-format')}
+													{formatFilesystemSize(p.size)}
 												</div>
-											</ServerCard>
-										)
-									})}
-							</>
-						)}
-					</div>
-				)
-			) : tab === 'umbrel-private-cloud' ? (
-				<div className='flex flex-col items-center justify-center gap-7 rounded-20 border border-white/10 bg-black/30 px-3 pt-8 pb-10'>
-					<div className='flex flex-col items-center justify-center gap-1 text-center'>
-						<h2 className='mb-0 text-2xl text-white'>{t('backups-setup-umbrel-private-cloud')}</h2>
-						<span className='mt-0 text-sm text-white/80'>{t('backups-setup-umbrel-private-cloud-subtitle')}</span>
-					</div>
-					<img
-						src={umbrelPrivateCloudIcon}
-						alt={t('backups-setup-umbrel-private-cloud')}
-						className='w-24'
-						draggable={false}
-					/>
-					<div className='flex flex-col items-center justify-center gap-2'>
-						<p className='max-w-md text-center text-sm text-white/80'>
-							<Trans
-								t={t}
-								i18nKey='backups-setup-umbrel-private-cloud-cta'
-								components={{
-									bold: <span className='font-bold text-white' />,
-								}}
-							/>
-						</p>
-						<Button asChild className='mt-4 px-4' variant='primary'>
-							<a href='https://link.umbrel.com/private-cloud' target='_blank' rel='noopener noreferrer'>
-								<TbExternalLink className='size-4' />
-								{t('backups-setup-umbrel-private-cloud-cta-link')}
-							</a>
-						</Button>
-					</div>
+											</ServerCard>,
+										]
+									}),
+								)}
+							{/* External drives that need formatting */}
+							{disks
+								.filter((disk) => !disk.isMounted || disk.isFormatting)
+								.map((disk) => {
+									const label = disk.name || t('unknown')
+									return (
+										<ServerCard
+											key={`${disk.id}-requires-format`}
+											selected={false}
+											onClick={() => {
+												if (disk.isFormatting) return
+												navigate(`/files/Home?dialog=files-format-drive&deviceId=${disk.id}`)
+											}}
+										>
+											<div className='mb-2 flex h-12 w-12 items-center justify-center'>
+												<BackupDeviceIcon path='' connected={false} className='size-11' />
+											</div>
+											<div className='w-full truncate text-center text-[12px]'>{label}</div>
+											<div className='w-full truncate text-center text-[11px] text-white/40'>
+												{disk.isFormatting ? t('files-format.formatting') : t('files-format.title-requires-format')}
+											</div>
+										</ServerCard>
+									)
+								})}
+						</>
+					)}
 				</div>
-			) : null}
+			)}
 
 			<AddNetworkShareDialog
 				open={isAddNasOpen}

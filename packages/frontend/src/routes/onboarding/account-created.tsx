@@ -2,8 +2,7 @@ import {useEffect, useRef} from 'react'
 import {useTranslation} from 'react-i18next'
 import {Link} from 'react-router-dom'
 
-import {links} from '@/constants/links'
-import {footerLinkClass, Layout, primaryButtonProps} from '@/layouts/bare/shared'
+import {Layout, primaryButtonProps} from '@/layouts/bare/shared'
 import {useOnboardingDevice} from '@/routes/onboarding/use-onboarding-device'
 import {trpcReact} from '@/trpc/trpc'
 
@@ -32,13 +31,6 @@ export default function AccountCreated() {
 			subTitleMaxWidth={630}
 			subTitleClassName='text-white/50'
 			showLogo={!device.showDevice}
-			footer={
-				<div className='flex flex-col items-center gap-3'>
-					<Link to={links.support} target='_blank' className={footerLinkClass}>
-						{t('onboarding.contact-support')}
-					</Link>
-				</div>
-			}
 		>
 			{device.showDevice && device.image && (
 				<>

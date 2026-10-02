@@ -194,7 +194,7 @@ export default function AddNetworkShareDialog(props?: {
 			// Discover step
 			case Step.Discover:
 				footer = (
-					<DialogFooter className={`${isMobile ? 'flex flex-col items-stretch' : 'flex items-center'} gap-2 pt-4`}>
+					<DialogFooter className='flex-row flex-wrap items-center justify-end gap-2 pt-4 [&>button]:w-auto'>
 						<Button
 							variant='primary'
 							size='dialog'
@@ -213,7 +213,7 @@ export default function AddNetworkShareDialog(props?: {
 			// Credentials step
 			case Step.Credentials:
 				footer = (
-					<DialogFooter className='gap-2 pt-4'>
+					<DialogFooter className='flex-row flex-wrap items-center justify-end gap-2 pt-4 [&>button]:w-auto'>
 						<Button size='dialog' onClick={back}>
 							{t('files-add-network-share.back')}
 						</Button>
@@ -227,7 +227,7 @@ export default function AddNetworkShareDialog(props?: {
 			// Select share step
 			case Step.SelectShare:
 				footer = (
-					<DialogFooter className='gap-2 pt-4'>
+					<DialogFooter className='flex-row flex-wrap items-center justify-end gap-2 pt-4 [&>button]:w-auto'>
 						<Button size='dialog' onClick={back}>
 							{t('files-add-network-share.back')}
 						</Button>
@@ -243,7 +243,7 @@ export default function AddNetworkShareDialog(props?: {
 		switch (manualStep) {
 			case ManualStep.Credentials:
 				footer = (
-					<DialogFooter className={`gap-2 pt-4 ${isMobile ? 'flex-col-reverse' : ''}`}>
+					<DialogFooter className='flex-row flex-wrap items-center justify-end gap-2 pt-4 [&>button]:w-auto'>
 						<Button size='dialog' onClick={() => setMode('wizard')}>
 							{t('files-add-network-share.back')}
 						</Button>
@@ -255,7 +255,7 @@ export default function AddNetworkShareDialog(props?: {
 				break
 			case ManualStep.SelectShare:
 				footer = (
-					<DialogFooter className={`gap-2 pt-4 ${isMobile ? 'flex-col-reverse' : ''}`}>
+					<DialogFooter className='flex-row flex-wrap items-center justify-end gap-2 pt-4 [&>button]:w-auto'>
 						<Button size='dialog' onClick={manualBack}>
 							{t('files-add-network-share.back')}
 						</Button>

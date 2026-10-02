@@ -37,7 +37,10 @@ const PALETTE_BLEND = 5
 // across StrictMode's double mount), so every renderer must start from a new
 // one; losing the context on dispose then keeps the browser's context budget
 // free for the next.
-export function createOrbRenderer(host: HTMLElement, {dpr = 1, seed = 0}: {dpr?: number; seed?: number} = {}) {
+export function createOrbRenderer(
+	host: HTMLElement,
+	{dpr = 1, seed = 0, onContextLost}: {dpr?: number; seed?: number; onContextLost?: () => void} = {},
+) {
 	const canvas = document.createElement('canvas')
 	canvas.className = 'block size-full rounded-full'
 	canvas.setAttribute('aria-hidden', 'true')
@@ -46,6 +49,9 @@ export function createOrbRenderer(host: HTMLElement, {dpr = 1, seed = 0}: {dpr?:
 		depth: false,
 		antialias: false,
 		premultipliedAlpha: false,
+		// The small search orb stops drawing between hovers. Keep its last
+		// frame when the desktop is hidden and composited again on return.
+		preserveDrawingBuffer: true,
 		powerPreference: 'low-power',
 	})
 	if (!context) return undefined
@@ -57,6 +63,7 @@ export function createOrbRenderer(host: HTMLElement, {dpr = 1, seed = 0}: {dpr?:
 		alpha: true,
 		depth: false,
 		premultipliedAlpha: false,
+		preserveDrawingBuffer: true,
 		powerPreference: 'low-power',
 		dpr,
 	})
@@ -137,6 +144,7 @@ export function createOrbRenderer(host: HTMLElement, {dpr = 1, seed = 0}: {dpr?:
 		lost = true
 		cancelAnimationFrame(frameId)
 		frameId = 0
+		onContextLost?.()
 	}
 	canvas.addEventListener('webglcontextlost', onLost)
 

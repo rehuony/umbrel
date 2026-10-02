@@ -1,6 +1,8 @@
 import {useId} from 'react'
 import {Trans, useTranslation} from 'react-i18next'
 
+import {links} from '@/constants/links'
+
 import {getDeviceHealth, StorageDevice} from '../hooks/use-storage'
 import {formatStorageSize} from '../utils'
 import {HardDriveIcon, SsdChip} from './list-manager/drive-visuals'
@@ -73,7 +75,7 @@ export function StorageMigrationDescription({
 					components={{
 						download: (
 							<a
-								href='https://umbrel.com/downloads'
+								href={links.downloads}
 								target='_blank'
 								rel='noopener noreferrer'
 								className='text-white/80 underline decoration-white/40 underline-offset-2 hover:text-white'

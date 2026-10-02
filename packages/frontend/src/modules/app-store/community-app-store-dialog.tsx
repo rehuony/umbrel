@@ -15,6 +15,7 @@ import {AnimatedInputError, Input} from '@/components/ui/input'
 import {Spinner} from '@/components/ui/loading'
 import {toast} from '@/components/ui/toast'
 import {UMBREL_APP_STORE_ID} from '@/constants/app-store'
+import {links} from '@/constants/links'
 import {cn} from '@/lib/utils'
 import {systemAppsKeyed} from '@/providers/apps'
 import {trpcReact} from '@/trpc/trpc'
@@ -98,7 +99,7 @@ export function CommunityAppStoreDialog() {
 							<DialogDescription className='text-13 leading-snug -tracking-2 text-white/50'>
 								{t('community-app-stores.description')}{' '}
 								<a
-									href='https://github.com/getumbrel/umbrel-community-app-store'
+									href={links.applicationDocs}
 									className='text-brand underline-offset-2 outline-hidden hover:underline focus-visible:underline'
 									target='_blank'
 									rel='noreferrer'

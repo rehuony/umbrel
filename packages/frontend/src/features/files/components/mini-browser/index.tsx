@@ -44,7 +44,7 @@ type MiniBrowserProps = {
 	title?: string
 	// Optional faded description below the title
 	subtitle?: React.ReactNode
-	// optional actions to render in the browser. e.g., "add NAS" button to open the add NAS dialog
+	// Optional actions at the left of the footer, e.g. a button to add a NAS.
 	actions?: React.ReactNode
 	// Optional function gating only the confirm button: every entry allowed by
 	// selectionMode stays highlightable for navigation (and as a New Folder
@@ -209,9 +209,6 @@ export function MiniBrowser({
 
 				{/* Fixed height so the dialog doesn't resize as folders expand */}
 				<div className='umbrel-stable-gutter h-[min(60vh,480px)] overflow-x-hidden overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-2'>
-					{/* Optional actions to render in the browser. e.g., "add NAS" button to open the add NAS dialog */}
-					{actions ? <div className='flex items-center justify-end'>{actions}</div> : null}
-
 					{/* The tree of files and folders */}
 					{rootPaths ? (
 						<MultiRootTree
@@ -239,14 +236,15 @@ export function MiniBrowser({
 					)}
 				</div>
 
-				<DialogFooter className='mt-4 shrink-0'>
+				<DialogFooter className='mt-4 shrink-0 flex-row items-center justify-end'>
+					{actions ? <div className='mr-auto flex items-center'>{actions}</div> : null}
 					{/* Show new folder button on desktop in footer */}
 					{!isMobile && newFolderButton}
-					<Button variant='primary' onClick={() => selected && onSelect?.(selected.path)} disabled={!isSelectionValid}>
-						{finalSelectButtonLabel}
-					</Button>
 					<Button variant='default' onClick={() => onOpenChange(false)}>
 						{t('cancel')}
+					</Button>
+					<Button variant='primary' onClick={() => selected && onSelect?.(selected.path)} disabled={!isSelectionValid}>
+						{finalSelectButtonLabel}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
@@ -364,6 +362,7 @@ function Tree({
 }) {
 	const {t} = useTranslation()
 	const {items: entries, isLoading} = useBrowserListing(initialPath, listDirectory)
+	const isNetworkRoot = initialPath === NETWORK_STORAGE_PATH && !listDirectory
 
 	// Tailored empty state message and icon for known roots
 	const emptyStateText = useMemo(() => {
@@ -390,8 +389,8 @@ function Tree({
 	const isNewFolderAtThisLevel = shouldRenderNewFolder && newFolderParent === initialPath
 
 	return (
-		<div className='space-y-1'>
-			{isLoading ? (
+		<div className='space-y-1' aria-busy={isLoading}>
+			{isLoading && !isNetworkRoot ? (
 				<div className='py-6 text-center text-white/60'>{t('files-listing.loading')}</div>
 			) : entries.length === 0 && !isNewFolderAtThisLevel ? (
 				<div className='mt-28 flex flex-col items-center justify-center gap-3 text-center'>

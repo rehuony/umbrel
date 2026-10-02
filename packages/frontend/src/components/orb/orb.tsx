@@ -55,9 +55,17 @@ export function Orb({
 	useLayoutEffect(() => {
 		const host = hostRef.current
 		if (!host) return
+		if (reducedMotion) {
+			setFallback(true)
+			return
+		}
 		let renderer: OrbRenderer | undefined
 		try {
-			renderer = createOrbRenderer(host, {dpr: Math.min(window.devicePixelRatio || 1, 2), seed})
+			renderer = createOrbRenderer(host, {
+				dpr: Math.min(window.devicePixelRatio || 1, 2),
+				seed,
+				onContextLost: () => setFallback(true),
+			})
 		} catch {
 			// A driver or context quirk must never take the desktop down with it
 			renderer = undefined
@@ -67,11 +75,12 @@ export function Orb({
 			return
 		}
 		rendererRef.current = renderer
+		setFallback(false)
 		return () => {
 			renderer.dispose()
 			rendererRef.current = undefined
 		}
-	}, [seed])
+	}, [seed, reducedMotion])
 
 	useLayoutEffect(() => {
 		const renderer = rendererRef.current
@@ -79,7 +88,7 @@ export function Orb({
 		renderer.setSize(size)
 		renderer.setPalette(palette)
 		if (!animate) renderer.frame()
-	}, [size, palette, animate])
+	}, [size, palette, animate, seed, reducedMotion])
 
 	useEffect(() => {
 		const renderer = rendererRef.current
@@ -87,15 +96,15 @@ export function Orb({
 		if (animate) renderer.start()
 		else renderer.stop()
 		return () => renderer.stop()
-	}, [animate])
+	}, [animate, seed, reducedMotion])
 
 	useEffect(() => {
 		rendererRef.current?.setEnergy(energy)
-	}, [energy])
+	}, [energy, seed, reducedMotion])
 
 	useEffect(() => {
 		if (pulseKey > 0) rendererRef.current?.pulse()
-	}, [pulseKey])
+	}, [pulseKey, seed, reducedMotion])
 
 	return (
 		<div
@@ -104,11 +113,10 @@ export function Orb({
 			className={cn('pointer-events-none relative shrink-0 rounded-full', className)}
 			style={{width: size, height: size, ...style}}
 		>
-			{fallback ? (
+			{fallback && (
 				<span className='absolute inset-0 rounded-full' style={{background: orbPaletteCssBackground(palette)}} />
-			) : (
-				<div ref={hostRef} className='size-full' />
 			)}
+			<div ref={hostRef} className={cn('size-full', fallback && 'invisible')} />
 		</div>
 	)
 }
