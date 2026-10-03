@@ -588,7 +588,7 @@ export default class CloudManager {
 
 	getProviders() {
 		const available = this.auth.getAvailableProviders()
-		return CLOUD_PROVIDERS.filter(({id}) => available.includes(id))
+		return CLOUD_PROVIDERS.map((provider) => ({...provider, available: available.includes(provider.id)}))
 	}
 
 	async getAccounts(userId: string): Promise<CloudAccountWithAttention[]> {

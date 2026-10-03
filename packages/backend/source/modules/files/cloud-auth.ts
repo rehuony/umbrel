@@ -2,6 +2,9 @@ import {createHash, randomBytes, randomUUID} from 'node:crypto'
 
 import ky, {HTTPError, type Input, type KyInstance, type Options} from 'ky'
 import stripAnsi from 'strip-ansi'
+import {z} from 'zod'
+
+import publicClients from './cloud-oauth-clients.json' with {type: 'json'}
 
 import CloudRclone, {
 	CLOUD_RCLONE_REMOTE,
@@ -19,53 +22,52 @@ import {
 } from './cloud-types.js'
 
 export const OAUTH_SESSION_LIFETIME = 10 * 60 * 1000
-// The production bouncer is a stateless copy-code page. Account binding, PKCE
-// verification, and expiry remain local; development may override only its base URL.
-export const DEFAULT_OAUTH_PROXY_URL = 'https://cloudoauth.umbrel.com'
 
 export const CLOUD_OAUTH_SCOPES = {
-	'google-drive': ['openid', 'email', 'https://www.googleapis.com/auth/drive.readonly'],
 	dropbox: ['account_info.read', 'files.metadata.read', 'files.content.read', 'sharing.read'],
-	onedrive: ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Files.Read'],
+	onedrive: ['offline_access', 'User.Read', 'Files.Read'],
 } as const
 
-const MAX_AUTH_CODE_LENGTH = 8192
+const MAX_AUTH_CODE_LENGTH = 16384
 const MAX_PROVIDER_RESPONSE = 2 * 1024 * 1024
 const PROVIDER_REQUEST_TIMEOUT = 30 * 1000
 const UNTRUSTED_CERTIFICATE_PATTERN = /tls: failed to verify certificate|\bx509:/i
 const OAUTH_PROVIDERS = ['google-drive', 'dropbox', 'onedrive'] as const
 type OAuthProvider = (typeof OAUTH_PROVIDERS)[number]
+type PublicOAuthProvider = 'dropbox' | 'onedrive'
 type Fetch = NonNullable<Options['fetch']>
-type Environment = Record<string, string | undefined>
 
-type OAuthClient = {
-	clientId: string
-	clientSecret?: string
-}
-
-// OAuth client identifiers and installed-app secrets are public values in a
-// shipped PKCE client. Environment variables only replace them for development.
-const DEFAULT_OAUTH_CLIENTS: Record<OAuthProvider, OAuthClient> = {
-	'google-drive': {
-		clientId: '568816885459-ussmuppkfkbh6afhbrivkoc2vv2j1qgp.apps.googleusercontent.com',
-		clientSecret: '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',
-	},
-	dropbox: {clientId: 'xzqtv5jfn61fkhd', clientSecret: '17jzl4nnwqjpznd'},
-	onedrive: {clientId: 'de8e3af2-9274-4e9d-bbc5-b9c2191a2493'},
-}
-
-const OAUTH_ENV_PREFIXES: Record<OAuthProvider, string> = {
-	'google-drive': 'UMBREL_CLOUD_GOOGLE',
-	dropbox: 'UMBREL_CLOUD_DROPBOX',
-	onedrive: 'UMBREL_CLOUD_ONEDRIVE',
+// Public registration metadata is maintained once by the distributor, not by users.
+// Google Desktop clients cannot use this fixed HTTPS callback contract; keep
+// existing Google accounts readable, but do not advertise a working public flow.
+const publicClientSchema = z.object({clientId: z.string().trim().max(512)}).strict()
+const publicConfigSchema = z
+	.object({
+		redirectUri: z.string().trim().max(2048),
+		dropbox: publicClientSchema,
+		onedrive: publicClientSchema,
+	})
+	.strict()
+type PublicConfig = z.infer<typeof publicConfigSchema>
+type OAuthClient = {clientId: string}
+const validatePublicConfig = (config: PublicConfig) => {
+	const parsed = publicConfigSchema.parse(config)
+	if (parsed.redirectUri) {
+		const url = new URL(parsed.redirectUri)
+		if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash)
+			throw new Error('[cloud-invalid-oauth-configuration]')
+	}
+	return parsed
 }
 
 export type OAuthSession = {
 	kind: 'oauth'
 	sessionId: string
 	accountId: string
-	provider: OAuthProvider
+	provider: PublicOAuthProvider
 	verifier: string
+	state: string
+	clientId: string
 	redirectUrl: string
 	expiresAt: number
 }
@@ -151,12 +153,7 @@ type OAuthProviderDefinition = {
 	scopes: readonly string[]
 }
 
-const PROVIDERS: Record<OAuthProvider, OAuthProviderDefinition> = {
-	'google-drive': {
-		authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-		tokenUrl: 'https://oauth2.googleapis.com/token',
-		scopes: CLOUD_OAUTH_SCOPES['google-drive'],
-	},
+const PROVIDERS: Record<PublicOAuthProvider, OAuthProviderDefinition> = {
 	dropbox: {
 		authorizationUrl: 'https://www.dropbox.com/oauth2/authorize',
 		tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
@@ -220,30 +217,18 @@ const upstreamErrorDetails = (error: unknown) => {
 const isOAuthProvider = (provider: Provider): provider is OAuthProvider =>
 	OAUTH_PROVIDERS.includes(provider as OAuthProvider)
 
-const valueFromEnvironment = (environment: Environment, name: string) => environment[name]?.trim() || undefined
-
-const oauthClientsFromEnvironment = (environment: Environment): Record<OAuthProvider, OAuthClient> => {
-	const clients = {} as Record<OAuthProvider, OAuthClient>
-	for (const provider of OAUTH_PROVIDERS) {
-		const defaults = DEFAULT_OAUTH_CLIENTS[provider]
-		const prefix = OAUTH_ENV_PREFIXES[provider]
-		const clientSecret = defaults.clientSecret
-			? (valueFromEnvironment(environment, `${prefix}_CLIENT_SECRET`) ?? defaults.clientSecret)
-			: undefined
-		clients[provider] = {
-			clientId: valueFromEnvironment(environment, `${prefix}_CLIENT_ID`) ?? defaults.clientId,
-			...(clientSecret ? {clientSecret} : {}),
-		}
-	}
-	return clients
-}
-
-const appendOptionalClientSecret = (parameters: URLSearchParams, client: OAuthClient) => {
-	if (client.clientSecret) parameters.set('client_secret', client.clientSecret)
-}
-
-const optionalClientSecretConfig = (client: OAuthClient) =>
-	client.clientSecret ? {client_secret: client.clientSecret} : {}
+// The separate callback site copies this JSON object, not a long-lived token.
+// State and the device-held PKCE verifier bind it to this local sign-in attempt.
+const authorizationResultSchema = z
+	.object({
+		code: z
+			.string()
+			.min(1)
+			.max(8192)
+			.refine((code) => !/[\u0000-\u001f\u007f]/.test(code)),
+		state: z.string().min(1).max(128),
+	})
+	.strict()
 
 const readProviderJson = async <T>(provider: Provider, response: Response) => {
 	const declaredLength = Number(response.headers.get('content-length'))
@@ -366,32 +351,42 @@ export default class CloudAuth {
 	readonly http: KyInstance
 	readonly now: () => number
 	readonly redirectUrl: string
-	readonly oauthClients: Record<OAuthProvider, OAuthClient>
+	readonly oauthClients: Partial<Record<PublicOAuthProvider, OAuthClient>>
 
 	constructor({
 		rclone,
 		fetch = globalThis.fetch,
 		now = Date.now,
-		environment = process.env,
+		configuration = publicClients,
 	}: {
 		rclone: Rclone
 		fetch?: Fetch
 		now?: () => number
-		environment?: Environment
+		configuration?: PublicConfig
 	}) {
 		this.rclone = rclone
-		this.http = ky.create({fetch, retry: 0, timeout: false})
+		this.http = ky.create({fetch, retry: 0, timeout: false, redirect: 'error'})
 		this.now = now
-		this.redirectUrl = new URL('/callback', environment.UMBREL_OAUTH_PROXY_URL ?? DEFAULT_OAUTH_PROXY_URL).toString()
-		this.oauthClients = oauthClientsFromEnvironment(environment)
+		const config = validatePublicConfig(configuration)
+		this.redirectUrl = config.redirectUri
+		this.oauthClients = Object.fromEntries(
+			(['dropbox', 'onedrive'] as const).flatMap((provider) =>
+				config.redirectUri && config[provider].clientId ? [[provider, config[provider]]] : [],
+			),
+		)
 	}
 
 	getAvailableProviders(): Provider[] {
-		return [...OAUTH_PROVIDERS.filter((provider) => this.oauthClients[provider]), 'webdav' as const, 'icloud' as const]
+		return [
+			...(['dropbox', 'onedrive'] as const).filter((provider) => this.oauthClients[provider]),
+			'webdav' as const,
+			'icloud' as const,
+		]
 	}
 
 	beginOAuth(accountId: string, provider: Provider) {
 		if (!isOAuthProvider(provider)) throw new Error('[cloud-oauth-not-supported]')
+		if (provider === 'google-drive') throw new Error('[cloud-provider-unavailable]')
 		const client = this.oauthClients[provider]
 		if (!client) throw new Error('[cloud-provider-unavailable]')
 
@@ -405,13 +400,9 @@ export default class CloudAuth {
 		authorizationUrl.searchParams.set('code_challenge', challenge)
 		authorizationUrl.searchParams.set('code_challenge_method', 'S256')
 		authorizationUrl.searchParams.set('scope', definition.scopes.join(' '))
-		authorizationUrl.searchParams.set('state', provider)
+		const state = randomBytes(32).toString('base64url')
+		authorizationUrl.searchParams.set('state', state)
 
-		if (provider === 'google-drive') {
-			authorizationUrl.searchParams.set('access_type', 'offline')
-			authorizationUrl.searchParams.set('prompt', 'consent')
-			authorizationUrl.searchParams.set('include_granted_scopes', 'false')
-		}
 		if (provider === 'dropbox') authorizationUrl.searchParams.set('token_access_type', 'offline')
 		if (provider === 'onedrive') {
 			authorizationUrl.searchParams.set('response_mode', 'query')
@@ -424,6 +415,8 @@ export default class CloudAuth {
 			accountId,
 			provider,
 			verifier,
+			state,
+			clientId: client.clientId,
 			redirectUrl: this.redirectUrl,
 			expiresAt: this.now() + OAUTH_SESSION_LIFETIME,
 		}
@@ -438,18 +431,25 @@ export default class CloudAuth {
 	): Promise<OAuthConnectionResult> {
 		if (session.expiresAt <= this.now()) throw new Error('[cloud-auth-session-expired]')
 		if (session.accountId !== transaction.accountId) throw new Error('[cloud-auth-session-mismatch]')
-		const normalizedCode = validateCredential(code, '[cloud-invalid-authorization-code]', MAX_AUTH_CODE_LENGTH)
+		let result: z.infer<typeof authorizationResultSchema>
+		try {
+			const value = validateCredential(code, '[cloud-invalid-authorization-code]', MAX_AUTH_CODE_LENGTH)
+			result = authorizationResultSchema.parse(JSON.parse(value))
+		} catch {
+			throw new Error('[cloud-invalid-authorization-code]')
+		}
+		if (result.state !== session.state) throw new Error('[cloud-auth-session-mismatch]')
 		const client = this.oauthClients[session.provider]
-		if (!client) throw new Error('[cloud-provider-unavailable]')
+		if (!client || client.clientId !== session.clientId || session.redirectUrl !== this.redirectUrl)
+			throw new Error('[cloud-provider-unavailable]')
 
 		const tokenParameters = new URLSearchParams({
 			client_id: client.clientId,
-			code: normalizedCode,
+			code: result.code,
 			code_verifier: session.verifier,
 			grant_type: 'authorization_code',
 			redirect_uri: session.redirectUrl,
 		})
-		appendOptionalClientSecret(tokenParameters, client)
 
 		const tokenResponse = await this.requestJson<Record<string, unknown>>(
 			session.provider,
@@ -482,7 +482,7 @@ export default class CloudAuth {
 
 	async configureOAuthTransaction(
 		transaction: ConfigTransaction,
-		provider: OAuthProvider,
+		provider: PublicOAuthProvider,
 		token: RcloneOAuthToken,
 		locations: CloudProviderLocation[],
 	) {
@@ -493,19 +493,11 @@ export default class CloudAuth {
 
 		let type: string
 		let parameters: Record<string, unknown>
-		if (provider === 'google-drive') {
-			type = 'drive'
-			parameters = {
-				client_id: client.clientId,
-				...optionalClientSecretConfig(client),
-				scope: 'drive.readonly',
-				token: JSON.stringify(token),
-			}
-		} else if (provider === 'dropbox') {
+		if (provider === 'dropbox') {
 			type = 'dropbox'
 			parameters = {
 				client_id: client.clientId,
-				...optionalClientSecretConfig(client),
+				client_secret: '',
 				token: JSON.stringify(token),
 			}
 		} else {
@@ -515,7 +507,7 @@ export default class CloudAuth {
 			type = 'onedrive'
 			parameters = {
 				client_id: client.clientId,
-				...optionalClientSecretConfig(client),
+				client_secret: '',
 				region: 'global',
 				access_scopes: CLOUD_OAUTH_SCOPES.onedrive.join(' '),
 				drive_id: firstLocation.remote.driveId,
@@ -525,7 +517,7 @@ export default class CloudAuth {
 			}
 		}
 
-		// Verified against rclone v1.74.4: supplying a token over the RC JSON body
+		// Supplying a token over the RC JSON body
 		// writes a usable remote before the non-interactive backend state machine asks
 		// about optional locations. Tokens never enter process argv.
 		await transaction.call('config/create', {
@@ -670,16 +662,13 @@ export default class CloudAuth {
 	}
 
 	private async getOAuthIdentity(
-		provider: OAuthProvider,
+		provider: PublicOAuthProvider,
 		token: RcloneOAuthToken,
 		signal?: AbortSignal,
 	): Promise<ConnectedAccount> {
 		let url: string
 		let init: RequestInit
-		if (provider === 'google-drive') {
-			url = 'https://openidconnect.googleapis.com/v1/userinfo'
-			init = {headers: bearerHeaders(token), signal}
-		} else if (provider === 'dropbox') {
+		if (provider === 'dropbox') {
 			url = 'https://api.dropboxapi.com/2/users/get_current_account'
 			init = {method: 'POST', headers: bearerHeaders(token), signal}
 		} else {
@@ -689,14 +678,6 @@ export default class CloudAuth {
 
 		const identity = await this.requestJson<Record<string, unknown>>(provider, url, init)
 
-		if (provider === 'google-drive') {
-			return {
-				provider,
-				identity: providerString(provider, identity.sub),
-				displayName: providerString(provider, identity.email),
-				connection: {kind: 'oauth'},
-			}
-		}
 		if (provider === 'dropbox') {
 			return {
 				provider,

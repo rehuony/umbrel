@@ -1,0 +1,9 @@
+{
+	"redirectUri": "",
+	"dropbox": {
+		"clientId": ""
+	},
+	"onedrive": {
+		"clientId": ""
+	}
+}

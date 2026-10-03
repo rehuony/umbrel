@@ -8,15 +8,12 @@ import CloudAuth, {CLOUD_OAUTH_SCOPES, OAUTH_SESSION_LIFETIME, type OAuthSession
 const ACCOUNT_ID = '11111111-1111-4111-8111-111111111111'
 const NOW = 1_720_000_000_000
 
-const ENVIRONMENT = {
-	UMBREL_OAUTH_PROXY_URL: 'https://proxy.example/base',
-	UMBREL_CLOUD_GOOGLE_CLIENT_ID: 'google-client',
-	UMBREL_CLOUD_GOOGLE_CLIENT_SECRET: 'google-secret',
-	UMBREL_CLOUD_DROPBOX_CLIENT_ID: 'dropbox-client',
-	UMBREL_CLOUD_DROPBOX_CLIENT_SECRET: 'dropbox-secret',
-	UMBREL_CLOUD_ONEDRIVE_CLIENT_ID: 'onedrive-client',
-	UMBREL_CLOUD_ONEDRIVE_CLIENT_SECRET: 'ignored-onedrive-secret',
+const CONFIGURATION = {
+	redirectUri: 'https://auth.example/callback',
+	dropbox: {clientId: 'dropbox-client'},
+	onedrive: {clientId: 'onedrive-client'},
 }
+const copiedResult = (code = 'copy-code', state = 'test-state') => JSON.stringify({code, state})
 
 type ConfigCall = {method: string; parameters: Record<string, unknown>}
 type AuthFetch = (input: Input, init?: RequestInit) => Promise<Response>
@@ -58,7 +55,7 @@ const createHarness = (fetch: AuthFetch = async () => jsonResponse({})) => {
 		},
 	}
 	return {
-		auth: new CloudAuth({rclone, fetch, now: () => NOW, environment: ENVIRONMENT}),
+		auth: new CloudAuth({rclone, fetch, now: () => NOW, configuration: CONFIGURATION}),
 		browseCalls,
 	}
 }
@@ -69,7 +66,9 @@ const oauthSession = (provider: OAuthSession['provider']): OAuthSession => ({
 	accountId: ACCOUNT_ID,
 	provider,
 	verifier: 'test-verifier',
-	redirectUrl: 'https://proxy.example/callback',
+	state: 'test-state',
+	clientId: CONFIGURATION[provider].clientId,
+	redirectUrl: CONFIGURATION.redirectUri,
 	expiresAt: NOW + OAUTH_SESSION_LIFETIME,
 })
 
@@ -82,119 +81,149 @@ const tokenResponse = () =>
 	})
 
 describe('CloudAuth', () => {
-	test('uses the production OAuth registrations by default and environment values as development overrides', () => {
-		const rclone = {
-			async browse() {
-				return {entries: [], truncated: false}
+	test('requires explicit public registrations and never falls back to upstream clients', () => {
+		const {auth} = createHarness()
+		const disabled = new CloudAuth({
+			rclone: auth.rclone,
+			configuration: {
+				redirectUri: '',
+				dropbox: {clientId: ''},
+				onedrive: {clientId: ''},
 			},
-			getAccountPaths(accountId: string) {
-				return {config: `/tmp/${accountId}.conf`}
-			},
-		}
-		const defaults = new CloudAuth({rclone, environment: {}})
-		expect(defaults.oauthClients).toEqual({
-			'google-drive': {
-				clientId: '568816885459-ussmuppkfkbh6afhbrivkoc2vv2j1qgp.apps.googleusercontent.com',
-				clientSecret: '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',
-			},
-			dropbox: {clientId: 'xzqtv5jfn61fkhd', clientSecret: '17jzl4nnwqjpznd'},
-			onedrive: {clientId: 'de8e3af2-9274-4e9d-bbc5-b9c2191a2493'},
 		})
-		expect(defaults.redirectUrl).toBe('https://cloudoauth.umbrel.com/callback')
-
-		const overrides = new CloudAuth({rclone, environment: ENVIRONMENT})
-		expect(overrides.oauthClients).toEqual({
-			'google-drive': {clientId: 'google-client', clientSecret: 'google-secret'},
-			dropbox: {clientId: 'dropbox-client', clientSecret: 'dropbox-secret'},
-			onedrive: {clientId: 'onedrive-client'},
+		expect(disabled.getAvailableProviders()).toEqual(['webdav', 'icloud'])
+		expect(() => disabled.beginOAuth(ACCOUNT_ID, 'dropbox')).toThrow('[cloud-provider-unavailable]')
+		expect(() => auth.beginOAuth(ACCOUNT_ID, 'google-drive')).toThrow('[cloud-provider-unavailable]')
+		expect(auth.oauthClients).toEqual({
+			dropbox: CONFIGURATION.dropbox,
+			onedrive: CONFIGURATION.onedrive,
 		})
-		expect(overrides.redirectUrl).toBe('https://proxy.example/callback')
+		const partial = new CloudAuth({
+			rclone: auth.rclone,
+			configuration: {
+				...CONFIGURATION,
+				dropbox: {clientId: ''},
+			},
+		})
+		expect(partial.getAvailableProviders()).toEqual(['onedrive', 'webdav', 'icloud'])
 	})
 
-	test('creates local ten-minute PKCE sessions with exact read-only scopes', () => {
+	test('rejects unsafe callbacks and confidential client configuration', () => {
 		const {auth} = createHarness()
-		expect(CLOUD_OAUTH_SCOPES['google-drive']).toEqual([
-			'openid',
-			'email',
-			'https://www.googleapis.com/auth/drive.readonly',
-		])
+		for (const redirectUri of [
+			'http://auth.example/callback',
+			'https://user:pass@auth.example/',
+			'https://auth.example/?secret=bad',
+			'https://auth.example/#code',
+		]) {
+			expect(() => new CloudAuth({rclone: auth.rclone, configuration: {...CONFIGURATION, redirectUri}})).toThrow()
+		}
+		for (const provider of ['dropbox', 'onedrive'] as const) {
+			const configuration = {
+				...CONFIGURATION,
+				[provider]: {...CONFIGURATION[provider], clientSecret: 'not-a-public-client'},
+			}
+			expect(() => new CloudAuth({rclone: auth.rclone, configuration})).toThrow()
+		}
+	})
 
-		expect(auth.getAvailableProviders()).toEqual(['google-drive', 'dropbox', 'onedrive', 'webdav', 'icloud'])
-		for (const provider of ['google-drive', 'dropbox', 'onedrive'] as const) {
+	test('creates local ten-minute PKCE sessions with independent state and read-only scopes', () => {
+		const {auth} = createHarness()
+		expect(auth.getAvailableProviders()).toEqual(['dropbox', 'onedrive', 'webdav', 'icloud'])
+		for (const provider of ['dropbox', 'onedrive'] as const) {
 			const {authorizationUrl, session} = auth.beginOAuth(ACCOUNT_ID, provider)
 			const url = new URL(authorizationUrl)
 			const challenge = createHash('sha256').update(session.verifier).digest('base64url')
-
 			expect(url.searchParams.get('scope')).toBe(CLOUD_OAUTH_SCOPES[provider].join(' '))
-			expect(url.searchParams.get('redirect_uri')).toBe('https://proxy.example/callback')
+			expect(url.searchParams.get('redirect_uri')).toBe(CONFIGURATION.redirectUri)
 			expect(url.searchParams.get('code_challenge')).toBe(challenge)
 			expect(url.searchParams.get('code_challenge_method')).toBe('S256')
-			expect(url.searchParams.get('state')).toBe(provider)
+			expect(url.searchParams.get('state')).toBe(session.state)
+			expect(session.state).toMatch(/^[a-zA-Z0-9_-]{43}$/)
+			expect(session.state).not.toBe(auth.beginOAuth(ACCOUNT_ID, provider).session.state)
+			expect(authorizationUrl).not.toContain(session.verifier)
 			expect(authorizationUrl).not.toContain(ACCOUNT_ID)
 			expect(authorizationUrl).not.toContain('secret')
-			expect(session.sessionId).toMatch(/^[0-9a-f-]{36}$/)
 			expect(session.expiresAt).toBe(NOW + OAUTH_SESSION_LIFETIME)
+			if (provider === 'dropbox') expect(url.searchParams.get('token_access_type')).toBe('offline')
 		}
 	})
 
-	test('exchanges a Google code, discovers My Drive and shared drives, and validates the temporary config', async () => {
-		const requests: {url: string; body?: string}[] = []
-		const fetch = async (input: Input, init?: RequestInit) => {
-			const request = input instanceof Request ? input : new Request(input, init)
-			const url = request.url
-			const body = request.body ? await request.text() : undefined
-			requests.push({url, body})
-			if (url.endsWith('/token')) return tokenResponse()
-			if (url.includes('/userinfo')) {
-				return jsonResponse({
-					sub: '\u001B[31mgoogle-user\u001B[0m\u0007',
-					name: 'Ada',
-					email: '\u001B[32mada@example.com\u001B[0m\u0000',
-				})
+	test.each(['dropbox', 'onedrive'] as const)(
+		'exchanges a %s result without a local secret and saves renewable credentials',
+		async (provider) => {
+			const requests: {url: string; body?: string}[] = []
+			const fetch = async (input: Input, init?: RequestInit) => {
+				const request = input instanceof Request ? input : new Request(input, init)
+				const {url} = request
+				const body = request.body ? await request.text() : undefined
+				requests.push({url, body})
+				expect(request.redirect).toBe('error')
+				if (url.endsWith('/token')) return tokenResponse()
+				if (url.includes('get_current_account')) return jsonResponse({account_id: 'user-id', email: 'ada@example.com'})
+				if (url.includes('/me?')) return jsonResponse({id: 'user-id', userPrincipalName: 'ada@example.com'})
+				if (url.includes('/drive/root?')) return jsonResponse({id: 'root-folder', name: 'Root'})
+				if (url.includes('/drive?')) return jsonResponse({id: 'drive-id', name: 'My Drive', driveType: 'personal'})
+				throw new Error(`Unexpected request: ${url}`)
 			}
-			if (url.includes('/files/root')) return jsonResponse({id: 'root-folder', name: 'Root'})
-			if (url.includes('/drives?')) {
-				return jsonResponse({
-					nextPageToken: 'more',
-					drives: [{id: 'shared-id', name: '\u001B[34mEngineering\u001B[0m\u0007'}],
-				})
-			}
-			throw new Error(`Unexpected request: ${url}`)
-		}
-		const {auth, browseCalls} = createHarness(fetch)
-		const {transaction, calls} = createTransaction()
+			const {auth, browseCalls} = createHarness(fetch)
+			const {transaction, calls} = createTransaction()
+			const result = await auth.completeOAuth(oauthSession(provider), ` ${copiedResult()} `, transaction)
+			const tokenRequest = requests.find(({url}) => url.endsWith('/token'))
+			const parameters = new URLSearchParams(tokenRequest?.body)
+			expect(Object.fromEntries(parameters)).toEqual({
+				client_id: CONFIGURATION[provider].clientId,
+				grant_type: 'authorization_code',
+				code: 'copy-code',
+				code_verifier: 'test-verifier',
+				redirect_uri: CONFIGURATION.redirectUri,
+			})
+			expect(result.account).toEqual({
+				provider,
+				identity: 'user-id',
+				displayName: 'ada@example.com',
+				connection: {kind: 'oauth'},
+			})
+			expect(calls).toHaveLength(1)
+			expect(calls[0]).toMatchObject({
+				method: 'config/create',
+				parameters: {
+					name: 'cloud',
+					type: provider,
+					parameters: {
+						client_id: CONFIGURATION[provider].clientId,
+						client_secret: '',
+					},
+				},
+			})
+			expect(calls[0].parameters.parameters).not.toHaveProperty('token_url')
+			expect(JSON.stringify(calls[0])).toContain('refresh-token')
+			expect(browseCalls[0]).toMatchObject({accountId: ACCOUNT_ID, configPath: '/tmp/cloud-test.conf'})
+		},
+	)
 
-		const result = await auth.completeOAuth(oauthSession('google-drive'), ' copy-code ', transaction)
-
-		const tokenRequest = requests.find(({url}) => url.endsWith('/token'))
-		expect(Object.fromEntries(new URLSearchParams(tokenRequest?.body))).toMatchObject({
-			client_id: 'google-client',
-			client_secret: 'google-secret',
-			code: 'copy-code',
-			code_verifier: 'test-verifier',
-			redirect_uri: 'https://proxy.example/callback',
-		})
-		expect(result.account).toEqual({
-			provider: 'google-drive',
-			identity: 'google-user',
-			displayName: 'ada@example.com',
-			connection: {kind: 'oauth'},
-		})
-		expect(result.locations.locations.map(({id}) => id)).toEqual(['my-drive', 'shared-id'])
-		expect(result.locations.locations[1].displayName).toBe('Engineering')
-		expect(result.locations.truncated).toBe(true)
-		expect(calls).toHaveLength(1)
-		expect(calls[0]).toMatchObject({
-			method: 'config/create',
-			parameters: {
-				name: 'cloud',
-				type: 'drive',
-				parameters: {client_id: 'google-client', client_secret: 'google-secret', scope: 'drive.readonly'},
-			},
-		})
-		expect(JSON.stringify(calls[0])).toContain('refresh-token')
-		expect(browseCalls[0]).toMatchObject({accountId: ACCOUNT_ID, configPath: '/tmp/cloud-test.conf'})
-	})
+	test.each(['dropbox', 'onedrive'] as const)(
+		'rejects mismatched state and changed registration before exchanging a %s result',
+		async (provider) => {
+			let requests = 0
+			const {auth} = createHarness(async () => {
+				requests++
+				return tokenResponse()
+			})
+			const session = oauthSession(provider)
+			const transaction = createTransaction().transaction
+			await expect(auth.completeOAuth(session, copiedResult('code', 'another-session'), transaction)).rejects.toThrow(
+				'[cloud-auth-session-mismatch]',
+			)
+			await expect(
+				auth.completeOAuth({...session, clientId: 'old-client'}, copiedResult(), transaction),
+			).rejects.toThrow('[cloud-provider-unavailable]')
+			await expect(
+				auth.completeOAuth({...session, redirectUrl: 'https://old.example/callback'}, copiedResult(), transaction),
+			).rejects.toThrow('[cloud-provider-unavailable]')
+			expect(requests).toBe(0)
+		},
+	)
 
 	test('rejects expired or mismatched OAuth sessions before contacting a provider', async () => {
 		let requests = 0
@@ -202,12 +231,12 @@ describe('CloudAuth', () => {
 			requests += 1
 			return tokenResponse()
 		})
-		const expired = {...oauthSession('google-drive'), expiresAt: NOW}
-		await expect(auth.completeOAuth(expired, 'code', createTransaction().transaction)).rejects.toThrow(
+		const expired = {...oauthSession('dropbox'), expiresAt: NOW}
+		await expect(auth.completeOAuth(expired, copiedResult(), createTransaction().transaction)).rejects.toThrow(
 			'[cloud-auth-session-expired]',
 		)
 		const mismatch = {...createTransaction().transaction, accountId: '22222222-2222-4222-8222-222222222222'}
-		await expect(auth.completeOAuth(oauthSession('google-drive'), 'code', mismatch)).rejects.toThrow(
+		await expect(auth.completeOAuth(oauthSession('dropbox'), copiedResult(), mismatch)).rejects.toThrow(
 			'[cloud-auth-session-mismatch]',
 		)
 		expect(requests).toBe(0)
@@ -221,31 +250,37 @@ describe('CloudAuth', () => {
 		})
 		const transaction = createTransaction().transaction
 
-		await expect(auth.completeOAuth(oauthSession('google-drive'), '   ', transaction)).rejects.toThrow(
-			'[cloud-invalid-authorization-code]',
-		)
-		await expect(auth.completeOAuth(oauthSession('google-drive'), 'x'.repeat(16_385), transaction)).rejects.toThrow(
-			'[cloud-invalid-authorization-code]',
-		)
+		for (const input of [
+			'   ',
+			'raw-code-without-state',
+			'x'.repeat(16_385),
+			JSON.stringify({code: 'code'}),
+			JSON.stringify({code: 'code', state: 'test-state', access_token: 'unexpected'}),
+			copiedResult('bad\u0000code'),
+		]) {
+			await expect(auth.completeOAuth(oauthSession('dropbox'), input, transaction)).rejects.toThrow(
+				'[cloud-invalid-authorization-code]',
+			)
+		}
 		expect(requests).toBe(0)
 	})
 
 	test('bounds provider response bodies and preserves HTTP status failures', async () => {
 		const oversized = createHarness(fetchResponse(new Response('x'.repeat(2 * 1024 * 1024 + 1))))
 		await expect(
-			oversized.auth.completeOAuth(oauthSession('google-drive'), 'code', createTransaction().transaction),
+			oversized.auth.completeOAuth(oauthSession('dropbox'), copiedResult(), createTransaction().transaction),
 		).rejects.toMatchObject({
 			message: '[cloud-provider-request-failed]',
-			provider: 'google-drive',
+			provider: 'dropbox',
 			statusCode: 200,
 		})
 
 		const unavailable = createHarness(fetchResponse(jsonResponse({}, 503)))
 		await expect(
-			unavailable.auth.completeOAuth(oauthSession('google-drive'), 'code', createTransaction().transaction),
+			unavailable.auth.completeOAuth(oauthSession('dropbox'), copiedResult(), createTransaction().transaction),
 		).rejects.toMatchObject({
 			message: '[cloud-provider-request-failed]',
-			provider: 'google-drive',
+			provider: 'dropbox',
 			statusCode: 503,
 		})
 	})
@@ -343,11 +378,15 @@ describe('CloudAuth', () => {
 		const invalidJson = createHarness(fetchResponse(new Response(`not-json-${secrets.refreshToken}`, {status: 200})))
 		let parseFailure: unknown
 		try {
-			await invalidJson.auth.completeOAuth(oauthSession('google-drive'), secrets.code, createTransaction().transaction)
+			await invalidJson.auth.completeOAuth(
+				oauthSession('dropbox'),
+				copiedResult(secrets.code),
+				createTransaction().transaction,
+			)
 		} catch (error) {
 			parseFailure = error
 		}
-		expect(parseFailure).toMatchObject({provider: 'google-drive', statusCode: 200})
+		expect(parseFailure).toMatchObject({provider: 'dropbox', statusCode: 200})
 		expect(inspect(parseFailure, {depth: 20})).not.toContain(secrets.refreshToken)
 
 		const networkSecret = 'planted-network-error-message'

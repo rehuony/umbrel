@@ -292,7 +292,7 @@ export function useCloudConnect() {
 export type CloudOAuthFailure = 'failed' | 'expired'
 
 // Runs a browser OAuth flow for connecting or re-authenticating a cloud provider. The
-// provider returns to the stateless bouncer, where the user copies the authorization code;
+// provider returns to the separate callback page, where the user copies the code and state;
 // completion happens through an authenticated mutation using the device-held PKCE verifier.
 // Failures carry the backend message so the failure screen can explain specific
 // causes (wrong account on reauthentication, already-connected account) instead
@@ -315,26 +315,21 @@ export function useCloudOAuth({
 	const [session, setSession] = useState<OAuthClientSession | null>(null)
 	const sessionRef = useRef<OAuthClientSession | null>(null)
 	const mountedRef = useRef(true)
+	const attemptRef = useRef(0)
+	const beginningRef = useRef(false)
+	const [isStarting, setIsStarting] = useState(false)
 	const onCompleteRef = useRef(onComplete)
 	const onFailureRef = useRef(onFailure)
 	onCompleteRef.current = onComplete
 	onFailureRef.current = onFailure
-	// Handle to the consent tab so completion/cancellation can close it if the bouncer did not.
+	// Handle to the consent tab so completion/cancellation can close it when the flow ends.
 	const consentTab = useRef<Window | null>(null)
 	const closeConsentTab = useCallback(() => {
 		consentTab.current?.close()
 		consentTab.current = null
 	}, [])
 
-	const beginMutation = trpcReact.files.cloud.oauthBegin.useMutation({
-		onError: (error: RouterError, variables) =>
-			toast.error(
-				variables.accountId
-					? t('files-cloud-error.reauthenticate', {message: getFilesErrorMessage(error.message)})
-					: t('files-cloud-error.connect', {message: getFilesErrorMessage(error.message)}),
-				{area: 'files'},
-			),
-	})
+	const beginMutation = trpcReact.files.cloud.oauthBegin.useMutation()
 
 	const completeMutation = trpcReact.files.cloud.oauthComplete.useMutation()
 	const cancelMutation = trpcReact.files.cloud.oauthCancel.useMutation()
@@ -361,6 +356,8 @@ export function useCloudOAuth({
 		mountedRef.current = true
 		return () => {
 			mountedRef.current = false
+			attemptRef.current++
+			beginningRef.current = false
 			const pending = sessionRef.current
 			sessionRef.current = null
 			if (pending) cancelBackendSession(pending)
@@ -377,6 +374,8 @@ export function useCloudOAuth({
 				updateSession(null)
 				closeConsentTab()
 				cancelBackendSession(session)
+				completionRef.current = null
+				setIsCompleting(false)
 				onFailureRef.current?.('expired')
 			},
 			Math.max(0, session.expiresAtMonotonic - performance.now()),
@@ -386,35 +385,53 @@ export function useCloudOAuth({
 
 	// Opens the provider consent page in a new tab and keeps the local completion session.
 	const begin = async (input: {provider: CloudOAuthProvider; reauthAccountId?: string}) => {
-		// The tab must open synchronously within the click gesture — Safari (and Chrome once the
-		// transient-activation window lapses) blocks window.open calls made after an await
-		const tab = window.open('', '_blank')
-		const popupBlocked = !tab
+		if (beginningRef.current || sessionRef.current || !mountedRef.current) return
+		beginningRef.current = true
+		setIsStarting(true)
+		const attempt = ++attemptRef.current
+		// Open synchronously within the user gesture, then detach the opener before
+		// navigating away. The provider/callback must not control the panel window.
+		let tab: Window | null = null
 		try {
+			tab = window.open('', '_blank')
+			if (tab) tab.opener = null
+			consentTab.current = tab
 			const {accountId, sessionId, authorizationUrl, expiresInMs} = await beginMutation.mutateAsync({
 				provider: input.provider,
 				...(input.reauthAccountId ? {accountId: input.reauthAccountId} : {}),
 			})
-			// Keep browser wall-clock skew out of expiry. The backend remains
-			// authoritative; this monotonic deadline only drives local UX cleanup.
 			const pending = {
 				accountId,
 				sessionId,
 				authorizationUrl,
-				popupBlocked,
+				popupBlocked: !tab,
 				expiresAtMonotonic: performance.now() + Math.max(0, expiresInMs),
 			}
-			if (!mountedRef.current) {
+			if (!mountedRef.current || attemptRef.current !== attempt) {
 				tab?.close()
 				cancelBackendSession(pending)
 				return
 			}
-			if (tab) tab.location.href = authorizationUrl
-			consentTab.current = tab
 			updateSession(pending)
-		} catch {
-			// the mutation handles the error toast
+			if (tab) tab.location.href = authorizationUrl
+		} catch (error) {
 			tab?.close()
+			if (mountedRef.current && attemptRef.current === attempt) {
+				const pending = sessionRef.current
+				if (pending) cancelBackendSession(pending)
+				updateSession(null)
+				toast.error(
+					input.reauthAccountId
+						? t('files-cloud-error.reauthenticate', {message: getFilesErrorMessage((error as RouterError).message)})
+						: t('files-cloud-error.connect', {message: getFilesErrorMessage((error as RouterError).message)}),
+					{area: 'files'},
+				)
+			}
+		} finally {
+			if (mountedRef.current && attemptRef.current === attempt) {
+				beginningRef.current = false
+				setIsStarting(false)
+			}
 		}
 	}
 
@@ -446,13 +463,18 @@ export function useCloudOAuth({
 		const clearCompletion = () => {
 			if (completionRef.current !== operation) return
 			completionRef.current = null
-			setIsCompleting(false)
+			if (mountedRef.current) setIsCompleting(false)
 		}
 		operation.then(clearCompletion, clearCompletion)
 		return operation
 	}
 
 	const cancel = () => {
+		attemptRef.current++
+		beginningRef.current = false
+		setIsStarting(false)
+		completionRef.current = null
+		setIsCompleting(false)
 		const pending = sessionRef.current
 		updateSession(null)
 		closeConsentTab()
@@ -463,7 +485,7 @@ export function useCloudOAuth({
 		begin,
 		complete,
 		cancel,
-		isStarting: beginMutation.isPending,
+		isStarting,
 		isCompleting,
 		isWaiting: !!session,
 		authorizationUrl: session?.authorizationUrl,

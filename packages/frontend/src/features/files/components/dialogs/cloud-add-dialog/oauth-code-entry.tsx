@@ -24,6 +24,8 @@ export function OAuthCodeEntry({
 			<Input
 				autoFocus
 				autoComplete='off'
+				aria-label={t('files-cloud.oauth-code-placeholder')}
+				maxLength={16384}
 				spellCheck={false}
 				value={code}
 				disabled={disabled}
@@ -36,7 +38,7 @@ export function OAuthCodeEntry({
 					// A pasted full code submits immediately; short fragments fall through
 					// to normal input handling
 					const pasted = event.clipboardData.getData('text').trim()
-					if (pasted.length >= 8) {
+					if (pasted.length >= 8 && pasted.length <= 16384) {
 						event.preventDefault()
 						onCodeChange(pasted)
 						onSubmit(pasted)

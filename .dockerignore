@@ -8,3 +8,7 @@ packages/system/build
 .codegraph
 .agents
 **/dist
+**/*.env
+**/.env
+**/.env.*
+!**/.env.example

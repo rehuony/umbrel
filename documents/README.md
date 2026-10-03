@@ -11,3 +11,4 @@ This repository contains the Web dashboard, Node.js / TypeScript server, and sou
 Validation prioritizes Raspberry Pi 4 with 8 GB RAM and ARM64. Raspberry Pi 5, generic ARM64, and AMD64 build targets remain supported. The system discards runtime root modifications on reboot. Permanent tools, services, and defaults belong in the image customization inputs; user data and home directories remain persistent. Installation on an existing Debian host remains deferred. External HTTPS application domains share the panel ingress and browser authentication; see [external application access](external-access.md) for configuration and deployment boundaries.
 
 - [System updates](system-updates.md): release source, bundled OS and panel updates, integrity, boot health, and rollback.
+- [Cloud connections](cloud-connections.md): local public OAuth clients, shared registration metadata, copy-code callback contract, and release verification.

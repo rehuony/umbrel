@@ -541,7 +541,7 @@ export default router({
 				ctx.umbreld.files.cloud.beginOAuth(ctx.principal?.accountId ?? OWNER_USER_ID, input.provider, input.accountId),
 			),
 		oauthComplete: cloudProcedure
-			.input(z.object({accountId, code: z.string().min(1).max(8192)}))
+			.input(z.object({accountId, code: z.string().min(1).max(16384)}))
 			.mutation(({ctx, input}) =>
 				ctx.umbreld.files.cloud.completeOAuth(ctx.principal?.accountId ?? OWNER_USER_ID, input.accountId, input.code),
 			),

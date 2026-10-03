@@ -48,7 +48,7 @@ vi.mock('@/utils/i18n', () => ({t: (key: string) => key}))
 let container!: HTMLDivElement
 let root: Root | undefined
 let oauth!: ReturnType<typeof useCloudOAuth>
-let consentTab!: {location: {href: string}; close: ReturnType<typeof vi.fn>}
+let consentTab!: {opener?: unknown; location: {href: string}; close: ReturnType<typeof vi.fn>}
 
 function Harness() {
 	oauth = useCloudOAuth({onComplete: mocks.onComplete, onFailure: mocks.onFailure})
@@ -88,7 +88,7 @@ afterEach(() => {
 
 describe('Cloud OAuth expiry', () => {
 	it('uses the relative server TTL instead of either wall clock', async () => {
-		await act(async () => oauth.begin({provider: 'google-drive'}))
+		await act(async () => oauth.begin({provider: 'onedrive'}))
 		expect(container.textContent).toBe('true:false:https://provider.example/authorize')
 		expect(consentTab.location.href).toBe('https://provider.example/authorize')
 
@@ -111,7 +111,7 @@ describe('Cloud OAuth expiry', () => {
 	it('retains the authorization URL when the initial popup is blocked', async () => {
 		vi.mocked(window.open).mockReturnValue(null)
 
-		await act(async () => oauth.begin({provider: 'google-drive'}))
+		await act(async () => oauth.begin({provider: 'onedrive'}))
 
 		expect(window.open).toHaveBeenCalledTimes(1)
 		expect(window.open).toHaveBeenCalledWith('', '_blank')
@@ -122,7 +122,7 @@ describe('Cloud OAuth expiry', () => {
 
 	it('cancels a retained blocked-popup session when the flow is abandoned', async () => {
 		vi.mocked(window.open).mockReturnValue(null)
-		await act(async () => oauth.begin({provider: 'google-drive'}))
+		await act(async () => oauth.begin({provider: 'onedrive'}))
 
 		act(() => root?.unmount())
 		root = undefined
@@ -143,7 +143,7 @@ describe('Cloud OAuth expiry', () => {
 				resolveCompletion = resolve
 			}),
 		)
-		await act(async () => oauth.begin({provider: 'google-drive'}))
+		await act(async () => oauth.begin({provider: 'onedrive'}))
 
 		let first!: Promise<void>
 		let duplicate!: Promise<void>
@@ -163,6 +163,130 @@ describe('Cloud OAuth expiry', () => {
 		await act(() => first)
 
 		expect(mocks.onComplete).toHaveBeenCalledOnce()
+		expect(oauth.isCompleting).toBe(false)
+	})
+})
+
+describe('Cloud OAuth lifecycle', () => {
+	it.each(['open', 'detach'] as const)('allows retry when the browser fails to %s the consent tab', async (step) => {
+		if (step === 'open')
+			vi.mocked(window.open).mockImplementationOnce(() => {
+				throw new Error('Popup unavailable')
+			})
+		else
+			Object.defineProperty(consentTab, 'opener', {
+				configurable: true,
+				set() {
+					throw new Error('Opener unavailable')
+				},
+			})
+		await act(() => oauth.begin({provider: 'onedrive'}))
+		expect(oauth.isStarting).toBe(false)
+		expect(oauth.isWaiting).toBe(false)
+		expect(mocks.begin).not.toHaveBeenCalled()
+		if (step === 'detach') expect(consentTab.close).toHaveBeenCalledOnce()
+		consentTab = {location: {href: ''}, close: vi.fn()}
+		vi.mocked(window.open).mockReturnValue(consentTab as unknown as Window)
+		await act(() => oauth.begin({provider: 'onedrive'}))
+		expect(mocks.begin).toHaveBeenCalledOnce()
+		expect(oauth.isWaiting).toBe(true)
+		expect(consentTab.opener).toBeNull()
+	})
+
+	it('opens one detached consent tab for duplicate clicks', async () => {
+		await act(async () => {
+			await Promise.all([oauth.begin({provider: 'onedrive'}), oauth.begin({provider: 'onedrive'})])
+		})
+		expect(mocks.begin).toHaveBeenCalledOnce()
+		expect(window.open).toHaveBeenCalledOnce()
+		expect(consentTab.opener).toBeNull()
+	})
+
+	it.each(['cancel', 'unmount'] as const)('discards a begin result arriving after %s', async (action) => {
+		let resolve!: (value: unknown) => void
+		mocks.begin.mockReturnValueOnce(
+			new Promise((done) => {
+				resolve = done
+			}),
+		)
+		let opening!: Promise<void>
+		act(() => {
+			opening = oauth.begin({provider: 'onedrive'})
+		})
+		act(() => {
+			if (action === 'cancel') oauth.cancel()
+			else {
+				root?.unmount()
+				root = undefined
+			}
+		})
+		resolve({
+			accountId: 'account',
+			sessionId: 'abandoned',
+			authorizationUrl: 'https://provider.example/authorize',
+			expiresInMs: 600_000,
+		})
+		await act(() => opening)
+		expect(consentTab.location.href).toBe('')
+		expect(consentTab.close).toHaveBeenCalled()
+		expect(mocks.cancel).toHaveBeenCalledWith({accountId: 'account', sessionId: 'abandoned'})
+		expect(mocks.onComplete).not.toHaveBeenCalled()
+		if (action === 'cancel') expect(oauth.isWaiting).toBe(false)
+	})
+
+	it('keeps a new session when an earlier cancelled begin completes late', async () => {
+		let resolve!: (value: unknown) => void
+		mocks.begin.mockReturnValueOnce(
+			new Promise((done) => {
+				resolve = done
+			}),
+		)
+		let abandoned!: Promise<void>
+		act(() => {
+			abandoned = oauth.begin({provider: 'onedrive'})
+		})
+		const oldTab = consentTab
+		act(() => oauth.cancel())
+		consentTab = {location: {href: ''}, close: vi.fn()}
+		vi.mocked(window.open).mockReturnValue(consentTab as unknown as Window)
+		await act(() => oauth.begin({provider: 'dropbox'}))
+		resolve({
+			accountId: 'old-account',
+			sessionId: 'old-session',
+			authorizationUrl: 'https://old.example/authorize',
+			expiresInMs: 600_000,
+		})
+		await act(() => abandoned)
+		expect(oauth.authorizationUrl).toBe('https://provider.example/authorize')
+		expect(consentTab.close).not.toHaveBeenCalled()
+		expect(oldTab.close).toHaveBeenCalled()
+		expect(mocks.cancel).toHaveBeenCalledWith({accountId: 'old-account', sessionId: 'old-session'})
+	})
+
+	it('ignores completion after cancellation and preserves a later session', async () => {
+		let resolve!: (value: unknown) => void
+		mocks.complete.mockReturnValueOnce(
+			new Promise((done) => {
+				resolve = done
+			}),
+		)
+		await act(() => oauth.begin({provider: 'onedrive'}))
+		let completion!: Promise<void>
+		act(() => {
+			completion = oauth.complete('copied-result')
+		})
+		act(() => oauth.cancel())
+		mocks.begin.mockResolvedValueOnce({
+			accountId: 'new-account',
+			sessionId: 'new-session',
+			authorizationUrl: 'https://new.example/authorize',
+			expiresInMs: 600_000,
+		})
+		await act(() => oauth.begin({provider: 'dropbox'}))
+		resolve({account: {id: 'old-account'}, locations: {locations: [], truncated: false}})
+		await act(() => completion)
+		expect(mocks.onComplete).not.toHaveBeenCalled()
+		expect(oauth.authorizationUrl).toBe('https://new.example/authorize')
 		expect(oauth.isCompleting).toBe(false)
 	})
 })

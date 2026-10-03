@@ -17,7 +17,7 @@ import CloudManager, {
 	classifyCloudFailure,
 	cloudDestinationDetails,
 } from './cloud.js'
-import {CloudProviderHttpError, OAUTH_SESSION_LIFETIME} from './cloud-auth.js'
+import CloudAuth, {CloudProviderHttpError, OAUTH_SESSION_LIFETIME} from './cloud-auth.js'
 import {RcloneAbortedError, RcloneProcessError} from './cloud-rclone.js'
 import {
 	CLOUD_ACCOUNT_NOT_FOUND_ERROR,
@@ -185,6 +185,15 @@ describe.sequential('CloudManager', () => {
 		manager = new CloudManager({
 			umbreld,
 			rclone: rclone as never,
+			auth: new CloudAuth({
+				rclone,
+				now,
+				configuration: {
+					redirectUri: 'https://auth.example/callback',
+					dropbox: {clientId: 'test-dropbox-client'},
+					onedrive: {clientId: 'test-onedrive-client'},
+				},
+			}),
 			resolveDestination,
 			now,
 			random,
@@ -1441,6 +1450,39 @@ describe.sequential('CloudManager', () => {
 		expect(fixture.transactions[0].promote).toHaveBeenCalledTimes(1)
 	})
 
+	test('keeps existing Google accounts while refusing new unsupported public connections', async () => {
+		const account: Account = {
+			...ACCOUNT,
+			provider: 'google-drive',
+			identity: 'google-user',
+			connection: {kind: 'oauth'},
+		}
+		const fixture = await createManager({accounts: [account], syncs: []})
+		await fixture.manager.start()
+		expect(fixture.manager.getProviders()).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({id: 'google-drive', available: false}),
+				expect.objectContaining({id: 'onedrive', available: true}),
+			]),
+		)
+		await expect(fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)).rejects.toThrow(
+			'[cloud-provider-unavailable]',
+		)
+		expect(await fixture.manager.getAccounts(USER_ID)).toEqual([account])
+		expect(fixture.transactions).toHaveLength(0)
+	})
+
+	test('prevents another user from completing a retained OAuth session', async () => {
+		const fixture = await createManager({accounts: [], syncs: []})
+		await fixture.manager.start()
+		const started = await fixture.manager.beginOAuth(USER_ID, 'onedrive')
+		const exchange = vi.spyOn(fixture.manager.auth, 'completeOAuth')
+		await expect(fixture.manager.completeOAuth(MEMBER_ID, started.accountId, 'copied-result')).rejects.toThrow()
+		expect(exchange).not.toHaveBeenCalled()
+		expect(fixture.transactions).toHaveLength(0)
+		expect(await fixture.manager.cancelOAuth(USER_ID, started.accountId, started.sessionId)).toBe(true)
+	})
+
 	test('consumes OAuth sessions once', async () => {
 		const fixture = await createManager({accounts: [], syncs: []})
 		await fixture.manager.start()
@@ -1450,27 +1492,29 @@ describe.sequential('CloudManager', () => {
 				kind: 'oauth',
 				sessionId: '55555555-5555-4555-8555-555555555555',
 				accountId,
-				provider: provider as 'google-drive' | 'dropbox' | 'onedrive',
+				provider: provider as 'dropbox' | 'onedrive',
 				verifier: 'verifier',
+				state: 'state',
+				clientId: 'test-onedrive-client',
 				redirectUrl: 'https://proxy.example/callback',
 				expiresAt: NOW + OAUTH_SESSION_LIFETIME,
 			},
 		}))
 		const completeOAuth = vi.spyOn(fixture.manager.auth, 'completeOAuth').mockResolvedValue({
 			account: {
-				provider: 'google-drive',
-				identity: 'google-user',
+				provider: 'onedrive',
+				identity: 'onedrive-user',
 				displayName: 'Ada',
 				connection: {kind: 'oauth'},
 			},
 			locations: {locations: [], truncated: false},
 		})
 
-		const session = await fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)
+		const session = await fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID)
 		expect(session).toMatchObject({expiresInMs: OAUTH_SESSION_LIFETIME})
 		expect(session).not.toHaveProperty('expiresAt')
 		await expect(fixture.manager.completeOAuth(USER_ID, ACCOUNT_ID, 'copy-code')).resolves.toMatchObject({
-			account: {id: ACCOUNT_ID, identity: 'google-user'},
+			account: {id: ACCOUNT_ID, identity: 'onedrive-user'},
 		})
 		await expect(fixture.manager.completeOAuth(USER_ID, ACCOUNT_ID, 'copy-code')).rejects.toThrow(
 			'[cloud-auth-session-not-found]',
@@ -1487,8 +1531,10 @@ describe.sequential('CloudManager', () => {
 				kind: 'oauth',
 				sessionId: '55555555-5555-4555-8555-555555555555',
 				accountId,
-				provider: provider as 'google-drive' | 'dropbox' | 'onedrive',
+				provider: provider as 'dropbox' | 'onedrive',
 				verifier: 'verifier',
+				state: 'state',
+				clientId: 'test-onedrive-client',
 				redirectUrl: 'https://proxy.example/callback',
 				expiresAt: NOW + OAUTH_SESSION_LIFETIME,
 			},
@@ -1506,8 +1552,8 @@ describe.sequential('CloudManager', () => {
 			await blocked
 			return {
 				account: {
-					provider: 'google-drive',
-					identity: 'google-user',
+					provider: 'onedrive',
+					identity: 'onedrive-user',
 					displayName: 'Ada',
 					connection: {kind: 'oauth'},
 				},
@@ -1515,7 +1561,7 @@ describe.sequential('CloudManager', () => {
 			}
 		})
 
-		await fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)
+		await fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID)
 		const first = fixture.manager.completeOAuth(USER_ID, ACCOUNT_ID, 'copy-code')
 		await didStart
 		const duplicate = fixture.manager.completeOAuth(USER_ID, ACCOUNT_ID, 'copy-code')
@@ -1530,15 +1576,15 @@ describe.sequential('CloudManager', () => {
 	test('cancels only the matching OAuth session and releases reauthentication immediately', async () => {
 		const account: Account = {
 			...ACCOUNT,
-			provider: 'google-drive',
-			identity: 'google-user',
+			provider: 'onedrive',
+			identity: 'onedrive-user',
 			displayName: 'Ada',
 			connection: {kind: 'oauth'},
 		}
 		const fixture = await createManager({accounts: [account], syncs: []})
 		await fixture.manager.start()
 
-		const first = await fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)
+		const first = await fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID)
 		expect(await fixture.manager.cancelOAuth(MEMBER_ID, ACCOUNT_ID, first.sessionId)).toBe(false)
 		expect(await fixture.manager.cancelOAuth(USER_ID, ACCOUNT_ID, '55555555-5555-4555-8555-555555555555')).toBe(false)
 		expect(fixture.manager.accountRuntimes.get(ACCOUNT_ID)?.state.kind).toBe('authenticating')
@@ -1546,7 +1592,7 @@ describe.sequential('CloudManager', () => {
 		expect(await fixture.manager.cancelOAuth(USER_ID, ACCOUNT_ID, first.sessionId)).toBe(true)
 		expect(fixture.manager.accountRuntimes.get(ACCOUNT_ID)?.state.kind).toBe('ready')
 
-		const second = await fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)
+		const second = await fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID)
 		expect(second.sessionId).not.toBe(first.sessionId)
 		expect(await fixture.manager.cancelOAuth(USER_ID, ACCOUNT_ID, first.sessionId)).toBe(false)
 		expect(fixture.manager.accountRuntimes.get(ACCOUNT_ID)?.state.kind).toBe('authenticating')
@@ -1556,8 +1602,8 @@ describe.sequential('CloudManager', () => {
 	test('aborts an in-flight OAuth transaction when its session is cancelled', async () => {
 		const account: Account = {
 			...ACCOUNT,
-			provider: 'google-drive',
-			identity: 'google-user',
+			provider: 'onedrive',
+			identity: 'onedrive-user',
 			displayName: 'Ada',
 			connection: {kind: 'oauth'},
 		}
@@ -1577,7 +1623,7 @@ describe.sequential('CloudManager', () => {
 			},
 		)
 
-		const session = await fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)
+		const session = await fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID)
 		const completion = fixture.manager.completeOAuth(USER_ID, ACCOUNT_ID, 'copy-code')
 		const completionResult = expect(completion).rejects.toThrow('[cloud-cancelled]')
 		await didStart
@@ -1594,8 +1640,8 @@ describe.sequential('CloudManager', () => {
 		await fixture.manager.start()
 
 		const attempts = await Promise.allSettled([
-			fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID),
-			fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID),
+			fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID),
+			fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID),
 		])
 
 		expect(attempts.filter(({status}) => status === 'fulfilled')).toHaveLength(1)
@@ -1671,8 +1717,8 @@ describe.sequential('CloudManager', () => {
 		let now = NOW
 		const oauthAccount: Account = {
 			...ACCOUNT,
-			provider: 'google-drive',
-			identity: 'google-user',
+			provider: 'onedrive',
+			identity: 'onedrive-user',
 			displayName: 'Ada',
 			connection: {kind: 'oauth'},
 		}
@@ -1686,7 +1732,7 @@ describe.sequential('CloudManager', () => {
 		await fixture.manager.start()
 		fixture.manager.syncRuntimes.get(SYNC_ID)!.nextRunAt = NOW
 
-		await fixture.manager.beginOAuth(USER_ID, 'google-drive', ACCOUNT_ID)
+		await fixture.manager.beginOAuth(USER_ID, 'onedrive', ACCOUNT_ID)
 		expect(fixture.manager.accountRuntimes.get(ACCOUNT_ID)?.state.kind).toBe('authenticating')
 		now += OAUTH_SESSION_LIFETIME + 1
 
