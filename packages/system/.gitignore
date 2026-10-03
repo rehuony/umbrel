@@ -1,4 +1,4 @@
 /build/
 
 # This is an image source template, not a developer's personal shell state.
-!rootfs/customization/files/etc/skel/.bashrc
+!rootfs/custom/files/etc/skel/.bashrc

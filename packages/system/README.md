@@ -7,16 +7,16 @@ This package builds the Debian system, packages bootable images, and runs local 
 ```text
 system/
 ├── rootfs/
-│   ├── Dockerfile          # Debian, kernel, runtime dependencies, and panel
-│   ├── scripts/            # Root filesystem installation steps
-│   ├── files/common/       # Files installed on every platform
-│   ├── files/raspberrypi/  # Raspberry Pi-specific files
-│   ├── customization/     # Packages, account defaults, SSH policy, and terminfo
-│   └── assets/             # Package checksums and build-time configuration
+│   ├── Dockerfile         # Debian, kernel, runtime dependencies, and panel
+│   ├── scripts/           # Root filesystem installation steps
+│   ├── files/common/      # Files installed on every platform
+│   ├── files/raspberrypi/ # Raspberry Pi-specific files
+│   ├── custom/            # Packages, account defaults, SSH policy, and terminfo
+│   └── assets/            # Package checksums and build-time configuration
 ├── images/
-│   ├── rugix-bakery.toml   # Hardware targets and image partition layouts
-│   ├── layers/             # Root imports, target recipes, and Ctrl versions
-│   └── recipes/            # Boot setup, persistent state, and reset hooks
+│   ├── rugix-bakery.toml  # Hardware targets and image partition layouts
+│   ├── layers/            # Root imports, target recipes, and Ctrl versions
+│   └── recipes/           # Boot setup, persistent state, and reset hooks
 ├── scripts/               # Build orchestration and pinned Bakery runner
 ├── vm/                    # QEMU management
 ├── installer/             # Optional NixOS USB installer
@@ -45,13 +45,13 @@ Set `VERSION=...` to supply the embedded release version. Otherwise it contains 
 
 The build checks Docker execution support for all requested architectures first, builds each required root filesystem once, and runs Rugix against a fresh working copy of `images/`. Pi 4 and Pi 5 share a root archive. Docker layers and Rugix downloads remain cached; path-keyed Rugix build layers do not cross build runs. Completed artifacts are copied to `build/images/` after checksum generation. A failed target leaves its previous final artifact untouched.
 
-A lock prevents concurrent image builds from sharing an output directory. `SYSTEM_BUILD_DIR` selects a different output directory; consumers then need an explicit image path. Set `KEEP_BUILD_WORK=true` to retain the temporary workspace for diagnostics. Interrupted runs that cannot execute cleanup may leave `.build-lock`; remove it only after confirming no build still uses that directory.
+A lock prevents concurrent image builds from sharing an output directory. `SYSTEM_BUILD_DIR` selects a different output directory; `make release-manifest` uses the same directory; VM consumers need an explicit image path. Set `KEEP_BUILD_WORK=true` to retain the temporary workspace for diagnostics. Interrupted runs that cannot execute cleanup may leave `.build-lock`; remove it only after confirming no build still uses that directory.
 
 Builds require Node.js 24 (see `.nvmrc`), Corepack-enabled pnpm, Docker, Buildx, `shasum`, and permission to run privileged Rugix containers. The host must already support the requested CPU architecture. The AMD64 root also requires SSSE3 support. The scripts never install or replace host emulators. Tool versions and checksums remain pinned in the Dockerfile, package checksum asset, Bakery runner, and image layers according to the tool they configure.
 
 ## Image customization
 
-Maintain permanent system changes in `rootfs/customization/`:
+Maintain permanent system changes in `rootfs/custom/`:
 
 - `packages.list`: additional Debian package names, one per line. Blank lines and `#` comments are allowed. Packages come from the image's pinned APT snapshot.
 - `files/`: files copied over the base root filesystem, preserving their paths and modes. Put service units under `files/etc/systemd/system/` and account defaults under `files/etc/skel/`.

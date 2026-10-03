@@ -1,4 +1,4 @@
-name: Translation checks
+name: Translation Checks
 
 on:
   push:

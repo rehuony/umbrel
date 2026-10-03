@@ -66,6 +66,6 @@ UPDATE_TEST_ARTIFACT=/absolute/path/to/candidate.update.json \
   pnpm --dir packages/backend test updates/system-update.vm.test.ts --maxWorkers=1
 ```
 
-The VM scenario uses two actual images with different stable versions and the `umbrel-home` profile. A local fixture replaces release HTTP transport inside the guest; checksum verification, slot installation, reboot, health commit, manual rollback, automatic fallback on a mismatched release version, and persistent user/application data use the real system. It does not publish a remote release or prove physical Raspberry Pi behavior. See [validation](validation.md) for results actually obtained.
+The VM scenario uses two actual images with different stable versions and the `umbrel-home` profile. A local fixture replaces release HTTP transport inside the guest; checksum verification, slot installation, reboot, health commit, manual rollback, automatic fallback on a mismatched release version, and persistent user/application data use the real system. It does not publish a remote release or prove physical Raspberry Pi behavior. See the [verification guide](validation.md) for environment prerequisites and release acceptance boundaries.
 
 References: [Rugix system updates](https://rugix.org/docs/ctrl/updates/system-updates/) and [GitHub Releases API](https://docs.github.com/en/rest/releases/releases).

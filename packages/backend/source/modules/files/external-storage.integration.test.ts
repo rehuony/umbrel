@@ -517,28 +517,6 @@ describe('externalstorage.#mountExternalDevices', () => {
 			if (command.startsWith('lsblk')) return JSON.stringify(LSBLK_NO_EXTERNAL_DISK)
 		}
 	})
-
-	// Skip this for now since it breaks with the new cleanup logic which will remove the directory before we can test it exists
-	// We should re-enable this if we get proper vm testing working or can reliably detect the fs creation.
-	test.skip('mounts a new external disk when it is attached', async () => {
-		mockCommand = (command: string) => {
-			// Mock lsblk command to return a valid response for no external disks
-			if (command.startsWith('lsblk')) return JSON.stringify(LSBLK_EXTERNAL_DISK_ATTACHED)
-			// Mock mountpoint command to return nonzero exit code so unused mount paths don't get cleaned up
-			if (command.startsWith('mountpoint')) return {exitCode: 1}
-		}
-
-		// Simulate disk event
-		await umbreld.instance.eventBus.emit('system:disk:change')
-
-		// Wait for event to be handled
-		await delay(500)
-
-		// Check that the mount point was not created
-		const mountPoint = `${umbreld.instance.dataDirectory}/external/Red T5`
-		const exists = await fse.pathExists(mountPoint)
-		expect(exists).toBe(true)
-	})
 })
 
 describe('filesystem permissions', () => {

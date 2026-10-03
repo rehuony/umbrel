@@ -51,7 +51,7 @@ if [[ "${1:-}" == "--test-on-host" ]]; then
     fi
     shift 2
     USER_HOME="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
-    WORK_DIR="${USER_HOME}/${REMOTE_DIR_ARG}/packages/backend"
+    WORK_DIR="${USER_HOME}/${REMOTE_DIR_ARG}"
 
     # Disable spinners and fancy progress output
     export CI=true
@@ -59,10 +59,10 @@ if [[ "${1:-}" == "--test-on-host" ]]; then
     cd "${WORK_DIR}"
     if [[ $# -eq 0 ]]; then
         # No args: run test:vm
-        pnpm run test:vm
+        pnpm --filter backend run test:vm
     else
         # Args provided: pass directly to test
-        pnpm run test "$@"
+        pnpm --filter backend run test "$@"
     fi
     exit 0
 fi

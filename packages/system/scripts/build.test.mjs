@@ -166,7 +166,7 @@ test('remote test arguments survive SSH shell parsing without expansion', async 
 
 test('the remote runner invokes pnpm and preserves test arguments', async (t) => {
 	const {directory, bin, log, env, capture} = await remoteFixture(t)
-	await mkdir(path.join(directory, 'checkout', 'packages', 'backend'), {recursive: true})
+	await mkdir(path.join(directory, 'checkout'), {recursive: true})
 	await writeFile(path.join(bin, 'pnpm'), capture, {mode: 0o755})
 	await writeFile(
 		path.join(bin, 'getent'),
@@ -179,7 +179,7 @@ test('the remote runner invokes pnpm and preserves test arguments', async (t) =>
 	await exec('bash', [remoteScript, '--test-on-host', 'checkout'], options)
 	const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse)
 	assert.deepEqual(calls, [
-		['run', 'test', ...args],
-		['run', 'test:vm'],
+		['--filter', 'backend', 'run', 'test', ...args],
+		['--filter', 'backend', 'run', 'test:vm'],
 	])
 })

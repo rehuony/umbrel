@@ -9,6 +9,9 @@ VERSION ?=
 DEV_COMMAND ?= start
 IMAGE_TARGETS ?= pi4 pi5 arm64 amd64
 
+SYSTEM_DIR := packages/system
+export SYSTEM_BUILD_DIR ?= $(SYSTEM_DIR)/build
+
 .PHONY: help deps dev frontend backend typecheck format-check format lint translations-check test test-backend test-frontend test-integration test-vm build build-frontend image image-amd64 image-arm64 image-pi4 image-pi5 image-usb-installer vm build-remote test-remote
 
 help:
@@ -39,29 +42,34 @@ dev:
 	./scripts/umbrel-dev.sh $(DEV_COMMAND) $(ARGS)
 
 frontend:
-	pnpm --dir packages/frontend run dev $(ARGS)
+	pnpm --filter frontend run dev $(ARGS)
 
 backend:
-	pnpm --dir packages/backend start $(ARGS)
+	pnpm --filter backend start $(ARGS)
 
 typecheck:
-	pnpm --dir packages/backend run typecheck
-	pnpm --dir packages/frontend run typecheck
+	pnpm --filter backend run typecheck
+	pnpm --filter frontend run typecheck
 
-format-check:
-	pnpm --dir packages/backend run format:check
-	pnpm --dir packages/frontend run format:check
-
-format:
-	pnpm --dir packages/backend run format
-	pnpm --dir packages/frontend run format
+# Discover source documents through Git, including new files but excluding ignored
+# build output and deleted files. Preserve upstream license text verbatim.
+# NUL separators preserve spaces in document paths.
+format format-check:
+	@set -o pipefail; \
+	git ls-files --cached --others --exclude-standard --deduplicate -z -- '*.md' ':(exclude,glob)**/LICENSE*.md' | \
+		while IFS= read -r -d '' file; do \
+			if [ -f "$$file" ]; then printf '%s\0' "$(CURDIR)/$$file"; fi; \
+		done | \
+		xargs -0 pnpm --filter frontend exec prettier $(if $(filter format,$@),--write,--check) --config "$(CURDIR)/.prettierrc.mjs"
+	pnpm --filter backend run $(if $(filter format,$@),format,format:check)
+	pnpm --filter frontend run $(if $(filter format,$@),format,format:check)
 
 lint:
-	pnpm --dir packages/frontend run lint
+	pnpm --filter frontend run lint
 
 translations-check:
-	pnpm --dir packages/frontend run translations:test
-	pnpm --dir packages/frontend run translations:check
+	pnpm --filter frontend run translations:test
+	pnpm --filter frontend run translations:check
 	bash .github/scripts/prepare-translations.test.sh
 
 .PHONY: test-system
@@ -69,46 +77,37 @@ translations-check:
 test: test-backend test-frontend test-system
 
 test-system:
-	node --test packages/system/scripts/*.test.mjs
+	node --test "$(SYSTEM_DIR)"/scripts/*.test.mjs
 
 test-backend:
-	pnpm --dir packages/backend run test $(or $(TEST),unit.test) $(ARGS)
+	pnpm --filter backend run test $(or $(TEST),unit.test) $(ARGS)
 
 test-frontend:
-	pnpm --dir packages/frontend test $(ARGS)
-	pnpm --dir packages/frontend run test:unit
+	pnpm --filter frontend test $(ARGS)
+	pnpm --filter frontend run test:unit
 
 test-integration:
-	pnpm --dir packages/backend run test $(or $(TEST),integration.test) $(ARGS)
+	pnpm --filter backend run test $(or $(TEST),integration.test) $(ARGS)
 
 test-vm:
-	pnpm --dir packages/backend run test $(or $(TEST),vm.test) $(ARGS)
+	pnpm --filter backend run test $(or $(TEST),vm.test) $(ARGS)
 
 build: typecheck build-frontend
 
 build-frontend:
-	pnpm --dir packages/frontend run build
+	pnpm --filter frontend run build
 
 image:
-	./packages/system/scripts/build.sh --version "$(VERSION)" $(IMAGE_TARGETS)
+	"$(SYSTEM_DIR)/scripts/build.sh" --version "$(VERSION)" $(IMAGE_TARGETS)
 
-image-amd64:
-	./packages/system/scripts/build.sh --version "$(VERSION)" amd64
-
-image-arm64:
-	./packages/system/scripts/build.sh --version "$(VERSION)" arm64
-
-image-pi4:
-	./packages/system/scripts/build.sh --version "$(VERSION)" pi4
-
-image-pi5:
-	./packages/system/scripts/build.sh --version "$(VERSION)" pi5
+image-amd64 image-arm64 image-pi4 image-pi5:
+	"$(SYSTEM_DIR)/scripts/build.sh" --version "$(VERSION)" $(patsubst image-%,%,$@)
 
 image-usb-installer:
-	./packages/system/installer/build.sh $(ARGS)
+	"$(SYSTEM_DIR)/installer/build.sh" $(ARGS)
 
 vm:
-	./packages/system/vm/run.sh $(ARGS)
+	"$(SYSTEM_DIR)/vm/run.sh" $(ARGS)
 
 build-remote:
 	./scripts/remote-builder.sh build $(ARGS)
@@ -118,4 +117,4 @@ test-remote:
 
 .PHONY: release-manifest
 release-manifest:
-	node packages/system/scripts/release.mjs manifest packages/system/build/images "$(VERSION)"
+	node "$(SYSTEM_DIR)/scripts/release.mjs" manifest "$(SYSTEM_BUILD_DIR)/images" "$(VERSION)"

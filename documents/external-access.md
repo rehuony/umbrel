@@ -1,10 +1,10 @@
 # External application access
 
-## Design and implementation plan
+## Architecture
 
 The existing backend owns both panel traffic and authenticated application forwarding. The VPS terminates public HTTPS and forwards registered hostnames through Tailscale to the same system ingress port. No additional authentication server or gateway process is required.
 
-Implementation proceeds in this order:
+The implementation has these boundaries:
 
 1. Add owner-managed HTTPS origins and exact trusted proxy addresses. Keep configuration separate from application manifests. Reject duplicate origins and unknown applications.
 2. Dispatch registered application hosts to the existing streaming application gateway. Reject untrusted forwarding and unknown hosts received from trusted proxies. External access always requires authentication, independently of LAN application settings.
@@ -97,18 +97,18 @@ Saving configuration invalidates old external sessions and pending requests. Fai
 
 The proxy configuration follows [Nginx's WebSocket guidance](https://nginx.org/en/docs/http/websocket.html) and [streaming proxy directives](https://nginx.org/en/docs/http/ngx_http_proxy_module.html). Cookie isolation follows the [host-prefixed cookie requirements](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
 
-## Validation status
+## Verification
 
-Checks completed against the current source:
+The gateway tests exercise local HTTP and WebSocket connections, central
+authentication and RPC handlers. They cover browser/app/request binding, expired
+and reused tickets, concurrent callbacks, member denial, session revocation,
+cross-origin requests, spoofed forwarding headers, unknown hosts, configuration
+rollback and application removal. UI tests cover callback navigation, external
+URL selection, draft retention, save failures and disabled global access.
 
-- Backend unit suite: 1,570 passed and one skipped across 132 files, including the final per-application configuration and global-enable checks.
-- Frontend suite: 924 passed across 128 files, including callback navigation, external URL selection, configuration save/error handling, and disabled global-access behavior.
-- Linux integration tests in the existing development container: 57 application lifecycle tests, 25 file-store tests, and one development-proxy test passed. These cover installation, update, removal, the normal panel login entry, removal of the old authentication API, and fresh reads after writes.
-- A separate Linux network-namespace test passed using the generated nftables rules. It confirmed that the configured proxy can reach ports 80/443, cannot reach raw application ports before DNAT, and does not change another LAN peer's access. The test used isolated namespaces, not the host firewall.
-- Frontend and backend type checks, frontend lint, changed-file formatting, translation freshness validation, production frontend build, and `git diff --check` passed. All supported locale files were updated through the translation workflow, including six previously pending system-update labels.
-- Browser checks in the running local panel confirmed the reduced global form, per-app URL editing, drafts surviving section changes, the unsaved-close prompt, the non-restarting URL-only save action, and navigation to global settings when access is disabled. The persisted external-access configuration was not enabled or changed during these UI checks.
-- Focused backend coverage verifies owner-only URL updates, concurrent per-app/global saves, duplicate-domain rejection, rejection of new app URLs while global access is disabled, and rollback after an ingress failure. The frontend checks preserve drafts when configuration is disabled or saving fails.
-
-The gateway tests exercise real local HTTP and WebSocket connections, central authentication and RPC handlers. They cover browser/app/request binding, expired and reused tickets, concurrent callback attempts, member access denial, session revocation, cross-origin requests, spoofed forwarding headers, unknown hosts, configuration rollback, and application removal. These checks are not a substitute for deployment acceptance tests.
-
-Existing VM authentication scenarios were updated to use the normal panel login, but were not run against a newly built image in this task. Existing boot images predate this change and are not evidence of gateway validation. Raspberry Pi hardware, a real VPS/Nginx/Tailscale deployment, and application-specific browser/client behavior remain unverified. No throughput or latency improvement is claimed without a hardware benchmark. No live VPS or Raspberry Pi deployment has been changed.
+Use the [verification guide](validation.md) for test commands and environment
+requirements. Deployment acceptance also needs the actual VPS/Nginx/Tailscale
+path, a current image and application-specific browser/client checks. Verify
+firewall restrictions in an isolated environment before applying them to the
+intended proxy. Synthetic gateway tests do not establish physical Raspberry Pi
+throughput or successful provider/application access.

@@ -346,7 +346,7 @@ fi
 if [[ "${command}" = "client" ]]
 then
     shift
-    exec_in_instance pnpm --dir /umbrel-dev/packages/backend run start client "$@"
+    exec_in_instance pnpm --dir /umbrel-dev --filter backend run start client "$@"
 
     exit
 fi
@@ -465,19 +465,18 @@ then
     then
         # Run umbreld and ui in development mode with live reload
         echo "Starting umbreld and ui..."
-        pnpm --dir /umbrel-dev/packages/backend run dev &
-        CHOKIDAR_USEPOLLING=true pnpm --dir /umbrel-dev/packages/frontend run dev &
+        pnpm --dir /umbrel-dev --filter backend run dev &
+        CHOKIDAR_USEPOLLING=true pnpm --dir /umbrel-dev --filter frontend run dev &
         wait
     else
         # Build static production ui bundle and serve from umbreld
         echo "Building production ui..."
-        pnpm --dir /umbrel-dev/packages/frontend run build
+        pnpm --dir /umbrel-dev --filter frontend run build
         # Copy contents instead of moving the directory because both paths are mount points.
-        # The dashboard and app-auth page are selected from this one build at runtime.
         rm -rf /umbrel-dev/packages/backend/ui/*
         cp --archive /umbrel-dev/packages/frontend/dist/. /umbrel-dev/packages/backend/ui/
         echo "Starting umbreld in production mode..."
-        pnpm --dir /umbrel-dev/packages/backend run dev:production-mode
+        pnpm --dir /umbrel-dev --filter backend run dev:production-mode
     fi
 
     exit

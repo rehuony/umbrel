@@ -81,7 +81,6 @@ starts a replacement in the same group. Shutdown and rebuild stop readers before
 replacing database files. `FileIndex.status().readers` reports thread IDs and
 active/queued counts. Long reads can delay WAL checkpoints. Photos preparation and
 rebuilds still run on the writer, so sustained ingestion can still delay reads.
-No schema migration is needed.
 
 ## Maintaining consistency
 
@@ -100,10 +99,10 @@ another photo's companion or visibility stale. Album membership stays in its
 durable table; Favorites update both durable state and stored rows directly.
 
 Scope changes and large recovery operations rebuild an account's projection.
-Rebuilds preserve the durable favorites, albums and backup identities in
-`umbrel.db`. File-index schema v18 has an initialization marker for first-time
-backfill, including when the disposable index is recreated. Photos schema v8
-adds the durable change journals. Startup checks the existing generation markers
+Rebuilds preserve the durable favorites, albums and source state in
+`umbrel.db`. The file index has an initialization marker for first-time
+backfill, including when the disposable index is recreated. The durable Photos
+schema includes change journals. Startup checks the existing generation markers
 in both databases and rebuilds all accounts when they differ, repairing the
 split-commit outcome possible for attached WAL databases. Journal changes,
 projection updates, timeline dates and generation changes participate in the same
@@ -121,41 +120,31 @@ reuses existing content/metadata where available and otherwise prepares it again
 This keeps delete/restore results immediately addressable without relying on a
 later background enrichment pass.
 
-## Upgrade and rollback (2.0 rollout)
+## Schema and recovery boundary
 
-The final file-index schema is **20** and the durable Photos schema is **9**.
-Schema 19 adds stored indexing counters. Schema 20 removes the duplicated source
-name; durable schema 9 replaces the v8 source-update trigger so name-only changes
-do not invalidate the account. Existing v18/v19 indexes upgrade in place, and the
-source-name migration preserves their stored library rows.
+This system starts with file-index schema **1** in `panel_schema_migrations` and
+Photos schema **1** under the `panel-photos` migration module. The authoritative
+versions and initialization rules are in [file-index migrations](../files/file-index/migrations.ts)
+and [Photos migrations](migrations.ts). Legacy upstream schemas are rejected;
+there is no in-place migration from the upstream version sequence. Unknown
+versions are also rejected without deleting their contents.
 
-On the first upgrade from a build without stored library tables, startup builds
-the projection and indexing counters from the existing index. This is synchronous
-work in the shared file-index worker and delays Photos readiness. Expect a longer
-first Photos startup on large libraries; do not describe it as a repeated cost on
-every boot. Index recreation, recovery and scope changes can also require a rebuild.
-See the [review follow-up measurements](../../../scripts/benchmarks/photos-read-model/review-followup.md)
-for the measured cost and its limits.
+First initialization builds the library projection and indexing counters from
+the indexed files. This work runs in the file-index worker and delays Photos
+readiness. Index recreation, recovery and source-scope changes can require
+another rebuild. The derived index can be rebuilt through the supported recovery
+path; favorites, albums and source state in `umbrel.db` must be preserved.
 
-**OS rollback does not roll back persistent application data.** Existing Photos
-migration policy rejects a durable schema newer than the running code understands,
-preserving `umbrel.db` rather than deleting it or guessing how to downgrade it.
-After this update, a fallback build supporting only Photos schema 7 or 8 therefore
-cannot serve Photos. The disposable file index can be recreated by older code;
-ordinary Files indexing remains available when Photos is unavailable.
-
-For a 2.0 rollout, retain a supported pre-upgrade data backup if a data rollback is
-required. To recover Photos after an OS fallback, return to a build supporting the
-upgraded schema, or restore a matching pre-upgrade backup through the supported
-restore procedure. Restoring older data loses changes made since that backup.
-Never lower schema-version records or delete `umbrel.db` to force a downgrade:
-it contains shared durable data, including Photos favorites, albums and backup
-identities. Automatic Photos schema downgrades remain unsupported.
+**OS rollback does not roll back persistent application data.** A fallback build
+must support the data format and schemas already on disk. Keep a supported backup
+before changing durable data formats. If a fallback cannot read the data, return
+to a compatible build or restore a matching backup through the supported restore
+procedure. Restoring older data loses changes made since that backup. Never lower
+migration versions or delete `umbrel.db` to force a downgrade. See the
+[system update contract](../../../../../documents/system-updates.md) for the
+shared-data boundary.
 
 When adding a new input to the library projection, update its journal trigger and
 eager maintenance path. Keep non-library activity out of the journals. Add a new
 migration when changing the stored schema or projection semantics so existing
 installations rebuild the affected data.
-
-[Benchmark results and reproduction](../../../scripts/benchmarks/photos-read-model/README.md)
-include every read case and the additional write/storage costs.

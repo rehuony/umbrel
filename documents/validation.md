@@ -1,156 +1,87 @@
-# Refactor and Validation Record
+# Verification
 
-## Files previews and transfer overhead
+Use the current source revision, manifests and executable workflows as the
+validation baseline. Record commands, environment, results and unverified targets
+with the change or release being reviewed. Historical test counts and old image
+paths do not establish that a later revision is validated.
 
-Common text formats reuse the existing text editor, including CSV and TypeScript. Preview selection, icons, and type labels share the same classification. Ambiguous `.ts` filenames default to text in the UI; this is a filename heuristic, not content detection. The editor retains its size limit, UTF-8 validation, and binary-data rejection. WebP uses the existing image viewer. No conversion service or dependency was added.
+## Local checks
 
-Uploads use a bounded 256 KiB write buffer with existing backpressure, authorization, temporary-file publication, and durability checks. Downloaded ZIP archives use compression level 1; the separate Compress action retains level 6. Already compressed media still bypass deflate. Single-file download and range handling are unchanged.
+Install the Node.js version in [`.nvmrc`](../.nvmrc), enable Corepack, and run
+`make deps` from the repository root. The root package manifest pins pnpm; CI and
+image builds use the workspace lockfile with `--frozen-lockfile`.
 
-- Frontend Files tests: 28 files, 230 tests passed. Backend file API, archive, upload preflight, and ingress upload tests: 4 files, 32 tests passed. Both package type checks, focused formatting/lint, production frontend build, and `git diff --check` passed. Existing bundle-size warnings remain.
-- Browser checks confirmed Markdown rendering, TXT/CSV/TypeScript text preview, WebP image preview, and the corrected TypeScript icon and type label after reload.
-- A real HTTP test verified a 4 MiB streamed upload, byte-for-byte download, and a range crossing the upload-buffer boundary. ZIP tests verified nested text, media bytes, empty files, and media compression bypass at both levels.
-- Local macOS and Linux-container loopback comparisons supported the buffer and ZIP changes. A structured-log sample compressed faster at level 1 with an approximately 5% larger archive; results depend on content. Single-file low throughput was not reproduced locally.
-- Gigabit LAN throughput, tens-of-gigabytes transfers, sustained memory measurements, and physical Raspberry Pi performance remain unverified. Loopback measurements are not device or network performance guarantees.
+| Command                   | Coverage                                                                |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `make typecheck`          | Backend, frontend and frontend build configuration types                |
+| `make format-check`       | Backend and frontend formatting                                         |
+| `make lint`               | Frontend lint rules                                                     |
+| `make translations-check` | Locale structure, source freshness and translation workflow tests       |
+| `make test`               | Backend unit tests, frontend tests and system build orchestration tests |
+| `make build-frontend`     | Production dashboard bundle                                             |
+| `git diff --check`        | Whitespace errors in the patch                                          |
 
-## pnpm and TypeScript toolchain migration
+Run focused tests while editing, then the checks appropriate to the final change.
+Runtime-script tests need Bash 4 or newer, Mike Farah's yq 4, jq, GNU coreutils and
+`envsubst`; the macOS system Bash is insufficient. See
+[continuous integration](../.github/workflows/ci.yml) for the maintained Linux
+setup and [translation checks](../.github/workflows/check-translations.yml) for
+the locale checks. The formatting commands discover Markdown files through Git, including new source
+files while excluding ignored output and deleted files. They use the existing
+Prettier executable and shared configuration.
 
-The frontend and backend now share a pnpm workspace and one root lockfile. Makefile, CI, translation automation, remote commands, development-container installation, production deployment, and root filesystem construction use pnpm. The previous per-package npm lockfiles and npm installation settings have been removed. No remote push or release was performed during this migration.
+`make test-system` uses stubbed Docker and remote transport commands. It covers
+build target selection, shared root archives, locking, failure preservation,
+checksums and argument forwarding. It does not build or boot an image.
 
-| Component           | Selected version |
-| ------------------- | ---------------- |
-| Node.js             | 24.18.0          |
-| pnpm                | 12.8.1           |
-| TypeScript          | 6.0.3            |
-| TypeScript ESLint   | 8.71.0           |
-| Vite / React plugin | 8.3.2 / 6.1.1    |
-| Vitest / coverage   | 4.1.11           |
-| tRPC packages       | 11.19.0          |
-| React Router        | 7.18.4           |
-| p-queue             | 9.3.3            |
+## Linux integration
 
-TypeScript 7 is deliberately not selected because the current TypeScript ESLint parser supports versions below 6.1. The existing React Compiler remains enabled through Vite's Babel integration. Other dependencies were refreshed within their declared ranges; targeted upgrades and narrowly scoped overrides remove reported vulnerable versions. This is not an indiscriminate upgrade of every library to its newest major version.
+Integration tests require an isolated Linux development container and its system
+services. Use the existing [development commands](architecture.md#development-commands)
+and select a test through `make test-integration TEST="source/...integration.test.ts"`.
+Do not run application image-cleanup tests against a shared Docker daemon.
 
-Review findings and fixes:
+Changes to authentication, cloud connections, storage or application lifecycle
+need their corresponding behavioral tests. Preserve negative cases for revoked
+sessions, member permissions, account isolation, interrupted uploads and failed
+writes. Real filesystem and process tests complement mocked unit tests; neither
+alone establishes physical-device behavior.
 
-- The text editor imported undeclared CodeMirror/Lezer dependencies previously exposed by npm hoisting. They are now explicit frontend dependencies.
-- Production startup no longer calls a package manager. Its shell entrypoint uses a portable interpreter path and correctly quotes installation paths containing spaces. The runtime TypeScript configuration preset remains a production dependency.
-- The development container now mounts the shared pnpm dependency directory and records only successful installations. Native dependency scripts are allowlisted and serialized.
-- Production image construction checks the deployed CLI, database, and terminal after deleting the temporary workspace. Host-generated assets cannot overwrite assets generated by the image's locked installation.
-- JSON imports use import attributes; the Git client uses its exported HTTP module. The queue upgrade retains serialized file writes and cancellation cleanup; timeout results can no longer silently masquerade as successful task results.
-- Remote test arguments retain quotes, spaces, empty arguments, and literal shell characters through SSH parsing. Two regressions in the existing system build test suite cover local dispatch and the remote pnpm runner. The root scripts directory contains only `umbrel-dev.sh` and `remote-builder.sh`; Makefile and runtime callers use the renamed entrypoints.
-- A reproduced file-picker bug caused custom sources with the same path to share an in-flight listing. Mounted sources now have distinct query identities, and changing cloud accounts remounts the picker. The regression failed before the fix and passes afterward. No layout or color styling changed.
-- An empty app catalog and unavailable editorial feed redirected to each other indefinitely, preventing Compose import from staying open. The complete catalog now remains accessible when empty, and the Discover fallback preserves dialog and sorting parameters. Both regression tests failed before the fix and pass afterward.
-- Test mocks no longer retain failure implementations across system tests. The system test file is type-checked again, and an asynchronous rejection assertion is awaited.
-- Vite's development host check allows local mDNS names rather than arbitrary public hostnames. A tracked, install-time patch fixes the stable terminal library's missing macOS helper permission.
+## Images and virtual machines
 
-Completed validation:
+Follow [system image instructions](../packages/system/README.md) to build the
+requested hardware target and verify its adjacent SHA-256 file. Check the
+embedded version and artifact metadata as well: a previously generated image can
+still exist after a later build fails. Test image and update-bundle integrity
+separately from successful boot.
 
-- Frozen workspace installation passed. Frontend/backend type checks, including the Vite configuration, passed.
-- Backend: 132 test files passed; 1,553 tests passed and one existing test was skipped.
-- Frontend: 121 test files and 899 tests passed; all 47 additional Node tests passed.
-- Nine build/release/remote-command tests passed. Translation validation, package formatting, frontend lint, and shell syntax passed.
-- Vite production build passed, including generated image assets and both HTML entrypoints. Existing large-chunk warnings remain; the retained Babel React Compiler accounts for most build time.
-- `pnpm audit` reported zero known advisories after the targeted dependency updates. This does not establish that the entire application is free of security defects.
-- A standalone production backend deployment in a path containing spaces passed CLI help, real SQLite queries, real pseudo-terminal execution, and a check that dependency symlinks stay inside the deployment. This check ran on macOS ARM64, not as a booted system.
-- The final ARM64 Linux root filesystem/development image built successfully, including its Vite production bundle. After removing the temporary workspace, the deployed backend passed CLI, SQLite, and pseudo-terminal checks during image construction. Installation and deployment reused the same BuildKit dependency cache without downloading package tarballs again.
-- Eight integration tests passed inside the isolated Linux development container: six browser authentication/session/2FA tests, one web-photo upload and account-isolation scenario, and one custom Compose application scenario. The application scenario checked actual HTTP responses, update data retention, and uninstallation deleting application data.
-- The local development container runs the upgraded Node.js and pnpm versions with the current source mounted. Desktop Chrome checks covered the existing authenticated desktop, widget editor, search, settings, and the corrected empty-store Compose import dialog. Visual styling was retained; no account settings or application installations were submitted during this browser check.
+Use the repository's [VM testing guidance](../.agents/skills/system-vm-testing/SKILL.md)
+when authoring or running machine scenarios. The customization scenario uses the
+authenticated WebSocket terminal and checks actual reboots, persistent user data,
+disposable root changes and factory reset. Fresh images enforce public-key-only
+SSH with no bundled login keys; scenarios using the older password-based SSH
+helper need a compatible test transport before they can validate these images.
+Do not weaken production SSH policy to make a test pass.
 
-No new flashable disk image, physical Raspberry Pi acceptance, AMD64 execution, mobile viewport check, or system-update/boot regression was completed for this migration. VM networking inside the development container remains limited by the host kernel's missing traffic-control checksum action. Earlier image and VM results below apply to their recorded revisions, not this toolchain change.
+The [system update scenario](system-updates.md#verification) requires two compatible
+images with different stable versions. It tests bundle verification, inactive-slot
+installation, boot health, rollback and persistent data. Its local release fixture
+does not validate a live GitHub release download. Report QEMU results separately
+from physical Raspberry Pi results, with the tested target and acceleration mode.
 
-## Repository system updater
+## Release acceptance
 
-The system and dashboard now share a repository release and Rugix A/B update. The source is `rehuony/umbrel`; stable release checks, verified bundle installation, durable progress, trial boot health, manual rollback, and a shell recovery fallback have been implemented. Local builds produce update bundles as well as flashable images; tagged CI prepares a draft release. No tags, pushes, or remote releases were created during implementation.
+The [release workflow](../.github/workflows/release.yml) builds target artifacts and
+creates a draft release. Passing the workflow does not replace these environment-
+specific acceptance checks:
 
-- The live repository query returned no eligible stable release. It was reachable; this was not reported as a connection failure or an installed-version match.
-- Backend unit suite: 131 files passed, 1,548 tests passed, 1 skipped. Five additional update-state tests subsequently passed; the focused update suite totals 37 passing tests.
-- Frontend suite: 116 files and 881 tests passed with four workers; 47 Node tests also passed. The first fully parallel run timed out in an existing RAID onboarding test and produced five related failures. That file's 30 tests passed independently, and the bounded full rerun passed. No RAID source was changed.
-- Seven build and release metadata tests passed. Frontend and backend types, package formatting, frontend lint, translation freshness/tests, production frontend build, shell syntax, workflow YAML parsing, and `git diff --check` passed. The frontend build retains its existing large-chunk warnings.
-- ARM64 baseline and candidate fixtures are built with versions `0.1.0` and `0.1.1` under `packages/system/build/update-baseline/` and `packages/system/build/update-candidate/`. These are local test releases, not published distribution versions.
-- The end-to-end ARM64 QEMU scenario passed in 382 seconds with the `umbrel-home` profile, HVF acceleration, four virtual CPUs, and 2 GB RAM. It checked owner-only access, actual bundle download/verification and inactive-slot writes, trial boot and health commit, explicit restoration of the previous system, and automatic fallback after a deliberately mismatched release version. A Compose application resumed with the same persisted content after each transition, and the uploaded user file remained present. Cleanup shut the VM down without a forced-termination fallback. Only release HTTP transport was replaced by a local fixture; no slot or health result was mocked.
-- Physical Raspberry Pi update/recovery, AMD64, Pi boot flows, a live GitHub release asset download, remote CI execution, power loss during slot writing, and bootloader/kernel failures are not yet validated. The browser inspection tool timed out, so the passing component tests are not recorded as a separate visual browser acceptance run.
+- Boot and recover on each claimed hardware target, including networking and storage.
+- Exercise updates and rollback against the intended release source while retaining user data.
+- Verify [external access](external-access.md) through the actual reverse proxy, including login callbacks, WebSockets and denied access.
+- Verify [cloud authorization](cloud-connections.md) with registered clients and the deployed callback page. Test cancellation, token refresh, expiry and account isolation. Empty registration fields deliberately keep new connections unavailable.
+- Check desktop and narrow-screen interactions; terminal soft keyboards require a real mobile browser.
+- Measure large-file and many-small-file transfers on the target disk and network, checking file contents and bounded memory. Local benchmarks do not prove Raspberry Pi throughput.
 
-The records below are historical and predate this updater unless stated otherwise.
-
-## Bash, SSH policy, and Ghostty customization
-
-The current customization selects Bash for both `umbrel` and `root`, seeds Bash aliases and prompts plus Vim defaults, and keeps Zsh installed as an optional shell without selecting it or seeding Zsh defaults. The existing `eza` package selection is retained. SSH permits public-key authentication only; no login keys or panel key-management feature are included. Ghostty 1.3.1 terminfo is compiled into the image's global terminal database.
-
-The customization VM scenario now performs low-level assertions through the existing authenticated owner WebSocket terminal. It does not inject SSH keys or weaken SSH policy for testing. Other VM scenarios using the shared password-based SSH helper require separate test-transport adaptation before they can run against these images; their earlier results below do not validate the new SSH policy.
-
-- Backend type checking, focused formatting, Bash syntax checks, and `git diff --check` passed. The six build orchestration tests and three terminal lifecycle unit tests passed.
-- The exported Ghostty description compiled successfully in a separate Debian 13 container, and `tput colors` returned 256 without a terminal-type error.
-- Generic ARM64, Raspberry Pi 4, and Raspberry Pi 5 images were rebuilt with version `3d7d915-dirty-20261002042813`; all three adjacent SHA-256 files passed independent verification. The successful build cleaned its temporary workspace and lock.
-- The updated `system-customization.vm.test.ts` passed in 183 seconds on the QEMU `umbrel-home` ARM64 profile using the new ARM64 image. It verified owner registration; Bash as the default for `umbrel` and `root`; installed Zsh and eza; aliases and distinct user/root prompt colors; global Ghostty terminfo and terminal capability lookup; effective public-key-only SSH policy with no preinstalled login keys; personal Bash configuration through the actual WebSocket terminal; two guest-initiated reboots; discarded runtime package, root-file, and service changes; persistent user configuration and files; and explicit factory reset. No forced-shutdown fallback occurred.
-- Nested interactive shells in the test run in separate terminal sessions so they cannot take over the Web terminal's TTY. This fixes the test's initial wait timeout without changing production terminal behavior.
-- Physical Raspberry Pi acceptance, a Ghostty-to-device SSH login, and the other SSH-dependent VM suites were not performed. AMD64 and the USB installer remain unverified on this host. No panel SSH key management or online update service was implemented.
-
-## Previous build and customization refactor
-
-The preceding build refactor separated root filesystem sources, image definitions, orchestration, VM tools, and the USB installer. Outputs live under `packages/system/build/images/`. The root overlay is explicitly discarded on reboot. Permanent customizations have a build-time package list, file tree, and setup script; the first customization installs Zsh, selects it for the host account, and seeds personal shell defaults. The panel terminal follows the account shell.
-
-- Six build orchestration tests, three terminal unit tests, and four VM port-retry unit tests passed.
-- Backend type checking, focused formatting, 22 shell syntax checks, Zsh configuration syntax, Makefile command expansion, VM help, and `git diff --check` passed.
-- Generic ARM64, Raspberry Pi 4, and Raspberry Pi 5 image construction and independent SHA-256 verification passed. Build version: `3d7d915-dirty-20261002032628`.
-- The `system-customization.vm.test.ts` scenario passed in 116 seconds on the QEMU `umbrel-home` ARM64 profile. It verified fresh registration, baked-in Zsh, the host account shell, actual authenticated WebSocket terminal output, personal shell startup configuration, two guest-initiated reboots, removal of a temporary Debian package and root-file/service changes, preservation of user data, and explicit factory reset. No forced shutdown fallback was reported in this run.
-- Application-owned TLS VM regression passed on the new ARM64 image in 279 seconds: Compose import, live application HTTPS, panel HTTPS, application restart, power cycle, and uninstall. No forced shutdown fallback was reported.
-- The build exited successfully and removed its temporary workspaces and lock. Physical Raspberry Pi boot, network, storage, and application acceptance have not been performed.
-- AMD64 preflight still fails with a host execution-format error; the AMD64 image and USB installer have not been rebuilt. Host emulation registrations and existing service containers were left unchanged. Image CI now selects native ARM64 runners for ARM targets and an AMD64 runner for AMD64; this workflow has not been dispatched.
-- The upstream online updater remains removed. A/B boot support is retained; a custom update channel, health-gated slot commit, and shared-data rollback still require their own implementation and acceptance tests.
-
-The historical results below predate these build and shell changes.
-
-## Previous foundation validation
-
-This record covers the Web-only system foundation. The backend remains Node.js / TypeScript. Image artifacts are local; no remote publication has been performed.
-
-## Implemented scope
-
-- Packages are named `frontend`, `backend`, and `system`. Makefile provides development, verification, and image-build commands.
-- Apple standalone clients, client-specific authentication/discovery/pairing, promotional assets, phone photo backup protocols, and their release workflows have been removed. Responsive browsers, SMB, browser HTTPS, and application-owned TLS remain supported.
-- Applications retain `umbrel-app.yml`, `docker-compose.yml`, official/community stores, and the original runtime. Administrators can import custom Compose files with required application metadata through the same installation and update pipeline.
-- Uninstallation removes application directories and owned data. Custom applications also lose their local source definitions. Existing member grants, safe data-directory cleanup, and shared user-directory protections remain in place.
-- Fresh installations require empty data directories. System data, photo state, and file indexes have explicit initial format versions. Unsupported old data and backups are rejected without deleting them.
-- Historical installation migrations, Mender artifacts, legacy USB installation detection, upstream system update services, and remote system upgrade scripts have been removed. Rugix boot and ordinary USB storage remain.
-- Project instructions and VM testing guidance have been rewritten. Work proceeds in the current checkout without worktrees. The obsolete analysis worktree and redundant historical task branches were removed through Git.
-- The entire `examples/` directory and its ignore rules have been removed. No separate remote application repository was created or published.
-- Project documentation and comments use English; localized interface content and Unicode test fixtures are retained.
-
-## Validation results
-
-These results exercise the restored original application configuration. Results from the superseded `x-panel` implementation are excluded.
-
-- Backend unit tests: **128 files passed, 1,515 tests passed, 1 skipped**.
-- Frontend tests: **115 files and 876 tests passed**, plus **47 Node script tests passed**.
-- Original application lifecycle and image-cleanup integration: **66 tests passed** in an isolated Linux development container. The **57 lifecycle tests** were rerun successfully with the final package paths. Store and repository integration contributed another **29 passing tests**.
-- Custom Compose integration: **1 scenario passed** after package renaming, covering metadata preview, installation, actual HTTP responses, stop, update with persistent data, and uninstallation removing both the application directory and local source.
-- Browser authentication integration: **6 tests passed**. Web photo upload and member directory isolation: **1 scenario passed**.
-- Backend and frontend unit suites were rerun successfully after renaming. Final type checks, formatting, frontend lint, translation checks, 34 shell syntax checks, production frontend build, and `git diff --check` passed. The frontend build reports existing bundle-size warnings.
-- Desktop Chrome verification passed: browser login, metadata form, Compose paste, installation, store listing, application details, update to a new version, and opening the application through its authenticated gateway. The container returned its actual Web response. The initial Alpine test fixture lacked `httpd`; it was replaced with BusyBox, and integration coverage now asserts a live HTTP response before and after update.
-- The browser viewport override did not take effect, so this run does not claim a fresh mobile viewport validation. File-chooser upload was not exercised because the browser extension lacked local file access; Compose paste was verified instead.
-- Fresh Raspberry Pi 4, Raspberry Pi 5, and generic ARM64 images built successfully from the final runtime source and package layout. All three adjacent SHA-256 checksum files were verified successfully. Build version: `d45ed5d-1790876432`.
-- QEMU ARM64 validation: **1 scenario passed** in 173 seconds using the `umbrel-home` profile, hardware acceleration, four virtual CPUs, and 2 GB RAM. It exercised initial boot, registration, custom application TLS, application restart, another system boot, and uninstallation. The harness logged one forced-termination fallback after its 30-second graceful shutdown deadline. Application recovery passed, but this is not evidence that normal shutdown completed successfully; graceful shutdown needs separate follow-up.
-- AMD64 execution remains blocked by the host emulation configuration. OrbStack has not been restarted.
-- Physical Raspberry Pi 4 / 8 GB testing, other hardware boot tests, and actual Hermes Agent / Immich / Tailscale deployments have not been completed.
-
-Runtime root persistence is deliberately excluded: system changes belong in the image; user data stays persistent. Standalone installation on existing Debian hosts, configurable external reverse-proxy entry URLs, and a self-hosted online system update service remain outside the current stage.
-
-## Built artifacts
-
-Paths are relative to the repository root. All three images below contain the current Bash customization, optional Zsh, public-key-only SSH policy, Ghostty terminfo, and disposable-root configuration, with version `3d7d915-dirty-20261002042813`. Images and checksums are local, ignored build outputs; they have not been published.
-
-| Target                   | Image                                             | Checksum                    |
-| ------------------------ | ------------------------------------------------- | --------------------------- |
-| Raspberry Pi 4           | `packages/system/build/images/umbrelos-pi4.img`   | `umbrelos-pi4.img.sha256`   |
-| Raspberry Pi 5 / tryboot | `packages/system/build/images/umbrelos-pi.img`    | `umbrelos-pi.img.sha256`    |
-| Generic ARM64            | `packages/system/build/images/umbrelos-arm64.img` | `umbrelos-arm64.img.sha256` |
-
-Successful image construction and checksum verification do not establish hardware boot compatibility or physical Raspberry Pi acceptance.
-
-## Environment notes
-
-- Package renaming required an explicit `umbreld` executable mapping and an image-build assertion. The backend development launcher uses the current executable directly and does not depend on removed root npm metadata.
-- Runtime script tests require Bash 4+, Mike Farah yq 4, jq, GNU coreutils, and envsubst. CI installs these prerequisites; the macOS system Bash is insufficient.
-- Development containers previously reset OrbStack's architecture emulation registrations through `systemd-binfmt`. New containers mask that service, and the existing test containers have been adjusted. ARM-only builds check only their required architecture. Restoring AMD64 execution may require an OrbStack restart, which would interrupt the user's PostgreSQL and Redis containers; restart approval is pending, so no restart was performed.
-- Virtual machine network initialization inside the OrbStack development container is limited by missing host `tc` checksum-action support. The VM feature is retained but is not considered validated by unit or container tests.
-- Dependency installation reports existing advisories. This work does not constitute a dependency security audit or a claim that all dependencies are free of vulnerabilities.
+Report missing prerequisites, skipped tests and warnings explicitly. Keep
+credentials, personal data, build output and temporary benchmark results out of
+source control; use CI artifacts or the release's verification record for run-specific evidence.

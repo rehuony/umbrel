@@ -46,18 +46,6 @@ data/
 !packages/frontend/src/features/app-store/data/
 !packages/frontend/src/features/app-store/data/**
 
-# Commit these files
-
-!statuses/update-status.json
-
-# Commit these empty directories
-
-!db/.gitkeep
-!events/signals/.gitkeep
-!lnd/.gitkeep
-!logs/.gitkeep
-!tor/data/.gitkeep
-!tor/run/.gitkeep
-.umbrel-dev
 jwt
 ./bin
+.umbrel-dev

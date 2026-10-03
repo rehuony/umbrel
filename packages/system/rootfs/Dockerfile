@@ -613,7 +613,7 @@ RUN set -e; \
 
 # Apply maintained customizations to every platform's base image. This runs
 # before initramfs generation and persistent-directory seeding, never at boot.
-COPY packages/system/rootfs/customization /tmp/system-customization
+COPY packages/system/rootfs/custom /tmp/system-customization
 RUN sed 's/#.*//; /^[[:space:]]*$/d' /tmp/system-customization/packages.list | \
     xargs -r apt-get install --yes --no-install-recommends && \
     cp -a /tmp/system-customization/files/. / && \

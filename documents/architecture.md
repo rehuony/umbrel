@@ -30,7 +30,7 @@ make image-pi4
 make test-vm TEST="source/modules/system/sd-card-only.pi.vm.test.ts"
 ```
 
-The frontend and backend form one pnpm workspace. Each package owns its manifest; `pnpm-lock.yaml` at the repository root locks the complete dependency graph. Use Node.js 24 (the exact version is in `.nvmrc`) and enable Corepack before running `make deps`; `package.json` pins pnpm. CI and image builds install with `--frozen-lockfile`. Makefile remains the entry point for development, verification, and system scripts. Runtime script tests need Bash 4 or newer, Mike Farah's yq 4, jq, GNU coreutils, and envsubst; the macOS system Bash is insufficient. Integration tests require an isolated Linux development container. Never run application image-cleanup tests against a shared Docker daemon. VM tests require a corresponding built image, QEMU, and a machine target selected according to the repository skill.
+The frontend and backend form one pnpm workspace. Each package owns its manifest; `pnpm-lock.yaml` at the repository root locks the complete dependency graph. Use Node.js 24 (the exact version is in `.nvmrc`) and enable Corepack before running `make deps`; `package.json` pins pnpm. CI and image builds install with `--frozen-lockfile`. Makefile remains the entry point for development, verification, and system scripts. Workspace commands select packages by manifest name rather than repeating their directory paths; document formatting discovers Markdown files through Git. Runtime script tests need Bash 4 or newer, Mike Farah's yq 4, jq, GNU coreutils, and envsubst; the macOS system Bash is insufficient. Integration tests require an isolated Linux development container. Never run application image-cleanup tests against a shared Docker daemon. VM tests require a corresponding built image, QEMU, and a machine target selected according to the repository skill.
 
 The development container mounts a writable root `node_modules` plus package-local dependency directories over the read-only checkout. A successful-install stamp covers the runtime, package manager, manifests, workspace settings, and lockfile. Production images deploy a self-contained backend, with no symlinks into the temporary workspace and no runtime package-manager lookup. The Node TypeScript configuration preset is a production dependency because the `tsx` entrypoint reads it at startup.
 
@@ -40,7 +40,7 @@ Image construction runs the deployed backend's `scripts/check-runtime.mjs` after
 
 Dependency build scripts are explicitly reviewed in `pnpm-workspace.yaml`; do not approve unknown scripts to silence installation failures. `packages/backend/scripts/node-pty.patch` is the single maintained dependency fix and is copied into image build workspaces. It restores the missing executable permission in its stable macOS prebuild (upstream issue [microsoft/node-pty#850](https://github.com/microsoft/node-pty/issues/850)); it has no effect on Linux. Update or remove it when adopting an upstream fixed stable release. Use a physical destination path when testing `pnpm deploy` on macOS: its patch resolver does not correctly resolve destinations beneath the `/tmp` symlink; `/private/tmp` works.
 
-TypeScript 6 is paired with the supported TypeScript ESLint parser. Vite 8 uses Rolldown and the Babel React Compiler preset; the editor UI and production UI use the same compiler. React Router 7 includes the transition behavior previously enabled by the v6 future flag. Type checking covers both application source and the Vite configuration. See the [toolchain validation record](validation.md#pnpm-and-typescript-toolchain-migration) for tested versions and upgrade boundaries.
+TypeScript 6 is paired with the supported TypeScript ESLint parser. Vite 8 uses Rolldown and the Babel React Compiler preset; the editor UI and production UI use the same compiler. React Router 7 includes the transition behavior previously enabled by the v6 future flag. Type checking covers both application source and the Vite configuration. Use the workspace manifests and lockfile for exact versions, and the [verification guide](validation.md) for the checks required after a toolchain change.
 
 The development container masks `systemd-binfmt.service` with a read-only mount to prevent container initialization from resetting the host's architecture emulation registrations. Do not manually register binfmt handlers from a container on a shared Docker host. Development startup waits for dashboard readiness and fails with instructions to inspect instance logs when the timeout expires.
 
@@ -54,6 +54,21 @@ Apple standalone clients, native-client login/refresh/discovery/pairing, phone p
 
 The system retains Rugix's A/B boot layout and resets the writable root overlay on reboot. Permanent packages, services, and defaults are baked into every customized image. User homes and declared application data remain persistent; explicit factory reset restores the image's initial data. The owner-only Terminal dock shortcut and search command open the host login shell directly; container terminals remain in each application's advanced settings. Terminal windows share the panel sheet layout and retain their shell session when resized. Authenticated terminal WebSockets use text frames for shell input and binary JSON controls (`type: resize`, `cols`, `rows`) for dimensions; resize controls are validated and never passed to the shell. System updates use the configured repository's stable releases, verified Rugix bundles, trial boot, and a separate health service before committing a slot. The panel and system share one release. See [system updates](system-updates.md) for the release contract and shared-data rollback boundary, and [system builds](../packages/system/README.md) for image customization.
 
+## File previews and transfers
+
+Common text formats, including CSV and TypeScript, use the existing text editor.
+Preview selection, icons and type labels share one classification. Ambiguous `.ts`
+filenames default to text in the UI; this is a filename heuristic, not content
+detection. Text previews retain size limits, UTF-8 validation and binary rejection.
+WebP uses the image viewer; there is no document conversion service.
+
+Uploads stream through a bounded 256 KiB write buffer with backpressure,
+authorization, interrupted-upload cleanup and completion checks. Multi-file ZIP
+downloads use fast compression to reduce CPU work, which can increase archive size.
+Single-file downloads retain direct streaming and range requests. Validate file
+integrity and sustained throughput on the destination hardware rather than
+inferring network speed from local packaging benchmarks.
+
 ## Language and translations
 
-Write project documentation and code comments in English. Preserve localized interface text and Unicode test fixtures. Existing interface translations remain. New custom application interface entries have English and Chinese text, with English fallbacks for other locales. Use the existing generation and snapshot checks in `packages/frontend/scripts/translations.mjs`; passing these checks does not imply human review of every translation.
+Write project documentation and code comments in English. Preserve localized interface text and Unicode test fixtures. Maintain all supported locales through the existing [translation workflow](../packages/frontend/translations/README.md). Generate derived locale files and snapshots through that workflow instead of updating them independently. Passing structural and freshness checks does not imply human review of every translation.

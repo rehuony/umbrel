@@ -1,4 +1,4 @@
-name: Build system release
+name: Build System Release
 on:
   push:
     tags: ['v*']
@@ -25,8 +25,8 @@ jobs:
       - run: make deps
       - run: make typecheck
       - run: make translations-check
-      - run: pnpm --dir packages/backend test updates/
-      - run: node --test packages/system/scripts/*.test.mjs
+      - run: make test-backend TEST=updates/
+      - run: make test-system
       - run: make build-frontend
   images:
     needs: checks

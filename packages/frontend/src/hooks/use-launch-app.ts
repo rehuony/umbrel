@@ -66,7 +66,11 @@ export function useLaunchApp() {
 			return
 		}
 
-		if (app.externalAccess?.enabled && location.origin === app.externalAccess.panelOrigin && !app.externalAccess.origin) {
+		if (
+			app.externalAccess?.enabled &&
+			location.origin === app.externalAccess.panelOrigin &&
+			!app.externalAccess.origin
+		) {
 			toast.warning(t('external-access.app-unavailable'), {area: 'app-store'})
 			return
 		}

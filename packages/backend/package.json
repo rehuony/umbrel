@@ -25,7 +25,7 @@
 		"todo": "git grep --line-number TODO -- ':!package.json'",
 		"test:vm": "pnpm test vm.test",
 		"test:umbrel-dev:prepare": "cd ../.. && ./scripts/umbrel-dev.sh exec:noninteractive -- bash -c 'systemctl stop umbrel; cd /umbrel-dev; pnpm install --frozen-lockfile'",
-		"test:umbrel-dev": "cd ../.. && ./scripts/umbrel-dev.sh exec:noninteractive -- pnpm --dir /umbrel-dev/packages/backend test"
+		"test:umbrel-dev": "cd ../.. && ./scripts/umbrel-dev.sh exec:noninteractive -- pnpm --dir /umbrel-dev --filter backend test"
 	},
 	"devDependencies": {
 		"@modelcontextprotocol/client": "2.0.0",

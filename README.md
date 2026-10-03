@@ -7,13 +7,13 @@ The main components are `packages/frontend`, `packages/backend`, and `packages/s
 ```sh
 make help
 make deps
-make typecheck
 make test
 make build
+make typecheck
 make image-pi4
 ```
 
-The primary hardware target is Raspberry Pi 4 with 8 GB RAM and ARM64. Raspberry Pi 5, generic ARM64, and AMD64 build targets remain available. A build target does not imply physical-device validation; see the [validation record](documents/validation.md) for actual results.
+The primary hardware target is Raspberry Pi 4 with 8 GB RAM and ARM64. Raspberry Pi 5, generic ARM64, and AMD64 build targets remain available. A build target does not imply physical-device validation; see the [verification guide](documents/validation.md) for checks and acceptance boundaries.
 
 This release requires a fresh installation. Standalone clients, historical installation migrations, and the default upstream online system updater have been removed. System and panel updates now use verified Rugix bundles from this repository’s stable releases, with health-gated activation and a previous-system rollback. Official and community app stores retain their original format. Administrators can import custom Compose files with an application name, icon, description, and other metadata. Uninstalling an application removes its application directory and owned data using the original cleanup rules.
 

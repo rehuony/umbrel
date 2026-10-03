@@ -1,4 +1,4 @@
-name: Verify system
+name: Verify System
 on:
   push:
   pull_request:
@@ -72,5 +72,5 @@ jobs:
           path: packages/system/build/images
       - run: cd packages/system/build/images && shasum -a 256 -c umbrelos-amd64.img.sha256
       - run: make deps
-      - run: pnpm --dir packages/backend exec playwright install --with-deps chromium
+      - run: pnpm --filter backend exec playwright install --with-deps chromium
       - run: make test-vm ARGS='--maxWorkers=1 --exclude **/*.pi.vm.test.ts'

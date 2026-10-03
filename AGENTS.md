@@ -30,6 +30,7 @@
 - Work in the current checkout. Start a new task branch from the current branch using `codex/<short-kebab-case-description>`; continue an ongoing task on its existing branch. Do not create git worktrees.
 - Preserve existing uncommitted changes. Use Git for source history and recovery; do not create duplicate source snapshots or rollback archives unless requested. Product data backup and recovery mechanisms are unaffected.
 - Do not stage, commit, amend, reset, rebase, push, or open a pull request unless explicitly requested. Authorized task-branch creation is the exception. Leave changes available for review.
+- Follow the user's intent when finishing branch work: a request to finalize a completed task authorizes committing verified changes, merging into the local primary branch, and deleting the fully merged task branch unless they specify otherwise. A checkpoint or commit-only request keeps the branch for continued work. Clarify only when completion intent is ambiguous; remote pushes require separate authorization.
 - When a pull request is requested, target the repository configured as `origin` unless directed otherwise, and pass `--repo` explicitly. Describe the final behavior and validation, not the conversation history.
 
 ## Instruction Maintenance

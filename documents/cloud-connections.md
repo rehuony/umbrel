@@ -95,7 +95,7 @@ The callback host sees a short-lived code and state but not the device's PKCE ve
 - Existing locally authorized accounts remain compatible. Their saved registration metadata is not silently replaced; explicitly reconnecting a supported provider replaces credentials only after successful validation.
 - Existing disconnect behavior is retained: local credentials and scheduled work are removed, with provider revocation where supported. Provider-level revocation may affect other authorizations using that registration; OneDrive users can also remove application access in their Microsoft account settings.
 
-Changing the source does not erase credentials from previous Git commits. Existing upstream credentials in unpublished history must be cleaned separately before retrying a blocked push. This change does not rewrite Git history or change account credentials at a provider.
+Removing credentials from source does not erase them from Git history or revoke them at the provider. Check both current files and history before publishing. Public client IDs are registration metadata; do not treat them as secret account credentials.
 
 ## Verification and release gates
 
