@@ -29,7 +29,7 @@
   "active-logins.title": "Etkin oturumlar",
   "active-logins.unknown-device": "Bilinmeyen cihaz",
   "advanced-settings": "Gelişmiş ayarlar",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Programı, ağ ayarları ve daha fazlası",
+  "advanced-settings-description": "Harici erişim, HTTPS ve ağ ayarları",
   "app-not-found": "Uygulama bulunamadı: {{app}}",
   "app-only-over-tor": "{{app}} sadece Tor üzerinden kullanılabilir. Bu uygulamayı açmak için lütfen uzak erişim URL'nizde (Ayarlar > Gelişmiş ayarlar > Uzaktan Tor erişimi) Tor tarayıcısı ile Umbrel'inize erişin.",
   "app-page.section.about": "Bu uygulama hakkında",

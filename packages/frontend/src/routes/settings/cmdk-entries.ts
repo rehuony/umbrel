@@ -42,10 +42,10 @@ export function useSettingsCmdkEntries(): CmdkEntry[] {
 		return getSettingsCommandItems(catalog).map((item) => ({
 			id: `settings:${item.id}`,
 			title: item.title,
-			subtitle: `${t('generic-in')} ${t('settings')}`,
+			subtitle: item.id === 'terminal' ? undefined : `${t('generic-in')} ${t('settings')}`,
 			keywords: [item.description, ...(item.keywords ?? [])].filter((keyword) => keyword !== undefined),
 			default: defaultItems.has(item),
-			icon: systemAppsKeyed['UMBREL_settings'].icon,
+			icon: systemAppsKeyed[item.id === 'terminal' ? 'UMBREL_terminal' : 'UMBREL_settings'].icon,
 			onSelect: () => {
 				const target = getSettingsCommandTarget(item)
 				if (target.type === 'external') window.open(target.to, '_blank', 'noopener,noreferrer')

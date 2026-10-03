@@ -29,7 +29,7 @@
   "active-logins.title": "Aktív bejelentkezések",
   "active-logins.unknown-device": "Ismeretlen eszköz",
   "advanced-settings": "Haladó beállítások",
-  "advanced-settings-description": "Terminál, az umbrelOS béta program, hálózati beállítások és még több",
+  "advanced-settings-description": "Külső hozzáférés, HTTPS és hálózati beállítások",
   "app-not-found": "Alkalmazás nem található: {{app}}",
   "app-only-over-tor": "{{app}} csak Toron keresztül használható. Kérlek, nyisd meg az Umbrel-t egy Tor böngészőben a távoli hozzáférési URL-eden (Beállítások > Speciális beállítások > Távoli Tor-hozzáférés), hogy megnyisd ezt az alkalmazást.",
   "app-page.section.about": "Az alkalmazásról",

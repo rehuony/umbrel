@@ -391,8 +391,6 @@ export function createSettingsCatalog(
 				'https',
 				'http',
 				'dhcp',
-				t('terminal'),
-				t('terminal-description'),
 				t('beta-program'),
 				t('beta-program-description'),
 				t('network'),
@@ -631,7 +629,7 @@ export function createSettingsCatalog(
 			id: 'terminal',
 			target: {type: 'current-location-dialog', dialog: 'terminal'},
 			title: t('terminal'),
-			description: t('terminal-description'),
+			description: t('terminal.umbrelos-description'),
 		},
 		{
 			kind: 'command',

@@ -1,6 +1,7 @@
 import {motion, useMotionValue} from 'motion/react'
 import React from 'react'
 import {useLocation, useNavigate} from 'react-router-dom'
+import {useWindowSize} from 'react-use'
 
 import {Glass} from '@/components/ui/glass'
 import {getLastFilesPath} from '@/features/files/utils/last-files-path'
@@ -45,6 +46,7 @@ type DockDimensionsPx = {
 
 function useDockDimensions(options?: {isPreview?: boolean}): DockDimensionsPx {
 	const isMobile = useIsMobile()
+	const {width} = useWindowSize()
 
 	if (options?.isPreview) {
 		const {iconSize, iconSizeZoomed, padding} = DOCK_DIMENSIONS_PX.preview
@@ -52,12 +54,14 @@ function useDockDimensions(options?: {isPreview?: boolean}): DockDimensionsPx {
 	}
 
 	const dimensions = isMobile ? DOCK_DIMENSIONS_PX.mobile : DOCK_DIMENSIONS_PX.desktop
-	const {iconSize, iconSizeZoomed, padding} = dimensions
+	const {iconSizeZoomed, padding} = dimensions
+	// Fit all seven owner shortcuts on narrow screens, including dock padding and gaps.
+	const iconSize = isMobile ? Math.min(dimensions.iconSize, Math.floor((width - 40 - 6 * 8) / 7)) : dimensions.iconSize
 	return {iconSize, iconSizeZoomed, padding, dockHeight: iconSize + padding * 2}
 }
 
 export function Dock() {
-	const {pathname} = useLocation()
+	const {pathname, search} = useLocation()
 	const navigate = useNavigate()
 	const mouseX = useMotionValue(Infinity)
 	const settingsNotificationCount = useSettingsNotificationCount()
@@ -168,6 +172,17 @@ export function Dock() {
 					label={systemAppsKeyed['UMBREL_live-usage'].name}
 					mouseX={mouseX}
 				/>
+				{isOwner && (
+					<DockItem
+						iconSize={iconSize}
+						iconSizeZoomed={iconSizeZoomed}
+						to={systemAppsKeyed['UMBREL_terminal'].systemAppTo}
+						open={new URLSearchParams(search).get('dialog') === 'terminal'}
+						bg={systemAppsKeyed['UMBREL_terminal'].icon}
+						label={systemAppsKeyed['UMBREL_terminal'].name}
+						mouseX={mouseX}
+					/>
+				)}
 			</Glass>
 		</motion.div>
 	)
@@ -219,6 +234,12 @@ export function DockPreview() {
 			/>
 			<DockItem
 				bg={systemAppsKeyed['UMBREL_live-usage'].icon}
+				mouseX={mouseX}
+				iconSize={iconSize}
+				iconSizeZoomed={iconSizeZoomed}
+			/>
+			<DockItem
+				bg={systemAppsKeyed['UMBREL_terminal'].icon}
 				mouseX={mouseX}
 				iconSize={iconSize}
 				iconSizeZoomed={iconSizeZoomed}

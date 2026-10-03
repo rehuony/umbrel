@@ -29,7 +29,7 @@
   "active-logins.title": "Virkar innskráningar",
   "active-logins.unknown-device": "Óþekkt tæki",
   "advanced-settings": "Ítarlegar stillingar",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, netkerfisstillingar og fleira",
+  "advanced-settings-description": "Ytri aðgangur, HTTPS og netstillingar",
   "app-not-found": "Forrit fannst ekki: {{app}}",
   "app-only-over-tor": "{{app}} er aðeins hægt að nota yfir Tor. Farðu á Umbrel í Tor-vafra með ytri aðgangsslóðinni þinni (Settings > Advanced settings > Remote Tor access) til að opna þetta forrit.",
   "app-page.section.about": "Um þetta forrit",

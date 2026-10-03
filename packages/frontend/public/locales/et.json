@@ -29,7 +29,7 @@
   "active-logins.title": "Aktiivsed sisselogimised",
   "active-logins.unknown-device": "Tundmatu seade",
   "advanced-settings": "Täpsemad seaded",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, võrguseaded ja palju muud",
+  "advanced-settings-description": "Väline juurdepääs, HTTPS ja võrguseaded",
   "app-not-found": "Rakendust ei leitud: {{app}}",
   "app-only-over-tor": "{{app}} saab kasutada ainult üle Tori. Selle rakenduse avamiseks ava oma Umbrel Tor-brauseris, kasutades kaugjuurdepääsu URL-i (Seaded > Täpsemad seaded > Tor-kaugjuurdepääs).",
   "app-page.section.about": "Teave rakenduse kohta",

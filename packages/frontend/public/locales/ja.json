@@ -29,7 +29,7 @@
   "active-logins.title": "アクティブなログイン",
   "active-logins.unknown-device": "不明なデバイス",
   "advanced-settings": "詳細設定",
-  "advanced-settings-description": "ターミナル、umbrelOSベータプログラム、ネットワーク設定など",
+  "advanced-settings-description": "外部アクセス、HTTPS、ネットワーク設定",
   "app-not-found": "アプリが見つかりません: {{app}}",
   "app-only-over-tor": "{{app}}はTor経由でのみ利用できます。このアプリを開くには、リモートアクセス用のURL（設定 > 詳細設定 > リモート Tor アクセス）にあるUmbrelへTorブラウザでアクセスしてください。",
   "app-page.section.about": "このアプリについて",

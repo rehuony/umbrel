@@ -1,3 +1,4 @@
+import {compute} from 'compute-scroll-into-view'
 import {Search as SearchIcon} from 'lucide-react'
 import {
 	createContext,
@@ -8,6 +9,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type CSSProperties,
 	type SetStateAction,
 } from 'react'
 import {ErrorBoundary} from 'react-error-boundary'
@@ -138,7 +140,11 @@ export function CmdkMenu() {
 			input.removeAttribute('aria-activedescendant')
 			return
 		}
-		selected.scrollIntoView({block: 'nearest'})
+		// Never scroll the card or stage: the search field must stay in place.
+		for (const {el, top, left} of compute(selected, {scrollMode: 'if-needed', block: 'nearest', boundary: list})) {
+			el.scrollTop = top
+			el.scrollLeft = left
+		}
 		input.setAttribute('aria-activedescendant', selected.id)
 	}, [open, value])
 
@@ -208,6 +214,8 @@ export function CmdkMenu() {
 				setQuery('')
 			}}
 			commandProps={{
+				className: '[--cmdk-orb-gap:16px] sm:[--cmdk-orb-gap:20px]',
+				style: {'--cmdk-orb-size': `${isMobile ? ORB_SIZE.mobile : ORB_SIZE.desktop}px`} as CSSProperties,
 				value,
 				onValueChange: (next) => {
 					if (navKeyDownRef.current) userMovedRef.current = true
@@ -246,7 +254,7 @@ export function CmdkMenu() {
 					}
 					onClear={() => setQuery('')}
 					clearLabel={t('cmdk.clear-search')}
-					wrapperClassName='h-11 rounded-full bg-white/6 pr-1.5 pl-3.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_0_0_0.5px_rgb(255_255_255/0.08)] sm:h-12'
+					wrapperClassName='shrink-0 h-11 rounded-full bg-white/6 pr-1.5 pl-3.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_0_0_0.5px_rgb(255_255_255/0.08)] sm:h-12'
 					className='px-2.5 text-14 sm:text-15'
 					onKeyDown={(event) => {
 						// An IME owns the keys while composing (Tab, arrows and space pick candidates)
@@ -305,7 +313,7 @@ function CmdkOrbStage({
 	pulseKey: number
 }) {
 	return (
-		<div className='cmdk-orb-stage relative mb-4 shrink-0 sm:mb-5' style={{width: size, height: size}}>
+		<div className='cmdk-orb-stage relative mb-[var(--cmdk-orb-gap)] shrink-0' style={{width: size, height: size}}>
 			<div
 				aria-hidden='true'
 				className='pointer-events-none absolute -inset-[45%] rounded-full'
@@ -333,7 +341,7 @@ function CmdkCard({children}: {children: React.ReactNode}) {
 		if (!outer || !inner) return
 		let measured = false
 		const observer = new ResizeObserver(() => {
-			const height = inner.offsetHeight
+			const height = inner.offsetHeight + 1
 			if (!measured) {
 				measured = true
 				outer.style.transition = 'none'
@@ -349,8 +357,11 @@ function CmdkCard({children}: {children: React.ReactNode}) {
 	}, [])
 
 	return (
-		<div ref={outerRef} className={cn(materialSurfaceClasses.modal, 'cmdk-card w-full overflow-hidden')}>
-			<div ref={innerRef} className='p-3'>
+		<div ref={outerRef} className={cn(materialSurfaceClasses.modal, 'cmdk-card w-full shrink-0 overflow-clip')}>
+			<div
+				ref={innerRef}
+				className='flex max-h-[calc(var(--cmdk-stage-height)-var(--cmdk-orb-size)-var(--cmdk-orb-gap)-1px)] flex-col p-3'
+			>
 				{children}
 			</div>
 		</div>

@@ -35,6 +35,7 @@ describe('terminal WebSocket lifecycle', () => {
 		onData: ReturnType<typeof vi.fn>
 		write: ReturnType<typeof vi.fn>
 		kill: ReturnType<typeof vi.fn>
+		resize: ReturnType<typeof vi.fn>
 	}
 	let onPtyData: (data: string) => void
 
@@ -46,6 +47,7 @@ describe('terminal WebSocket lifecycle', () => {
 			}),
 			write: vi.fn(),
 			kill: vi.fn(),
+			resize: vi.fn(),
 		}
 		spawn.mockReset().mockReturnValue(ptyProcess)
 		$.mockReset().mockResolvedValue({stdout: 'umbrel'})
@@ -66,6 +68,51 @@ describe('terminal WebSocket lifecycle', () => {
 			rows: 24,
 		})
 		expect(socket.send).toHaveBeenCalledWith('Welcome\r\n')
+	})
+
+	test('resizes the existing shell without interpreting control messages as commands', async () => {
+		const handler = createTerminalWebSocketHandler({umbreld: {} as never, logger: {error: vi.fn()} as never})
+		const socket = new TestWebSocket()
+		await handler(socket as unknown as WebSocket, {url: '/terminal?cols=80&rows=24'} as http.IncomingMessage)
+		socket.emit('message', Buffer.from(JSON.stringify({type: 'resize', cols: 120, rows: 40})), true)
+		expect(ptyProcess.resize).toHaveBeenCalledWith(120, 40)
+		expect(ptyProcess.write).not.toHaveBeenCalled()
+		expect(spawn).toHaveBeenCalledTimes(1)
+		socket.readyState = WebSocket.CLOSING
+		socket.emit('message', Buffer.from(JSON.stringify({type: 'resize', cols: 90, rows: 30})), true)
+		expect(ptyProcess.resize).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		'not JSON',
+		JSON.stringify({type: 'resize', cols: 0, rows: 24}),
+		JSON.stringify({type: 'resize', cols: 80, rows: 501}),
+		JSON.stringify({type: 'resize', cols: 80.5, rows: 24}),
+		JSON.stringify({type: 'input', data: 'touch bad-file'}),
+	])('rejects invalid resize controls without sending them to the shell: %s', async (message) => {
+		const handler = createTerminalWebSocketHandler({umbreld: {} as never, logger: {error: vi.fn()} as never})
+		const socket = new TestWebSocket()
+		await handler(socket as unknown as WebSocket, {url: '/terminal?cols=80&rows=24'} as http.IncomingMessage)
+		socket.emit('message', Buffer.from(message), true)
+		expect(socket.close).toHaveBeenCalledWith(1008, 'Invalid terminal control')
+		expect(ptyProcess.resize).not.toHaveBeenCalled()
+		expect(ptyProcess.write).not.toHaveBeenCalled()
+	})
+
+	test('uses the latest size when a resize arrives during shell initialization', async () => {
+		const username = deferred<{stdout: string}>()
+		$.mockReturnValue(username.promise)
+		const handler = createTerminalWebSocketHandler({umbreld: {} as never, logger: {error: vi.fn()} as never})
+		const socket = new TestWebSocket()
+		const handling = handler(socket as unknown as WebSocket, {url: '/terminal?cols=80&rows=24'} as http.IncomingMessage)
+		socket.emit('message', Buffer.from(JSON.stringify({type: 'resize', cols: 100, rows: 35})), true)
+		username.resolve({stdout: 'umbrel'})
+		await handling
+		expect(spawn).toHaveBeenCalledWith('sudo', ['--user', 'umbrel', '--login'], {
+			name: 'xterm-color',
+			cols: 100,
+			rows: 35,
+		})
 	})
 
 	test('does not spawn a PTY after the socket disconnects during asynchronous setup', async () => {

@@ -131,13 +131,6 @@ export default function AdvancedSettingsDrawerOrDialog() {
 
 	const mainContent = (
 		<div className='flex flex-col gap-y-3'>
-			<label className={cardClass}>
-				<CardText title={t('terminal')} description={t('terminal-description')} />
-				<IconButtonLink className='pointer-events-auto self-center' to='/settings?dialog=terminal'>
-					{t('open')}
-				</IconButtonLink>
-			</label>
-
 			{networkSettingRow}
 			<button
 				onClick={() => setActivePanel('external-access')}

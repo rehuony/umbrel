@@ -29,7 +29,7 @@
   "active-logins.title": "Aktívne prihlásenia",
   "active-logins.unknown-device": "Neznáme zariadenie",
   "advanced-settings": "Rozšírené nastavenia",
-  "advanced-settings-description": "Terminál, umbrelOS Beta Program, nastavenia siete a ďalšie",
+  "advanced-settings-description": "Externý prístup, HTTPS a nastavenia siete",
   "app-not-found": "Aplikácia sa nenašla: {{app}}",
   "app-only-over-tor": "{{app}} sa dá používať iba cez Tor. Ak chceš otvoriť túto aplikáciu, pristúp k svojmu Umbrel v prehliadači Tor na URL vzdialeného prístupu (Nastavenia > Rozšírené nastavenia > Vzdialený prístup cez Tor).",
   "app-page.section.about": "O tejto aplikácii",

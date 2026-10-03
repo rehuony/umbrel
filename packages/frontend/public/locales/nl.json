@@ -29,7 +29,7 @@
   "active-logins.title": "Actieve aanmeldingen",
   "active-logins.unknown-device": "Onbekend apparaat",
   "advanced-settings": "Geavanceerde instellingen",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, netwerkinstellingen en meer",
+  "advanced-settings-description": "Externe toegang, HTTPS en netwerkinstellingen",
   "app-not-found": "App niet gevonden: {{app}}",
   "app-only-over-tor": "{{app}} kan alleen via Tor worden gebruikt. Open deze app door je Umbrel in een Tor-browser te benaderen via je URL voor externe toegang (Instellingen > Geavanceerde instellingen > Tor-toegang op afstand).",
   "app-page.section.about": "Over deze app",

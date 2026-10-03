@@ -3,7 +3,7 @@ import {useTranslation} from 'react-i18next'
 import {matchPath, Outlet, useLocation, useNavigate} from 'react-router-dom'
 
 import {DialogCloseButton} from '@/components/ui/dialog-close-button'
-import {Sheet, SheetContent, SheetTitle} from '@/components/ui/sheet'
+import {Sheet, SHEET_EXIT_DURATION_MS, SheetContent, SheetTitle} from '@/components/ui/sheet'
 import {ScrollArea} from '@/components/ui/sheet-scroll-area'
 import {useScrollRestoration} from '@/hooks/use-scroll-restoration'
 import {cn} from '@/lib/utils'
@@ -14,10 +14,6 @@ import {usePauseWallpaperVideo} from '@/providers/wallpaper'
 import {useAfterDelayedClose} from '@/utils/dialog'
 
 import {getSheetScrollRestorationAction} from './sheet-scroll-restoration'
-
-// Matches the umbrel-sheet-out duration in index.css, so the route unmounts
-// (and the desktop takes back over) right as the close animation lands
-const SHEET_EXIT_DURATION_MS = 200
 
 export function SheetLayout() {
 	const {t} = useTranslation()

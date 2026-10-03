@@ -29,7 +29,7 @@
   "active-logins.title": "Ενεργές συνδέσεις",
   "active-logins.unknown-device": "Άγνωστη συσκευή",
   "advanced-settings": "Προηγμένες ρυθμίσεις",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, ρυθμίσεις δικτύου και άλλα",
+  "advanced-settings-description": "Εξωτερική πρόσβαση, HTTPS και ρυθμίσεις δικτύου",
   "app-not-found": "Η εφαρμογή δεν βρέθηκε: {{app}}",
   "app-only-over-tor": "Το {{app}} μπορεί να χρησιμοποιηθεί μόνο μέσω Tor. Άνοιξε το Umbrel σου σε ένα πρόγραμμα περιήγησης Tor από το URL απομακρυσμένης πρόσβασης σου (Ρυθμίσεις > Προηγμένες ρυθμίσεις > Απομακρυσμένη πρόσβαση Tor) για να ανοίξεις αυτή την εφαρμογή.",
   "app-page.section.about": "Σχετικά με αυτή την εφαρμογή",

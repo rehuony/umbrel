@@ -269,7 +269,7 @@ html {
 	   what reads as the settle. Keep entry opaque: fading the whole sheet exposes
 	   the sharp desktop through its material while Photos replaces loading content.
 	   The close duration must match
-	   SHEET_EXIT_DURATION_MS in layouts/sheet.tsx, which navigates away
+	   SHEET_EXIT_DURATION_MS in components/ui/sheet.tsx, which navigates away
 	   (unmounting the route) once the animation lands. */
 	.umbrel-sheet-zoom {
 		transform-origin: 50% 100%;
@@ -1027,15 +1027,10 @@ html {
 
 [cmdk-list] {
 	transition: height 100ms ease;
-	/* height: var(--cmdk-list-height); */
-	/* min-height: 200px; */
-	max-height: 500px;
 	/* Results cross the overflow threshold constantly while typing; keep the
 	   scrollbar's space reserved so rows don't jitter sideways — on both edges,
 	   so rows stay centred under the search field */
 	scrollbar-gutter: stable both-edges;
-	/* scroll-padding-block-start: 20px; */
-	/* scroll-padding-block-end: 20px; */
 }
 
 /* Breathing room between list rows only; tiles sit in their own grid */

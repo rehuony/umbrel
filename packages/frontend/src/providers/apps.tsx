@@ -60,6 +60,13 @@ export const systemApps = [
 		systemAppTo: '/machines',
 	},
 	{
+		id: 'UMBREL_terminal',
+		name: 'Terminal',
+		icon: '/assets/dock/dock-terminal.svg',
+		systemApp: true,
+		systemAppTo: '/?dialog=terminal',
+	},
+	{
 		id: 'UMBREL_live-usage',
 		name: 'Live Usage',
 		icon: '/assets/dock/dock-live-usage.webp',

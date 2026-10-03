@@ -29,7 +29,7 @@
   "active-logins.title": "Connexions actives",
   "active-logins.unknown-device": "Appareil inconnu",
   "advanced-settings": "Paramètres avancés",
-  "advanced-settings-description": "Terminal, Programme bêta umbrelOS, paramètres réseau et plus",
+  "advanced-settings-description": "Accès externe, HTTPS et paramètres réseau",
   "app-not-found": "Application non trouvée : {{app}}",
   "app-only-over-tor": "{{app}} ne peut être utilisé que via Tor. Accédez à votre Umbrel depuis un navigateur Tor en utilisant votre URL d'accès à distance (Paramètres > Paramètres avancés > Accès distant via Tor) pour ouvrir cette application.",
   "app-page.section.about": "À propos de cette application",

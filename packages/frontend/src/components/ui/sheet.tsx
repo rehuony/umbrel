@@ -5,6 +5,9 @@ import * as React from 'react'
 import {cn} from '@/lib/utils'
 import {useWallpaper, WallpaperAvifSource} from '@/providers/wallpaper'
 
+// Matches the bottom-zoom exit animation in index.css.
+export const SHEET_EXIT_DURATION_MS = 200
+
 const Sheet = SheetPrimitive.Root
 
 const SheetTrigger = SheetPrimitive.Trigger

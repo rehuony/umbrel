@@ -29,7 +29,7 @@
   "active-logins.title": "活跃的登录",
   "active-logins.unknown-device": "未知设备",
   "advanced-settings": "高级设置",
-  "advanced-settings-description": "Terminal、umbrelOS Beta Program、网络设置等",
+  "advanced-settings-description": "外部访问、HTTPS 和网络设置",
   "app-not-found": "未找到应用：{{app}}",
   "app-only-over-tor": "{{app}} 只能通过 Tor 使用。请在 Tor 浏览器中通过你的远程访问 URL 访问你的 Umbrel（设置 > 高级设置 > 远程 Tor 访问）来打开这个应用。",
   "app-page.section.about": "关于此应用",

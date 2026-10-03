@@ -25,7 +25,7 @@ vi.mock('@/hooks/use-is-home-or-pro', () => ({
 	useIsHomeOrPro: () => ({deviceName: 'Umbrel Home'}),
 }))
 vi.mock('@/providers/apps', () => ({
-	systemAppsKeyed: {UMBREL_settings: {icon: 'settings.svg'}},
+	systemAppsKeyed: {UMBREL_settings: {icon: 'settings.svg'}, UMBREL_terminal: {icon: 'terminal.svg'}},
 }))
 vi.mock('@/trpc/trpc', () => ({
 	trpcReact: {user: {get: {useQuery: () => ({data: {role: 'owner'}, isLoading: false})}}},
@@ -72,6 +72,12 @@ describe('Settings Command-K entries', () => {
 		expect(entries.length).toBeGreaterThan(20)
 		expect(new Set(ids(entries)).size).toBe(entries.length)
 		expect(ids(entries).every((id) => /^settings:[a-z0-9-]+$/.test(id))).toBe(true)
+	})
+
+	it('finds the host terminal with its own icon and no removed settings-page label', () => {
+		const terminal = rankCmdkEntries(renderEntries(), 'terminal', 25).find(({id}) => id === 'settings:terminal')
+		expect(terminal?.icon).toBe('terminal.svg')
+		expect(terminal?.subtitle).toBeUndefined()
 	})
 
 	it('shows the established actions without a query', () => {

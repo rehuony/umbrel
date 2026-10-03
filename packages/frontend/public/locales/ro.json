@@ -29,7 +29,7 @@
   "active-logins.title": "Sesiuni active",
   "active-logins.unknown-device": "Dispozitiv necunoscut",
   "advanced-settings": "Setări avansate",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, setări de rețea și altele",
+  "advanced-settings-description": "Acces extern, HTTPS și setări de rețea",
   "app-not-found": "Aplicația nu a fost găsită: {{app}}",
   "app-only-over-tor": "{{app}} poate fi folosită doar prin Tor. Te rugăm să îți accesezi Umbrel într-un browser Tor la URL-ul tău de acces de la distanță (Setări > Setări avansate > Acces Tor de la distanță) pentru a deschide această aplicație.",
   "app-page.section.about": "Despre această aplicație",

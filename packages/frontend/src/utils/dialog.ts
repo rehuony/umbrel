@@ -90,7 +90,7 @@ export function useAfterDelayedClose(open: boolean, cb: () => void, delayMs: num
 }
 
 /** Allow controlling dialog from query params */
-export function useDialogOpenProps(dialogKey: DialogKey) {
+export function useDialogOpenProps(dialogKey: DialogKey, exitDuration = EXIT_DURATION_MS) {
 	const [searchParams, setSearchParams] = useSearchParams()
 	const [open, setOpen] = useState(false)
 
@@ -104,7 +104,7 @@ export function useDialogOpenProps(dialogKey: DialogKey) {
 		setOpen(open)
 		if (open) setSearchParams(withDialog(searchParams, dialogKey))
 		// The params outlive the close so the exit animation can play
-		else sleep(EXIT_DURATION_MS).then(() => setSearchParams(withoutDialog(searchParams)))
+		else sleep(exitDuration).then(() => setSearchParams(withoutDialog(searchParams)))
 	}
 
 	return {open, onOpenChange}

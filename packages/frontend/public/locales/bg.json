@@ -29,7 +29,7 @@
   "active-logins.title": "Активни влизания",
   "active-logins.unknown-device": "Неизвестно устройство",
   "advanced-settings": "Разширени настройки",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, мрежови настройки и още",
+  "advanced-settings-description": "Външен достъп, HTTPS и мрежови настройки",
   "app-not-found": "Приложението не е намерено: {{app}}",
   "app-only-over-tor": "{{app}} може да се използва само през Tor. Моля, отвори своя Umbrel в Tor браузър чрез URL адреса си за отдалечен достъп (Settings > Advanced settings > Remote Tor access), за да отвориш това приложение.",
   "app-page.section.about": "Относно това приложение",

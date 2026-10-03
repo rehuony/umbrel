@@ -46,7 +46,7 @@ const CommandDialog = ({children, contentClassName, commandProps, onEscapeKeyDow
 				aria-describedby={undefined}
 				className={cn(
 					'cmdk-stage fixed left-1/2 z-[999] flex -translate-x-1/2 flex-col items-center outline-hidden',
-					'top-4 max-h-[calc(100dvh-32px)] w-full max-w-[calc(100%-32px)] sm:max-w-[720px] lg:top-[8%] lg:max-h-[84dvh]',
+					'top-4 max-h-[var(--cmdk-stage-height)] w-full max-w-[calc(100%-32px)] [--cmdk-stage-height:calc(100dvh-32px)] sm:max-w-[720px] lg:top-[8%] lg:[--cmdk-stage-height:84dvh]',
 					contentClassName,
 				)}
 			>

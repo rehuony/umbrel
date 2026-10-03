@@ -131,6 +131,7 @@ export function DockItem({
 			>
 				<Link
 					to={to || '/'}
+					aria-label={label}
 					className='absolute inset-0 outline-hidden'
 					onClick={(e) => {
 						setClickedOpen(true)

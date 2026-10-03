@@ -4,9 +4,16 @@ import {readFile} from 'node:fs/promises'
 import {$} from 'execa'
 import pty, {IPty} from 'node-pty'
 import {WebSocket} from 'ws'
+import {z} from 'zod'
 
 import type Umbreld from '../../index.js'
 import type createLogger from '../utilities/logger.js'
+
+const terminalSize = z.object({
+	cols: z.number().int().min(1).max(500),
+	rows: z.number().int().min(1).max(500),
+})
+const terminalResize = terminalSize.extend({type: z.literal('resize')}).strict()
 
 export default function createTerminalWebSocketHandler({
 	umbreld,
@@ -26,9 +33,28 @@ export default function createTerminalWebSocketHandler({
 		})
 
 		try {
-			const appId = new URL(`https://localhost/${request.url}`).searchParams.get('appId')
-			const cols = Number(new URL(`https://localhost/${request.url}`).searchParams.get('cols'))
-			const rows = Number(new URL(`https://localhost/${request.url}`).searchParams.get('rows'))
+			const {searchParams} = new URL(`https://localhost/${request.url}`)
+			const appId = searchParams.get('appId')
+			let size = terminalSize.parse({cols: Number(searchParams.get('cols')), rows: Number(searchParams.get('rows'))})
+			// A hostile peer can continue delivering buffered frames after a graceful
+			// close begins. Never write terminal input unless the socket is fully open.
+			ws.on('message', (data, isBinary) => {
+				if (ws.readyState !== WebSocket.OPEN) return
+				// Text frames are shell input; binary frames carry resize controls only.
+				if (!isBinary) {
+					ptyProcess?.write(data.toString())
+					return
+				}
+				try {
+					const message = data.toString()
+					if (message.length > 128) throw new Error('Invalid terminal control')
+					const control = terminalResize.parse(JSON.parse(message))
+					size = {cols: control.cols, rows: control.rows}
+					ptyProcess?.resize(size.cols, size.rows)
+				} catch {
+					ws.close(1008, 'Invalid terminal control')
+				}
+			})
 
 			if (appId) {
 				const app = await umbreld.apps.getApp(appId)
@@ -63,8 +89,7 @@ export default function createTerminalWebSocketHandler({
 					],
 					{
 						name: 'xterm-color',
-						cols,
-						rows,
+						...size,
 					},
 				)
 			} else {
@@ -78,19 +103,12 @@ export default function createTerminalWebSocketHandler({
 				// With no command, sudo uses the account's configured login shell and home.
 				ptyProcess = pty.spawn('sudo', ['--user', username, '--login'], {
 					name: 'xterm-color',
-					cols,
-					rows,
+					...size,
 				})
 			}
 			// Stream output from the shell to the WebSocket
 			ptyProcess.onData((data) => {
 				if (ws.readyState === WebSocket.OPEN) ws.send(data)
-			})
-
-			// A hostile peer can continue delivering buffered frames after a graceful
-			// close begins. Never write terminal input unless the socket is fully open.
-			ws.on('message', (data) => {
-				if (ws.readyState === WebSocket.OPEN) ptyProcess?.write(data.toString())
 			})
 		} catch (error) {
 			logger.error(`Terminal socket`, error)

@@ -16,4 +16,5 @@ export function prefetchRouteChunks() {
 	import('@/features/machines/components/machines-index')
 	import('@/routes/edit-widgets')
 	import('@/routes/live-usage')
+	import('@/routes/settings/terminal')
 }

@@ -29,7 +29,7 @@
   "active-logins.title": "使用中的登入",
   "active-logins.unknown-device": "未知裝置",
   "advanced-settings": "進階設定",
-  "advanced-settings-description": "Terminal、umbrelOS Beta Program、網路設定等",
+  "advanced-settings-description": "外部存取、HTTPS 與網路設定",
   "app-not-found": "找不到應用程式：{{app}}",
   "app-only-over-tor": "{{app}} 只能透過 Tor 使用。請在 Tor 瀏覽器中使用你的遠端存取 URL 開啟 Umbrel（設定 > 進階設定 > 遠端 Tor 存取），以開啟此應用程式。",
   "app-page.section.about": "關於此應用程式",

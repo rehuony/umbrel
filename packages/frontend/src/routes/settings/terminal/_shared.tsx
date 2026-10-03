@@ -2,13 +2,10 @@ import {FitAddon} from '@xterm/addon-fit'
 import {Terminal} from '@xterm/xterm'
 import {useEffect, useRef, useState} from 'react'
 import {TbArrowRight, TbClipboard, TbX} from 'react-icons/tb'
-import {useMeasure} from 'react-use'
 
 import {Button} from '@/components/ui/button'
 import {useIsTouchDevice} from '@/features/files/hooks/use-is-touch-device'
 import {useIsMobile} from '@/hooks/use-is-mobile'
-import {BackLink} from '@/modules/immersive-picker'
-import {usePickerTarget} from '@/modules/immersive-picker/target'
 import {trpcClient} from '@/trpc/trpc'
 
 import {createAuthenticatedTerminalSocket} from './terminal-connection'
@@ -16,12 +13,6 @@ import {createAuthenticatedTerminalSocket} from './terminal-connection'
 import '@xterm/xterm/css/xterm.css'
 
 import {useTranslation} from 'react-i18next'
-
-export function TerminalTitleBackLink() {
-	const {t} = useTranslation()
-	const {linkToTarget} = usePickerTarget('terminal')
-	return <BackLink to={linkToTarget({type: 'picker'})}>{t('terminal')}</BackLink>
-}
 
 // Minimum columns for MOTD display (warning box is 79 chars wide)
 const MIN_COLS = 80
@@ -40,8 +31,7 @@ export const XTermTerminal = ({appId}: {appId?: string}) => {
 	// TODO: link this to the theme
 	const fontFamily = 'SF Mono, SFMono-Regular, ui-monospace, DejaVu Sans Mono, Menlo, Consolas, monospace'
 
-	const [parentContainerRef, {width: containerWidth, height: containerHeight}] = useMeasure()
-	const [charMeasureRef, {width: charWidth}] = useMeasure()
+	const fitRef = useRef<(() => void) | null>(null)
 	const [connectionFailed, setConnectionFailed] = useState(false)
 	const [connectionAttempt, setConnectionAttempt] = useState(0)
 
@@ -61,7 +51,10 @@ export const XTermTerminal = ({appId}: {appId?: string}) => {
 	// On narrow screens (e.g., mobile), terminal may be wider than container (due to MIN_COLS).
 	// We auto-scroll horizontally to keep cursor visible as the user types, otherwise they can't see what they're typing.
 	const scrollToCursor = () => {
-		if (!scrollContainerRef.current || !terminalRef.current || charWidth === 0) return
+		if (!scrollContainerRef.current || !terminalRef.current) return
+		const screen = containerRef.current?.querySelector<HTMLElement>('.xterm-screen')
+		if (!screen) return
+		const charWidth = screen.clientWidth / terminalRef.current.cols
 		const cursorX = terminalRef.current.buffer.active.cursorX
 		const cursorPixelX = cursorX * charWidth + 16 // 16px left padding
 		const container = scrollContainerRef.current
@@ -76,29 +69,48 @@ export const XTermTerminal = ({appId}: {appId?: string}) => {
 	}
 
 	useEffect(() => {
-		if (containerWidth === 0 || containerHeight === 0) return
+		const container = containerRef.current
+		if (!container) return
 		let cancelled = false
+		setConnectionFailed(false)
 
-		// Clean up previous instances if they exist
-		terminalRef.current?.dispose()
-		ws.current?.close()
-
-		const terminal = new Terminal({fontSize, fontFamily})
+		const terminal = new Terminal({
+			fontSize,
+			fontFamily,
+			allowTransparency: true,
+			theme: {background: '#00000000'},
+			cursorStyle: 'bar',
+			cursorBlink: true,
+			cursorInactiveStyle: 'bar',
+		})
 		const fitAddon = new FitAddon()
 		terminalRef.current = terminal
 
-		const connect = async () => {
-			if (!containerRef.current) return
-			terminal.loadAddon(fitAddon)
-			terminal.open(containerRef.current)
-			terminal.focus()
+		terminal.loadAddon(fitAddon)
+		terminal.open(container)
+		terminal.focus()
+		const fit = () => {
+			if (!container.clientWidth || !container.clientHeight) return
 			fitAddon.fit()
 
 			// Enforce minimum cols for MOTD display on narrow screens
 			if (terminal.cols < MIN_COLS) {
 				terminal.resize(MIN_COLS, terminal.rows)
 			}
-
+		}
+		fitRef.current = fit
+		fit()
+		// Resize the existing PTY instead of replacing the user's shell session.
+		const sendSize = () => {
+			if (ws.current?.readyState !== WebSocket.OPEN) return
+			ws.current.send(
+				new TextEncoder().encode(JSON.stringify({type: 'resize', cols: terminal.cols, rows: terminal.rows})),
+			)
+		}
+		terminal.onResize(sendSize)
+		const observer = new ResizeObserver(fit)
+		observer.observe(container)
+		const connect = async () => {
 			// We read dimensions AFTER fit/resize so server PTY matches xterm exactly.
 			// If mismatched, the server thinks lines wrap at a different column than xterm,
 			// causing text to overwrite itself when typing past the (server's) line boundary.
@@ -114,33 +126,42 @@ export const XTermTerminal = ({appId}: {appId?: string}) => {
 					return new WebSocket(`${wsProtocol}${window.location.hostname}${port}${path}`)
 				},
 				isCancelled: () => cancelled,
-				onConnected: () => setConnectionFailed(false),
+				onConnected: () => {
+					setConnectionFailed(false)
+					sendSize()
+				},
 				onDisconnected: () => setConnectionFailed(true),
 			})
 			if (!socket || cancelled) return
 			ws.current = socket
 
 			socket.onmessage = (event) => {
-				terminal.write(event.data)
-				scrollToCursor()
+				terminal.write(event.data, () => {
+					if (!cancelled) scrollToCursor()
+				})
 			}
-			terminal.onData((data) => ws.current?.send(data))
+			terminal.onData((data) => {
+				if (socket.readyState === WebSocket.OPEN) socket.send(data)
+			})
 		}
 		void connect()
 
 		return () => {
 			cancelled = true
+			observer.disconnect()
+			fitRef.current = null
 			terminal.dispose()
 			ws.current?.close()
 		}
-	}, [appId, connectionAttempt, containerWidth, containerHeight])
+	}, [appId, connectionAttempt])
+
+	useEffect(() => {
+		if (terminalRef.current) terminalRef.current.options.fontSize = fontSize
+		fitRef.current?.()
+	}, [fontSize])
 
 	return (
-		<div
-			ref={parentContainerRef as React.LegacyRef<HTMLDivElement>}
-			data-native-context-menu
-			className='relative h-full w-full overflow-hidden rounded-12 bg-black/50'
-		>
+		<div data-native-context-menu className='relative h-full min-h-0 w-full flex-1 overflow-hidden'>
 			{connectionFailed && (
 				<div className='absolute inset-0 z-20 flex items-center justify-center bg-black/80'>
 					<div className='flex flex-col items-center gap-3 text-center'>
@@ -158,13 +179,6 @@ export const XTermTerminal = ({appId}: {appId?: string}) => {
 					</div>
 				</div>
 			)}
-			{/* Hidden character to measure monospace character width */}
-			<div
-				ref={charMeasureRef as React.LegacyRef<HTMLDivElement>}
-				style={{fontFamily, fontSize, visibility: 'hidden', position: 'absolute', whiteSpace: 'nowrap'}}
-			>
-				W
-			</div>
 
 			{/* Paste button ONLY for touch devices. Without this, touch device users have no way to paste commands into the terminal. */}
 			{/* xterm renders to a canvas which doesn't receive native paste gestures, so we allow users to paste via an input */}
@@ -214,11 +228,11 @@ export const XTermTerminal = ({appId}: {appId?: string}) => {
 			)}
 			{/* Scroll container for horizontal scrolling on narrow screens */}
 			<div ref={scrollContainerRef} className='h-full w-full overflow-x-auto overflow-y-hidden'>
-				{/* 980px min width (for mobile) cause side scrolling is better than wrapping */}
+				{/* Keep an 80-column canvas on phones without forcing a desktop-sized width. */}
 				{/* Using `tracking-normal` and `text-rendering: unset` to prevent cursor text selection from not selecting the correct text */}
 				{/* Note: xterm.js handles text selection internally, so no `select-text` class needed */}
 				{/* Padding is on the outer div so FitAddon measures the correct available height for row calculation */}
-				<div className='h-full w-full min-w-[980px] px-4 py-3'>
+				<div className='h-full w-full min-w-[calc(80ch+32px)] px-4 py-3' style={{fontFamily, fontSize}}>
 					<div ref={containerRef} className='h-full w-full tracking-normal' style={{textRendering: 'unset'}} />
 				</div>
 			</div>

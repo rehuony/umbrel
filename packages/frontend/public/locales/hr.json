@@ -29,7 +29,7 @@
   "active-logins.title": "Aktivne prijave",
   "active-logins.unknown-device": "Nepoznati uređaj",
   "advanced-settings": "Napredne postavke",
-  "advanced-settings-description": "Terminal, umbrelOS Beta Program, mrežne postavke i još mnogo toga",
+  "advanced-settings-description": "Vanjski pristup, HTTPS i mrežne postavke",
   "app-not-found": "Aplikacija nije pronađena: {{app}}",
   "app-only-over-tor": "{{app}} se može koristiti samo preko Tor mreže. Otvori svoj Umbrel u Tor pregledniku na URL-u za udaljeni pristup (Postavke > Napredne postavke > Udaljeni Tor pristup) kako bi otvorio ovu aplikaciju.",
   "app-page.section.about": "O ovoj aplikaciji",
