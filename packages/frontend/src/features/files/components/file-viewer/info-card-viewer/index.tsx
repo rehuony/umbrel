@@ -2,10 +2,10 @@ import {useTranslation} from 'react-i18next'
 
 import {ViewerWrapper} from '@/features/files/components/file-viewer/viewer-wrapper'
 import {FileItemIcon} from '@/features/files/components/shared/file-item-icon'
-import {FILE_TYPE_MAP} from '@/features/files/constants'
 import type {FileSystemItem} from '@/features/files/types'
 import {formatFilesystemDate} from '@/features/files/utils/format-filesystem-date'
 import {formatFilesystemSize} from '@/features/files/utils/format-filesystem-size'
+import {getFileType} from '@/features/files/utils/get-file-type'
 import {useLanguage} from '@/hooks/use-language'
 
 interface InfoCardViewerProps {
@@ -16,7 +16,7 @@ export default function InfoCardViewer({item}: InfoCardViewerProps) {
 	const {t} = useTranslation()
 	const [languageCode] = useLanguage()
 
-	const fileType = item.type ? FILE_TYPE_MAP[item.type as keyof typeof FILE_TYPE_MAP]?.nameTKey : ''
+	const fileType = getFileType(item)?.nameTKey
 	const translatedFileType = fileType ? t(fileType) : item.type
 
 	const typeLine = [

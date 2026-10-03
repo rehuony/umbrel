@@ -16,6 +16,28 @@ afterEach(async () => {
 	await Promise.all(directories.splice(0).map((directory) => rm(directory, {recursive: true, force: true})))
 })
 
+test.each([1, 6])('preserves nested files and skips media recompression at ZIP level %s', async (compressionLevel) => {
+	const directory = await mkdtemp(nodePath.join(tmpdir(), 'files-archive-'))
+	directories.push(directory)
+	const source = nodePath.join(directory, 'documents')
+	await mkdir(source)
+	const text = 'name,value\npreview,42\n'.repeat(100)
+	const media = Buffer.from([0, 255, 1, 2, 3, 4])
+	await Promise.all([
+		writeFile(nodePath.join(source, 'table.csv'), text),
+		writeFile(nodePath.join(source, 'photo.webp'), media),
+		writeFile(nodePath.join(source, 'empty.txt'), ''),
+	])
+	const archive = new Archive({logger: {createChildLogger: () => ({})}} as unknown as Umbreld)
+	const destination = nodePath.join(directory, 'download.zip')
+	await pipeline(await archive.createZipStream([source], {compressionLevel}), createWriteStream(destination))
+	const zip = new AdmZip(destination)
+	expect(zip.readAsText('documents/table.csv')).toBe(text)
+	expect(zip.readFile('documents/photo.webp')).toEqual(media)
+	expect(zip.readAsText('documents/empty.txt')).toBe('')
+	expect(zip.getEntry('documents/photo.webp')!.header.method).toBe(0)
+})
+
 test('creates a flat Photos zip across folders and disambiguates duplicate basenames', async () => {
 	const directory = await mkdtemp(nodePath.join(tmpdir(), 'photos-archive-'))
 	directories.push(directory)

@@ -1,5 +1,17 @@
 # Refactor and Validation Record
 
+## Files previews and transfer overhead
+
+Common text formats reuse the existing text editor, including CSV and TypeScript. Preview selection, icons, and type labels share the same classification. Ambiguous `.ts` filenames default to text in the UI; this is a filename heuristic, not content detection. The editor retains its size limit, UTF-8 validation, and binary-data rejection. WebP uses the existing image viewer. No conversion service or dependency was added.
+
+Uploads use a bounded 256 KiB write buffer with existing backpressure, authorization, temporary-file publication, and durability checks. Downloaded ZIP archives use compression level 1; the separate Compress action retains level 6. Already compressed media still bypass deflate. Single-file download and range handling are unchanged.
+
+- Frontend Files tests: 28 files, 230 tests passed. Backend file API, archive, upload preflight, and ingress upload tests: 4 files, 32 tests passed. Both package type checks, focused formatting/lint, production frontend build, and `git diff --check` passed. Existing bundle-size warnings remain.
+- Browser checks confirmed Markdown rendering, TXT/CSV/TypeScript text preview, WebP image preview, and the corrected TypeScript icon and type label after reload.
+- A real HTTP test verified a 4 MiB streamed upload, byte-for-byte download, and a range crossing the upload-buffer boundary. ZIP tests verified nested text, media bytes, empty files, and media compression bypass at both levels.
+- Local macOS and Linux-container loopback comparisons supported the buffer and ZIP changes. A structured-log sample compressed faster at level 1 with an approximately 5% larger archive; results depend on content. Single-file low throughput was not reproduced locally.
+- Gigabit LAN throughput, tens-of-gigabytes transfers, sustained memory measurements, and physical Raspberry Pi performance remain unverified. Loopback measurements are not device or network performance guarantees.
+
 ## pnpm and TypeScript toolchain migration
 
 The frontend and backend now share a pnpm workspace and one root lockfile. Makefile, CI, translation automation, remote commands, development-container installation, production deployment, and root filesystem construction use pnpm. The previous per-package npm lockfiles and npm installation settings have been removed. No remote push or release was performed during this migration.
@@ -9,7 +21,7 @@ The frontend and backend now share a pnpm workspace and one root lockfile. Makef
 | Node.js             | 24.18.0          |
 | pnpm                | 12.8.1           |
 | TypeScript          | 6.0.3            |
-| TypeScript ESLint    | 8.71.0           |
+| TypeScript ESLint   | 8.71.0           |
 | Vite / React plugin | 8.3.2 / 6.1.1    |
 | Vitest / coverage   | 4.1.11           |
 | tRPC packages       | 11.19.0          |

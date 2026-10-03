@@ -31,7 +31,6 @@ import {
 	BACKUPS_PATH,
 	CLOUD_PATH,
 	CLOUD_PROVIDER_LOGOS,
-	FILE_TYPE_MAP,
 	HOME_PATH,
 	IMAGE_EXTENSIONS_WITH_IMAGE_THUMBNAILS,
 	MACHINES_PATH,
@@ -50,6 +49,7 @@ import {useShares} from '@/features/files/hooks/use-shares'
 import type {FileSystemItem} from '@/features/files/types'
 import {CLOUD_SELF_TILE_BRANDS, cloudAccountBrand} from '@/features/files/utils/cloud'
 import {splitFileName} from '@/features/files/utils/format-filesystem-name'
+import {getFileType} from '@/features/files/utils/get-file-type'
 import {isDirectoryANetworkDevice} from '@/features/files/utils/is-directory-a-network-device-or-share'
 import {isDirectoryAnExternalDrivePartition} from '@/features/files/utils/is-directory-an-external-drive-partition'
 import {OsIcon} from '@/features/machines/components/os-icon'
@@ -225,7 +225,7 @@ const FileItemIconContent = ({
 		)
 	}
 
-	const definition = item.type ? FILE_TYPE_MAP[item.type as keyof typeof FILE_TYPE_MAP] : undefined
+	const definition = getFileType(item)
 	const DefaultThumbnail = definition?.thumbnail as React.ComponentType<{className?: string}> | null | undefined
 
 	// When rendering inside an SVG context, only return SVG-safe elements

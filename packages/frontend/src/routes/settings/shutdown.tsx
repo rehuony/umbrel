@@ -25,7 +25,7 @@ export default function ShutdownDialog() {
 				<AlertDialogHeader icon={RiShutDownLine}>
 					<AlertDialogTitle>{t('shut-down.confirm.title')}</AlertDialogTitle>
 				</AlertDialogHeader>
-				<AlertDialogFooter>
+				<AlertDialogFooter className='md:justify-center'>
 					<AlertDialogCancel disabled={isPowerActionPending}>{t('cancel')}</AlertDialogCancel>
 					<AlertDialogAction
 						variant='destructive'

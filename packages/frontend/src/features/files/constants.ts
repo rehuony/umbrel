@@ -164,7 +164,7 @@ export const FILE_TYPE_MAP = {
 
 	// Documents
 	'application/pdf': {nameTKey: 'files-type.pdf', thumbnail: PdfThumbnail, viewer: PdfViewer},
-	'text/csv': {nameTKey: 'files-type.csv', thumbnail: CsvThumbnail, viewer: null},
+	'text/csv': {nameTKey: 'files-type.csv', thumbnail: CsvThumbnail, viewer: TextViewer},
 
 	// Text / Code (editable via TextViewer)
 	'text/plain': {nameTKey: 'files-type.txt', thumbnail: TxtThumbnail, viewer: TextViewer},

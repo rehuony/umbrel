@@ -198,7 +198,9 @@ export function downloadFiles(umbreld: Umbreld) {
 			const filename = umbreld.files.archive.zipName(files, {defaultName: 'umbrel-files.zip'})
 			response.setHeader('Content-Type', 'application/zip')
 			response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
-			await pipeline(await umbreld.files.archive.createZipStream(files), response)
+			// Favor throughput over the smallest archive when downloading. Already
+			// compressed files still bypass deflate in the archive service.
+			await pipeline(await umbreld.files.archive.createZipStream(files, {compressionLevel: 1}), response)
 		} catch (error) {
 			if ((error as Error).message === 'paths must be in same directory') {
 				return response.status(400).json({error: (error as Error).message})
@@ -337,7 +339,9 @@ export async function receiveUpload(
 				constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
 				0o600,
 			)
-			const writeStream = temporaryFile.createWriteStream()
+			// Batch disk writes without buffering the entire upload. This remains
+			// bounded per transfer and lets pipeline propagate backpressure.
+			const writeStream = temporaryFile.createWriteStream({highWaterMark: 256 * 1024})
 			// The stream owns and closes this descriptor. Reopen the completed
 			// temporary file below to make its bytes durable before publication.
 			temporaryFile = undefined

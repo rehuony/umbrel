@@ -47,7 +47,7 @@ export default class Archive {
 	}
 
 	// Returns a readable stream of a zip archive from a list of system paths
-	async createZipStream(systemPaths: string[]) {
+	async createZipStream(systemPaths: string[], {compressionLevel = 6} = {}) {
 		// Check that all paths are in the same directory
 		// This is to avoid collisions in the zip archive
 		// e.g:
@@ -58,7 +58,7 @@ export default class Archive {
 		const uniqueDirectories = new Set(directories)
 		if (uniqueDirectories.size > 1) throw new Error('paths must be in same directory')
 
-		const archive = archiver('zip')
+		const archive = archiver('zip', {zlib: {level: compressionLevel}})
 		for (const systemPath of systemPaths) {
 			const status = await fse.stat(systemPath)
 

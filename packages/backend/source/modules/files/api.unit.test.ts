@@ -1,6 +1,8 @@
 import {once} from 'node:events'
 import {readFile, writeFile} from 'node:fs/promises'
 import type {AddressInfo} from 'node:net'
+import nodePath from 'node:path'
+import {Readable} from 'node:stream'
 
 import cookieParser from 'cookie-parser'
 import express from 'express'
@@ -17,11 +19,12 @@ describe('file API authentication boundaries', () => {
 	const directory = temporaryDirectory()
 	let server: ReturnType<express.Express['listen']>
 	let origin: string
+	let uploadDirectory: string
 
 	beforeAll(async () => {
 		await directory.createRoot()
 		const thumbnailDirectory = await directory.create()
-		const uploadDirectory = await directory.create()
+		uploadDirectory = await directory.create()
 		const systemPrincipal = {sessionId: 'system', accountId: OWNER_ACCOUNT_ID, actor: 'system'} as const
 		const umbreld = {
 			auth: {
@@ -37,10 +40,16 @@ describe('file API authentication boundaries', () => {
 			},
 			files: {
 				thumbnails: {thumbnailDirectory},
-				virtualToSystemPath: async () => `${uploadDirectory}/blocked.txt`,
-				authorizeWritableDestinationSystemPath: async () => {
-					throw new Error('[cloud-read-only]')
+				virtualToSystemPath: async (path: string) => `${uploadDirectory}/${nodePath.basename(path)}`,
+				authorizeWritableDestinationSystemPath: async (path: string) => {
+					if (path.endsWith('/blocked.txt')) throw new Error('[cloud-read-only]')
+					return path
 				},
+				systemToVirtualPath: (path: string) => `/Home/${nodePath.basename(path)}`,
+				isInternalStorageVirtualPath: () => true,
+				chownSystemPath: async () => {},
+				fileIndex: {movePath: async () => {}},
+				logger: {error: () => {}},
 			},
 		} as unknown as Umbreld
 
@@ -106,6 +115,29 @@ describe('file API authentication boundaries', () => {
 
 		expect(response.statusCode).toBe(400)
 		expect(JSON.parse(response.body)).toEqual({error: '[cloud-read-only]'})
+	})
+
+	test('streams uploads larger than the write buffer and preserves download ranges', async () => {
+		const block = Buffer.from(Array.from({length: 65536}, (_, index) => index % 251))
+		const body = Buffer.concat(Array.from({length: 64}, () => block))
+		const headers = {Authorization: 'Bearer system-token'}
+		const response = await got
+			.post(`${origin}/api/files/upload?path=/Home/stream.bin`, {
+				headers: {...headers, 'content-length': String(body.length)},
+				body: Readable.from(Array.from({length: 64}, () => block)),
+			})
+			.json()
+		expect(response).toEqual({path: '/Home/stream.bin'})
+		expect((await readFile(`${uploadDirectory}/stream.bin`)).equals(body)).toBe(true)
+		const download = await got(`${origin}/api/files/download?path=/Home/stream.bin`, {headers}).buffer()
+		expect(download.equals(body)).toBe(true)
+		const partial = await got(`${origin}/api/files/download?path=/Home/stream.bin`, {
+			headers: {...headers, Range: 'bytes=262100-262300'},
+			responseType: 'buffer',
+		})
+		expect(partial.statusCode).toBe(206)
+		expect(partial.body).toEqual(body.subarray(262100, 262301))
+		expect(partial.headers['content-range']).toBe(`bytes 262100-262300/${body.length}`)
 	})
 
 	test('publishes without clobbering when the destination filesystem has no hard links', async () => {
