@@ -49,6 +49,15 @@ A lock prevents concurrent image builds from sharing an output directory. `SYSTE
 
 Builds require Node.js 24 (see `.nvmrc`), Corepack-enabled pnpm, Docker, Buildx, `shasum`, and permission to run privileged Rugix containers. The host must already support the requested CPU architecture. The AMD64 root also requires SSSE3 support. The scripts never install or replace host emulators. Tool versions and checksums remain pinned in the Dockerfile, package checksum asset, Bakery runner, and image layers according to the tool they configure.
 
+For GitHub-hosted builds, open **Actions → Build System Release → Run workflow**.
+Choose the source branch and a target (`pi4`, `pi5`, `arm64`, `amd64`, or `all`).
+The workflow runs the shared source checks and uploads `system-<target>` artifacts
+containing compressed flash images, update bundles and checksums. Pi 4 uses
+`umbrelos-pi4.img.gz`; Pi 5 uses `umbrelos-pi.img.gz`. Verify the compressed
+checksum, decompress the image, and verify the original image checksum before
+flashing. Manual builds do not create releases. Stable version tags build all
+targets and prepare a draft release; see [system updates](../../documents/system-updates.md#build-and-publish).
+
 ## Image customization
 
 Maintain permanent system changes in `rootfs/custom/`:

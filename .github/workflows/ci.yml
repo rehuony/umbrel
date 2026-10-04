@@ -1,19 +1,27 @@
 name: Verify System
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
+# Keep standalone verification separate from checks reused by image builds.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   checks:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
+          cache: pnpm
       - name: Install application runner test dependencies
         run: |
           sudo apt-get update
@@ -29,48 +37,3 @@ jobs:
       - run: make test
       - run: make build-frontend
       - run: git diff --check
-  images:
-    if: github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [pi4, pi5, arm64, amd64]
-    runs-on: ${{ matrix.target == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-      - uses: docker/setup-buildx-action@v3
-      - uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124
-      - name: Build bootable image and checksum
-        run: make image-${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: system-${{ matrix.target }}
-          if-no-files-found: error
-          compression-level: 0
-          path: |
-            packages/system/build/images/*.img
-            packages/system/build/images/*.sha256
-            packages/system/build/images/*.rugixb
-            packages/system/build/images/*.update.json
-  virtual-machine:
-    if: github.event_name == 'workflow_dispatch'
-    needs: images
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-      - run: sudo apt-get update && sudo apt-get install --yes qemu-system-x86 qemu-utils ovmf
-      - uses: actions/download-artifact@v4
-        with:
-          name: system-amd64
-          path: packages/system/build/images
-      - run: cd packages/system/build/images && shasum -a 256 -c umbrelos-amd64.img.sha256
-      - run: make deps
-      - run: pnpm --filter backend exec playwright install --with-deps chromium
-      - run: make test-vm ARGS='--maxWorkers=1 --exclude **/*.pi.vm.test.ts'

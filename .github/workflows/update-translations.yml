@@ -4,10 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       target_branch:
-        description: Branch to translate (the translation PR will target this branch)
+        description: Branch to translate (leave empty for the repository default branch)
         type: string
-        required: true
-        default: staging
+        required: false
       plan_only:
         description: Show pending translation counts without calling OpenAI or creating a PR
         type: boolean
@@ -18,7 +17,7 @@ permissions:
 
 # Serialize batches for each target; don't cancel a paid batch halfway through.
 concurrency:
-  group: update-translations-${{ inputs.target_branch }}
+  group: update-translations-${{ inputs.target_branch || github.event.repository.default_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +29,7 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      TARGET_BRANCH: ${{ inputs.target_branch }}
+      TARGET_BRANCH: ${{ inputs.target_branch || github.event.repository.default_branch }}
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -43,7 +42,7 @@ jobs:
           fi
       - uses: actions/checkout@v4
         with:
-          ref: refs/heads/${{ inputs.target_branch }}
+          ref: refs/heads/${{ env.TARGET_BRANCH }}
           fetch-depth: 0
       - name: Reuse the open translation PR
         id: prepare
@@ -52,6 +51,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
+          cache: pnpm
       - name: Show pending translations
         run: node packages/frontend/update-translations.js --plan
       - name: Install dependencies
@@ -96,18 +96,18 @@ jobs:
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           branch: ${{ steps.prepare.outputs.translation-branch }}
-          base: ${{ inputs.target_branch }}
+          base: ${{ env.TARGET_BRANCH }}
           add-paths: |
             packages/frontend/public/locales/*.json
             packages/frontend/translations/last-translated.en.json
           commit-message: Update translations
-          title: Update translations for ${{ inputs.target_branch }}
+          title: Update translations for ${{ env.TARGET_BRANCH }}
           body: |
             Updates translations for new or changed English strings, fills missing translations, and removes keys explicitly deleted from English.
 
             The locale files and `translations/last-translated.en.json` are updated together. English source text is unchanged. Generation completed for every language, and locale completeness, interpolation variables, component tags, snapshot formatting, and generator tests passed before this PR was published.
 
-            Review and merge this PR before promoting its target branch to master. If English text changes, run **Update translations** again. Missing or outdated translations remain allowed during development.
+            Review and merge this PR into its target branch. If English text changes, run **Update Translations** again. **Verify System** checks translation structure and freshness alongside the other source checks.
       - name: Report result
         if: ${{ !inputs.plan_only }}
         env:

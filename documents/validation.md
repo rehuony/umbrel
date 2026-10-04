@@ -25,10 +25,36 @@ Run focused tests while editing, then the checks appropriate to the final change
 Runtime-script tests need Bash 4 or newer, Mike Farah's yq 4, jq, GNU coreutils and
 `envsubst`; the macOS system Bash is insufficient. See
 [continuous integration](../.github/workflows/ci.yml) for the maintained Linux
-setup and [translation checks](../.github/workflows/check-translations.yml) for
-the locale checks. The formatting commands discover Markdown files through Git, including new source
+setup and locale checks. The formatting commands discover Markdown files through Git, including new source
 files while excluding ignored output and deleted files. They use the existing
 Prettier executable and shared configuration.
+
+## GitHub Actions
+
+| Workflow                                                            | Responsibility                                                       | Trigger                                                                   |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Verify System](../.github/workflows/ci.yml)                        | Types, formatting, lint, translations, unit tests and frontend build | Branch pushes, pull requests, manual runs, or reuse by the image workflow |
+| [Build System Release](../.github/workflows/release.yml)            | Image builds, checksums, AMD64 boot verification and draft releases  | Manual target selection or stable version tags                            |
+| [Update Translations](../.github/workflows/update-translations.yml) | Preview or generate a reviewed translation PR                        | Manual run                                                                |
+
+Translation validation and freshness checks are part of **Verify System**; there is
+no separate translation-check workflow. The image workflow calls the same checks
+from the same source revision before building. Branch pushes do not build images,
+and version tags use the image workflow without triggering a duplicate standalone
+verification run. Dependency installation uses the pnpm cache and frozen lockfile.
+
+To build a flash image, run **Build System Release**, choose the source branch and
+one target or `all`, and download the matching `system-<target>` artifact. Manual
+runs use one development version across all selected targets and never create a
+GitHub Release, even when manually selecting a tag. Tagged releases always build
+all four targets and create only a draft after their required checks pass.
+
+When AMD64 is included, the image workflow verifies and boots that image with the
+existing system-customization scenario. It covers authenticated terminal access,
+reboots, persistent data, disposable system changes and factory reset. This is a
+focused boot check, not the complete VM suite or physical Raspberry Pi validation.
+The full suite remains available through `make test-vm` with the transport and
+image prerequisites described below.
 
 `make test-system` uses stubbed Docker and remote transport commands. It covers
 build target selection, shared root archives, locking, failure preservation,
