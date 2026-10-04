@@ -78,8 +78,9 @@ jobs:
         run: |
           for image in *.img; do
             sha256sum --check "$image.sha256"
-            gzip -1 "$image"
-            sha256sum "$image.gz" > "$image.gz.sha256"
+            # XZ keeps large flash images below GitHub's 2 GiB asset limit.
+            xz -T0 -6 "$image"
+            sha256sum "$image.xz" > "$image.xz.sha256"
           done
           for checksum in *.rugixb.sha256; do
             sha256sum --check "$checksum"
@@ -111,8 +112,8 @@ jobs:
       - name: Verify and unpack the test image
         working-directory: packages/system/build/images
         run: |
-          shasum -a 256 -c umbrelos-amd64.img.gz.sha256
-          gzip -d umbrelos-amd64.img.gz
+          shasum -a 256 -c umbrelos-amd64.img.xz.sha256
+          xz -d umbrelos-amd64.img.xz
           shasum -a 256 -c umbrelos-amd64.img.sha256
       - run: make deps
       # Fresh images use key-only SSH. This scenario uses the owner Web terminal

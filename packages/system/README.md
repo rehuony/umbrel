@@ -53,7 +53,8 @@ For GitHub-hosted builds, open **Actions → Build System Release → Run workfl
 Choose the source branch and a target (`pi4`, `pi5`, `arm64`, `amd64`, or `all`).
 The workflow runs the shared source checks and uploads `system-<target>` artifacts
 containing compressed flash images, update bundles and checksums. Pi 4 uses
-`umbrelos-pi4.img.gz`; Pi 5 uses `umbrelos-pi.img.gz`. Verify the compressed
+`umbrelos-pi4.img.xz`; Pi 5 uses `umbrelos-pi.img.xz`. XZ compression keeps large
+flash images within GitHub's per-asset release limit. Verify the compressed
 checksum, decompress the image, and verify the original image checksum before
 flashing. Manual builds do not create releases. Stable version tags build all
 targets and prepare a draft release; see [system updates](../../documents/system-updates.md#build-and-publish).

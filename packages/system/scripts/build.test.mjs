@@ -134,8 +134,10 @@ test('CI exports root-owned artifacts for checksumming and compression by the ru
 			assert.equal(info.uid, process.getuid())
 			assert.equal(info.gid, process.getgid())
 			await exec('shasum', ['-a', '256', '-c', `${file}.sha256`], {cwd: images})
-			await exec('gzip', ['--keep', file], {cwd: images})
 		}
+		await exec('xz', ['--keep', `${name}.img`], {cwd: images})
+		const unpacked = await exec('xz', ['--decompress', '--stdout', `${name}.img.xz`], {cwd: images})
+		assert.equal(unpacked.stdout, await readFile(path.join(images, `${name}.img`), 'utf8'))
 	}
 	assert.deepEqual(await readdir(context.build), ['images'])
 })
