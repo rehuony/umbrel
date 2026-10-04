@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {mkdtemp, mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises'
+import {mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -23,6 +23,7 @@ async function fixture(t) {
 		`#!/usr/bin/env node
 const fs = require('node:fs')
 const path = require('node:path')
+const {execFileSync} = require('node:child_process')
 const args = process.argv.slice(2)
 fs.appendFileSync(process.env.DOCKER_TEST_LOG, JSON.stringify(args) + '\\n')
 if (process.env.FAIL_ARCH && args.includes('linux/' + process.env.FAIL_ARCH)) process.exit(1)
@@ -38,8 +39,12 @@ if (args.includes('bake')) {
   if (process.env.FAIL_SYSTEM === system) process.exit(1)
   const destination = path.join(project, 'build', system)
   fs.mkdirSync(destination, {recursive: true})
-  fs.writeFileSync(path.join(destination, 'system.img'), system)
-  fs.writeFileSync(path.join(destination, 'system.rugixb'), system + '-bundle')
+  fs.writeFileSync(path.join(destination, 'system.img'), system, {mode: 0o600})
+  fs.writeFileSync(path.join(destination, 'system.rugixb'), system + '-bundle', {mode: 0o600})
+  if (process.env.ROOT_OWNED_ARTIFACTS === 'true') {
+    execFileSync('sudo', ['-n', 'chown', 'root:root', destination,
+      path.join(destination, 'system.img'), path.join(destination, 'system.rugixb')])
+  }
 }
 `,
 		{mode: 0o755},
@@ -104,6 +109,35 @@ test('default build covers all four platforms', async (t) => {
 		calls.filter((args) => args.includes('bake')).map((args) => args.at(-1)),
 		['umbrelos-pi4', 'umbrelos-pi-tryboot', 'umbrelos-arm64', 'umbrelos-amd64'],
 	)
+})
+
+test('CI exports root-owned artifacts for checksumming and compression by the runner', async (t) => {
+	if (process.platform !== 'linux' || process.getuid() === 0) {
+		assert.notEqual(process.env.GITHUB_ACTIONS, 'true', 'CI must test permissions as an unprivileged Linux user')
+		t.skip('Requires an unprivileged Linux user')
+		return
+	}
+	try {
+		await exec('sudo', ['-n', 'true'])
+	} catch (error) {
+		if (process.env.GITHUB_ACTIONS === 'true') throw error
+		t.skip('Requires passwordless sudo, as on GitHub-hosted runners')
+		return
+	}
+	const context = await fixture(t)
+	await context.run([], {GITHUB_ACTIONS: 'true', ROOT_OWNED_ARTIFACTS: 'true'})
+	const images = path.join(context.build, 'images')
+	for (const name of ['umbrelos-pi4', 'umbrelos-pi', 'umbrelos-arm64', 'umbrelos-amd64']) {
+		for (const extension of ['img', 'rugixb']) {
+			const file = `${name}.${extension}`
+			const info = await stat(path.join(images, file))
+			assert.equal(info.uid, process.getuid())
+			assert.equal(info.gid, process.getgid())
+			await exec('shasum', ['-a', '256', '-c', `${file}.sha256`], {cwd: images})
+			await exec('gzip', ['--keep', file], {cwd: images})
+		}
+	}
+	assert.deepEqual(await readdir(context.build), ['images'])
 })
 
 test('invalid targets fail before Docker is invoked', async (t) => {

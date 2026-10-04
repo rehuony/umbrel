@@ -116,6 +116,12 @@ for target in "${targets[@]}"; do
 
     echo "Building $target image (version $version)..."
     (cd "$work_dir" && "$SYSTEM_DIR/scripts/run-bakery.sh" bake bundle --release-version "$version" "$system")
+    if [ "${GITHUB_ACTIONS:-false}" = true ]; then
+        # Rugix runs as root. Hand only the export directory and artifacts back
+        # to the runner; never recursively change the staged system's ownership.
+        sudo chown "$(id -u):$(id -g)" "$work_dir/build/$system" \
+            "$work_dir/build/$system/system.img" "$work_dir/build/$system/system.rugixb"
+    fi
     # Publish only after a successful build and checksum. Leave unrelated images
     # from previous builds and their checksums untouched.
     mkdir -p "$work_dir/artifacts"
