@@ -7,7 +7,13 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest'
 import {ComposeImportDialog} from '@/modules/app-store/compose-import-dialog'
 import {EXIT_DURATION_MS} from '@/utils/dialog'
 
-const api = vi.hoisted(() => ({prepare: vi.fn(), install: vi.fn(), invalidate: vi.fn(), toast: vi.fn()}))
+const api = vi.hoisted(() => ({
+	inspect: vi.fn(),
+	prepare: vi.fn(),
+	install: vi.fn(),
+	invalidate: vi.fn(),
+	toast: vi.fn(),
+}))
 vi.mock('react-i18next', () => ({useTranslation: () => ({t: (key: string) => key})}))
 vi.mock('@/utils/i18n', () => ({t: (key: string) => key}))
 vi.mock('@/providers/apps', () => ({systemAppsKeyed: {}}))
@@ -37,6 +43,7 @@ vi.mock('@/trpc/trpc', async () => {
 				user: {invalidate: api.invalidate},
 			}),
 			apps: {
+				inspectCompose: {useMutation: () => ({mutateAsync: api.inspect})},
 				prepareImport: {
 					useMutation: () => {
 						const [isPending, setPending] = useState(false)
@@ -110,11 +117,13 @@ async function selectFile(file: File) {
 
 beforeEach(async () => {
 	vi.clearAllMocks()
+	api.inspect.mockResolvedValue({ports: [], hostNetwork: false})
 	api.prepare.mockImplementation(async ({definition, metadata}) => ({
 		definition,
 		metadata,
 		app: {...metadata},
 		hostNetwork: false,
+		ports: [],
 	}))
 	api.install.mockResolvedValue(true)
 	container = document.createElement('div')
@@ -149,7 +158,7 @@ test('preserves the draft after cancel, review and back, and installs the newly 
 	await click('install-review.install-now')
 	expect(api.install).toHaveBeenCalledWith({
 		definition,
-		metadata: expect.objectContaining({name: 'Updated worker', port: 0, containerPort: 0}),
+		metadata: expect.objectContaining({name: 'Updated worker', port: 0, protocol: 'http', externalUrl: ''}),
 	})
 	expect(api.invalidate).toHaveBeenCalledTimes(3)
 	await act(async () => {
@@ -209,21 +218,40 @@ test('waits for uploaded content before review and preserves existing text on ov
 	expect(editor().value).toContain('replacement')
 })
 
-test('reveals invalid web fields and preserves gateway metadata for an existing app_proxy service', async () => {
+test('selects a published host port and preserves the external URL through review', async () => {
 	await fillDraft()
 	await fill(input('id'), 'Invalid_ID')
 	await click('continue')
 	expect(input('id').validity.patternMismatch).toBe(true)
 	expect(api.prepare).not.toHaveBeenCalled()
 	await fill(input('id'), 'example-worker')
-	await fill(input('service'), 'worker')
-	await act(async () => {
-		input('containerPort').checkValidity()
+	const source = `${definition}    ports: ["18080:8080", "18081:8081"]\n`
+	api.inspect.mockResolvedValue({
+		ports: [
+			{service: 'worker', published: '18080', target: '8080', protocol: 'tcp'},
+			{service: 'worker', published: '18081', target: '8081', protocol: 'tcp'},
+			{service: 'worker', published: null, target: '8090', protocol: 'tcp'},
+			{service: 'worker', published: '0', target: '8091', protocol: 'tcp'},
+		],
+		hostNetwork: false,
 	})
-	expect(document.querySelector('details')?.open).toBe(true)
-	await fill(input('service'), '')
-	await fill(input('port'), '8080')
+	await fill(editor(), source)
+	await act(async () => {
+		await new Promise((resolve) => setTimeout(resolve, 450))
+	})
+	const ports = document.querySelector<HTMLSelectElement>('select[name="port"]')!
+	expect(Array.from(ports.options).map((option) => option.value)).toEqual(['', '18080', '18081'])
+	await act(async () => {
+		ports.value = '18080'
+		ports.dispatchEvent(new Event('change', {bubbles: true}))
+	})
+	await fill(input('externalUrl'), 'https://agent.example.com/ui/')
 	await click('continue')
-	expect(api.prepare).toHaveBeenCalledWith({definition, metadata: expect.objectContaining({service: '', port: 8080})})
-	expect(document.body.textContent).not.toContain('panel-catalog.background-app')
+	expect(api.prepare).toHaveBeenCalledWith({
+		definition: source,
+		metadata: expect.objectContaining({port: 18080, externalUrl: 'https://agent.example.com/ui/'}),
+	})
+	await click('back')
+	expect(input('externalUrl').value).toBe('https://agent.example.com/ui/')
+	expect(document.querySelector<HTMLSelectElement>('select[name="port"]')!.value).toBe('18080')
 })

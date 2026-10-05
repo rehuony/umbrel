@@ -48,7 +48,7 @@ The development container masks `systemd-binfmt.service` with a read-only mount 
 
 First boot requires an empty data directory. `.panel-data.json` records the system data format and version. Old directories, unknown versions, and old backups are rejected without deleting their contents. Photo account state and file indexes have new initial database versions. Version mechanisms remain available for future evolution of this system.
 
-Browser sessions include browser information and support two-factor authentication, revocation, WebSocket tickets, and application gateway authorization. Internal commands and necessary system calls use separate credentials. Members have individual Home directories; application access follows member grants. Application installation, updates, uninstallation, and repository management require an administrator.
+Browser sessions include browser information and support two-factor authentication, revocation and WebSocket tickets. Internal commands and necessary system calls use separate credentials. Members have individual Home directories; dashboard application visibility follows member grants, while application services handle their own authentication. Application installation, updates, uninstallation, and repository management require an administrator.
 
 Apple standalone clients, native-client login/refresh/discovery/pairing, phone photo backup protocols, and historical migrations have been removed. SMB, mobile browsers, browser HTTPS, Web uploads, and local photo indexing remain available.
 

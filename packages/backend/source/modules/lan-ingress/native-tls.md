@@ -14,8 +14,7 @@ with at least two labels; wildcards, URLs, IP literals and trailing dots are
 invalid. Invalid metadata disables only the optional passthrough policy.
 
 Only direct app routes whose original Compose services contain no `app_proxy`
-key are eligible. Disabling gateway authentication does not make a gateway
-eligible. HTTP retains its existing path. TLS with a declared SNI goes to the
+key are eligible. Transport gateways terminate TLS themselves. HTTP retains its existing path. TLS with a declared SNI goes to the
 app's fixed loopback port without decryption; Umbrel names, unknown names and
 absent SNI keep Umbrel TLS termination. Localhost and `.local` names remain
 reserved. No destination is resolved or constructed from client input.

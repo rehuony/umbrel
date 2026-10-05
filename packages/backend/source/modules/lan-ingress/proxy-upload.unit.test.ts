@@ -11,7 +11,6 @@ import {promisify} from 'node:util'
 import {afterAll, afterEach, beforeAll, expect, test, vi} from 'vitest'
 
 import AppGateway from '../app-gateway/app-gateway.js'
-import {APP_GATEWAY_HTTP_COOKIE_NAME, APP_GATEWAY_HTTPS_COOKIE_NAME} from '../auth/app-gateway-cookie.js'
 import LanIngress from './lan-ingress.js'
 
 type ProxyFactory = {
@@ -91,22 +90,13 @@ async function createProxy(protocol: 'http' | 'https', upstreamPort: number, gat
 		.mockImplementation((...args) => shortenDeadline(createHttpsServer(...args)))
 	try {
 		if (gateway) {
-			const auth = {
-				authenticateApp: async (token: string) => {
-					if (token !== 'upload-session') throw new Error('Unauthorized')
-					return {accountId: 'owner'}
-				},
-			}
-			const server = new AppGateway({logger, auth} as never, {
+			const server = new AppGateway({logger} as never, {
 				appId: 'upload-test',
 				appName: 'Upload test',
 				appIcon: '',
 				targetProtocol: 'http',
 				targetHost: '127.0.0.1',
 				targetPort: upstreamPort,
-				auth: true,
-				authWhitelist: [],
-				authBlacklist: [],
 				trustUpstream: false,
 				timeout: 0,
 			}).server
@@ -136,7 +126,6 @@ function upload(protocol: 'http' | 'https', port: number) {
 				rejectUnauthorized: false,
 				headers: {
 					'content-length': chunk.length * chunkCount,
-					cookie: `${protocol === 'https' ? APP_GATEWAY_HTTPS_COOKIE_NAME : APP_GATEWAY_HTTP_COOKIE_NAME}=upload-session`,
 				},
 			},
 			(response) => {

@@ -151,7 +151,7 @@ function appSettingsFixture() {
 		id: 'wallet',
 		name: 'Wallet',
 		credentials: {defaultUsername: 'umbrel', defaultPassword: 'secret', showBeforeOpen: true, hideBeforeOpen: false},
-		appProxyAuth: {supported: true, defaultEnabled: true, override: null, enabled: true},
+		externalUrl: 'https://app.example.com',
 		storage: {
 			dataRoot: {location: null, canMoveExternally: true, status: 'available'},
 			folderAccess: [
@@ -332,6 +332,19 @@ test('app details aggregates app and system routes into the compact MCP response
 	})
 	expect(context.mcp.assertAppAccess).toHaveBeenCalledWith('bitcoin')
 	expect(context.rpc.apps.details).toHaveBeenCalledWith({appId: 'bitcoin'})
+
+	const details = await context.rpc.apps.details({appId: 'bitcoin'})
+	for (const [portProtocol, expected] of [
+		['http', 'http://homebox.local:8332/dashboard'],
+		['https', 'https://homebox.local:8332/dashboard'],
+	] as const) {
+		vi.mocked(context.rpc.apps.details).mockResolvedValue({...details, portProtocol, requiresHttps: false})
+		expect(parseToolResult(await registry.get('get_app_details').handler({appId: 'bitcoin'}))).toMatchObject({
+			url: expected,
+		})
+	}
+	vi.mocked(context.rpc.apps.details).mockResolvedValue({...details, port: 0})
+	expect(parseToolResult(await registry.get('get_app_details').handler({appId: 'bitcoin'}))).toMatchObject({url: null})
 })
 
 test('app details exposes the full settings metadata', async () => {
@@ -357,7 +370,7 @@ test('app details exposes the full settings metadata', async () => {
 	expect(parseToolResult(await registry.get('get_app_details').handler({appId: 'wallet'}))).toMatchObject({
 		credentials: {username: 'umbrel', password: 'secret'},
 		settings: {
-			appProxyAuth: app.appProxyAuth,
+			externalUrl: app.externalUrl,
 			storage: app.storage,
 			environment: app.environment,
 			hideCredentialsBeforeOpen: false,
@@ -381,7 +394,7 @@ test('set_app_settings saves all groups together after checking newly introduced
 	const tool = appSettingsTool(context)
 	const input = tool.config.inputSchema.parse({
 		appId: 'wallet',
-		appProxyAuthEnabled: false,
+		externalUrl: 'https://app.example.com',
 		hideCredentialsBeforeOpen: true,
 		folderAccess: [{id: 'media', sourcePath: '/External/Drive/Movies'}],
 		customMounts: [{serviceName: 'server', targetPath: '/photos', sourcePath: '/Home/New Photos', readOnly: false}],
@@ -403,8 +416,8 @@ test('set_app_settings saves all groups together after checking newly introduced
 })
 
 test.each([
-	{appProxyAuthEnabled: false},
-	{appProxyAuthEnabled: null},
+	{externalUrl: 'https://app.example.com'},
+	{externalUrl: ''},
 	{hideCredentialsBeforeOpen: false},
 	{environment: []},
 	{customEnvironment: []},
@@ -578,7 +591,7 @@ test('set_app_settings rejects a custom mount target with leading whitespace', a
 
 test.each([
 	['get_app_details', {}],
-	['set_app_settings', {appProxyAuthEnabled: false}],
+	['set_app_settings', {externalUrl: 'https://app.example.com'}],
 	['move_app_data', {destinationParentPath: null}],
 	['reset_app_data', {}],
 ])('%s denies revoked app access before reading or changing app settings', async (name, settings) => {

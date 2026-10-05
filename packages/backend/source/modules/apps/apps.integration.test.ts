@@ -248,15 +248,6 @@ test.sequential('updates() follows the same first-repository precedence as app u
 	}
 })
 
-test.sequential('application login uses the dashboard entrypoint without widening form destinations', async () => {
-	const document = await umbreld.unauthenticatedApi.get('../app-access?request=invalid', {responseType: 'text'})
-	expect(document.headers['content-type']).toMatch(/^text\/html/)
-	expect(document.headers['cache-control']).toContain('no-store')
-	expect(document.headers['content-security-policy']).toContain("form-action 'self'")
-	expect(document.body).toContain('/src/dashboard.tsx')
-	expect(document.body).not.toContain('/src/app-auth.tsx')
-})
-
 test.sequential('runs app proxying in umbreld without an app-proxy container', async () => {
 	const appDataDirectory = path.join(umbreld.instance.dataDirectory, 'app-data', 'sparkles-hello-world')
 	const originalCompose = yaml.load(
@@ -280,15 +271,6 @@ test.sequential('runs app proxying in umbreld without an app-proxy container', a
 	await expect(umbreld.instance.apps.getApp('sparkles-hello-world').getContainerNames()).resolves.not.toContain(
 		'sparkles-hello-world_app_proxy_1',
 	)
-})
-
-test.sequential('retired app login endpoints cannot issue credentials', async () => {
-	const response = await umbreld.unauthenticatedApi.post('../app-auth/v1/account/login', {
-		json: {password: 'moneyprintergobrrr'},
-		throwHttpErrors: false,
-	})
-	expect(response.statusCode).toBe(404)
-	expect(response.headers['set-cookie']).toBeUndefined()
 })
 
 test.sequential('list() lists installed apps', async () => {
@@ -326,59 +308,22 @@ test.sequential('list() reports when an app requires HTTPS', async () => {
 	}
 })
 
-test.sequential('setSettings() overrides and resets app proxy authentication', async () => {
+test.sequential('setSettings() saves and clears external launch URLs without restarting the app', async () => {
 	const appId = 'sparkles-hello-world'
-	const appDataDirectory = path.join(umbreld.instance.dataDirectory, 'app-data', appId)
-	const settingsPath = path.join(appDataDirectory, 'settings.yml')
-	const userSettingsComposePath = path.join(appDataDirectory, 'docker-compose.umbrel-user-settings.yml')
-	const userSettingsComposeBefore = await fse.readFile(userSettingsComposePath, 'utf8')
-	const getAppProxyAuth = async () => {
-		const app = (await umbreld.client.apps.list.query()).find((app) => app.id === appId)
-		if (!app || 'error' in app) throw new Error(`Failed to read installed app ${appId}`)
-		return app.appProxyAuth
-	}
-
-	await expect(getAppProxyAuth()).resolves.toStrictEqual({
-		supported: true,
-		defaultEnabled: true,
-		override: null,
-		enabled: true,
-	})
-
-	// Auth lives in umbreld's app gateway which reads the override from the
-	// settings store, so an auth-only change applies without a restart and
-	// doesn't change the generated compose contents
 	const app = umbreld.instance.apps.getApp(appId)
-	const restartSpy = vi.spyOn(app, 'restart')
-	const settingsChanged = umbreld.instance.eventBus.once('apps:settings:change')
-	await expect(umbreld.client.apps.setSettings.mutate({appId, appProxyAuthEnabled: false})).resolves.toStrictEqual(true)
-	await expect(settingsChanged).resolves.toStrictEqual({appId})
-	expect(restartSpy).not.toHaveBeenCalled()
-	await expect(umbreld.client.apps.state.query({appId})).resolves.toMatchObject({state: 'ready'})
-
-	await expect(fse.readFile(userSettingsComposePath, 'utf8')).resolves.toBe(userSettingsComposeBefore)
-	const settings = yaml.load(await fse.readFile(settingsPath, 'utf8')) as Record<string, unknown>
-	expect(settings.appProxyAuthEnabled).toBe(false)
-
-	await expect(getAppProxyAuth()).resolves.toStrictEqual({
-		supported: true,
-		defaultEnabled: true,
-		override: false,
-		enabled: false,
-	})
-
-	await expect(umbreld.client.apps.setSettings.mutate({appId, appProxyAuthEnabled: null})).resolves.toStrictEqual(true)
-	expect(restartSpy).not.toHaveBeenCalled()
-	restartSpy.mockRestore()
-
-	const settingsAfterReset = yaml.load(await fse.readFile(settingsPath, 'utf8')) as Record<string, unknown>
-	expect(settingsAfterReset).not.toHaveProperty('appProxyAuthEnabled')
-	await expect(getAppProxyAuth()).resolves.toStrictEqual({
-		supported: true,
-		defaultEnabled: true,
-		override: null,
-		enabled: true,
-	})
+	const composeBefore = await fse.readFile(app.userSettingsComposePath, 'utf8')
+	const restart = vi.spyOn(app, 'restart')
+	try {
+		for (const externalUrl of ['https://app.example.com/ui/', '']) {
+			await expect(umbreld.client.apps.setSettings.mutate({appId, externalUrl})).resolves.toBe(true)
+			expect((await umbreld.client.apps.list.query()).find((entry) => entry.id === appId)).toMatchObject({externalUrl})
+			expect((await app.store.get('externalUrl')) ?? '').toBe(externalUrl)
+		}
+		expect(restart).not.toHaveBeenCalled()
+		expect(await fse.readFile(app.userSettingsComposePath, 'utf8')).toBe(composeBefore)
+	} finally {
+		restart.mockRestore()
+	}
 })
 
 test.sequential('setSettings() configures suggested folders and advanced mount overrides', async () => {
@@ -1893,7 +1838,7 @@ async function startPanelUi() {
 	try {
 		await pRetry(
 			async () => {
-				const response = await fetch(`http://127.0.0.1:${port}/app-access`)
+				const response = await fetch(`http://127.0.0.1:${port}/`)
 				if (!response.ok) throw new Error(`Panel Vite server returned ${response.status}`)
 			},
 			{retries: 100, factor: 1, minTimeout: 100, maxTimeout: 100},

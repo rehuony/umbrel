@@ -21,16 +21,20 @@ test('imports, updates and uninstalls a custom app using original store files an
 		description: 'Custom service',
 		version: '1.0.0',
 		category: 'Utilities',
-		service: 'web',
 		port: 38888,
-		containerPort: 8080,
+		externalUrl: 'https://test.example.com/ui/',
 	}
 	const definition = yaml.dump({
 		services: {
 			web: {
 				image: 'busybox:1.37.0',
-				command: ['sh', '-c', 'mkdir -p /www; echo ready > /www/index.html; httpd -f -p 8080 -h /www'],
+				command: [
+					'sh',
+					'-c',
+					'mkdir -p /www; echo ready > /www/index.html; httpd -p 8081 -h /www; httpd -f -p 8080 -h /www',
+				],
 				volumes: ['./data:/data'],
+				ports: ['38888:8080', '38889:8081'],
 			},
 		},
 	})
@@ -52,7 +56,17 @@ test('imports, updates and uninstalls a custom app using original store files an
 		manifestVersion: '1.1.0',
 		id: metadata.id,
 	})
-	expect(yaml.load(await fse.readFile(`${directory}/docker-compose.yml`, 'utf8'))).toHaveProperty('services.app_proxy')
+	expect(await fse.readFile(`${directory}/docker-compose.yml`, 'utf8')).toBe(definition)
+	expect((await host.client.apps.list.query()).find((app) => app.id === metadata.id)).toMatchObject({
+		externalUrl: metadata.externalUrl,
+		port: 38888,
+	})
+	expect((await host.client.apps.list.query()).find((app) => app.id === metadata.id)).toMatchObject({
+		portProtocol: 'http',
+	})
+	for (const port of [38888, 38889]) {
+		await pRetry(async () => expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(200))
+	}
 	await fse.outputFile(`${directory}/data/persistent.txt`, 'application data')
 	await host.client.apps.stop.mutate({appId: metadata.id})
 	expect(await fse.readFile(`${directory}/data/persistent.txt`, 'utf8')).toBe('application data')

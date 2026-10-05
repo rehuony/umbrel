@@ -12,6 +12,7 @@ import yaml from 'js-yaml'
 import {createProxyMiddleware, type RequestHandler} from 'http-proxy-middleware'
 
 import type Umbreld from '../../index.js'
+import {getPublishedPorts, publishedHostPorts} from '../apps/compose-ports.js'
 import randomToken from '../utilities/random-token.js'
 import {getHostname, getIpAddresses} from '../system/system.js'
 import runEvery from '../utilities/run-every.js'
@@ -149,7 +150,6 @@ export default class LanIngress {
 		if (this.#isStopped) return
 		this.logger.log('Stopping LAN ingress')
 		this.#isStopped = true
-		this.#umbreld.externalAccess.reset()
 		this.#stopPeriodicRefresh?.()
 		this.#stopPeriodicRefresh = undefined
 		this.#nextAppTargetRecoveryAt.clear()
@@ -441,20 +441,22 @@ export default class LanIngress {
 					if (!manifest) return null
 					const parsed = yaml.load(manifest) as {
 						port?: unknown
+						portProtocol?: unknown
 						name?: unknown
 						icon?: unknown
 						nativeTlsHostnameSuffixes?: unknown
 					} | null
 					const publicPort = Number(parsed?.port)
-					if (!Number.isInteger(publicPort) || publicPort <= 0 || publicPort > 65_535) return null
 
 					const composePath = `${appDataDirectory}/${appId}/docker-compose.yml`
 					const composeText = await fse.readFile(composePath, 'utf8').catch(() => '')
 					const compose = yaml.load(composeText) as ComposeFile | null
-					const publishedPorts = this.getPublishedPorts(compose)
+					const publishedPorts = publishedHostPorts(getPublishedPorts(compose))
 					// Host-network apps can bind ports without declaring them. We can only reserve the
 					// manifest port and rendered compose-published ports until apps expose richer port metadata.
-					const reservedPorts = [publicPort, ...publishedPorts]
+					const hasWebEntry = Number.isInteger(publicPort) && publicPort > 0 && publicPort <= 65_535
+					const reservedPorts = [...(hasWebEntry ? [publicPort] : []), ...publishedPorts]
+					if (!hasWebEntry) return {reservedPorts, route: null}
 					// Uninstalling apps have already stopped their containers, so drop their
 					// routes early too while the uninstall is still removing images/data.
 					if (app?.state === 'stopped' || app?.state === 'uninstalling') return {reservedPorts, route: null}
@@ -473,12 +475,6 @@ export default class LanIngress {
 						gatewayIds.add(appId)
 						if (!this.appGatewayCanListen(appId, gateway, compose!)) return {reservedPorts, route: null}
 
-						// The user can override the app's default gateway authentication in
-						// app settings. Applied here so an auth change takes effect on the
-						// next ingress refresh without restarting the app.
-						const authOverride = await this.getAppProxyAuthOverride(appId)
-						if (typeof authOverride === 'boolean') gateway.auth = authOverride
-
 						const targetAddress = await this.resolveAppTarget(appId, gateway.targetHost, compose)
 						if (!targetAddress) {
 							this.logger.verbose(`Skipping LAN ingress route for ${appId}; app gateway target is unavailable`)
@@ -488,6 +484,12 @@ export default class LanIngress {
 							reservedPorts,
 							route: {id: appId, publicPort, gateway: {...gateway, targetAddress}},
 						}
+					}
+
+					// Direct endpoints own their protocol and bind address. Intercepting them
+					// would send HTTP to native TLS services and expose loopback-only bindings.
+					if (parsed?.portProtocol === 'http' || parsed?.portProtocol === 'https') {
+						return {reservedPorts, route: null}
 					}
 
 					if (!this.canRouteAppDirectly(compose, publicPort, publishedPorts)) {
@@ -543,17 +545,6 @@ export default class LanIngress {
 		// intercept LAN traffic before it reaches the app-owned socket.
 		const hasHostNetworkService = Object.values(compose.services).some((service) => service.network_mode === 'host')
 		return hasHostNetworkService
-	}
-
-	// Read the app's saved auth override through the app-owned settings API. Kept safe
-	// against missing app instances since routes rebuild during install and
-	// uninstall.
-	private async getAppProxyAuthOverride(appId: string) {
-		try {
-			return await this.#umbreld.apps.getApp(appId).getAppProxyAuthOverride()
-		} catch {
-			return undefined
-		}
 	}
 
 	private async resolveAppTarget(appId: string, host: string, compose: ComposeFile | null) {
@@ -640,33 +631,6 @@ export default class LanIngress {
 		}
 	}
 
-	private getPublishedPorts(compose: ComposeFile | null) {
-		return Object.values(compose?.services ?? {}).flatMap((service) => {
-			if (!Array.isArray(service.ports)) return []
-			return service.ports.flatMap((publishedPort) => {
-				const port = this.getPublishedPort(publishedPort)
-				return port ? [port] : []
-			})
-		})
-	}
-
-	private getPublishedPort(port: unknown) {
-		if (typeof port === 'number') return this.isValidPort(port) ? port : null
-		if (typeof port === 'object' && port !== null && 'published' in port) {
-			const parsed = Number(port.published)
-			return this.isValidPort(parsed) ? parsed : null
-		}
-		if (typeof port !== 'string') return null
-
-		// Docker compose port strings can be "80", "8080:80", "127.0.0.1:8080:80",
-		// and may include "/tcp" or "/udp". We only need the published host port.
-		const withoutProtocol = port.trim().replace(/\/(tcp|udp)$/i, '')
-		const parts = withoutProtocol.split(':')
-		const published = parts.length === 1 ? parts[0] : parts.at(-2)
-		const parsed = Number(published)
-		return this.isValidPort(parsed) ? parsed : null
-	}
-
 	// Keep existing hidden ports stable across syncs so adding an app does not briefly
 	// point an existing public port at a different app's old listener.
 	private allocateAppIngressPorts(
@@ -744,7 +708,6 @@ export default class LanIngress {
 		await this.ensureDashboardHttpServer()
 		await this.ensureDashboardHttpsServer()
 		await this.updateAppMuxServers(appRoutes)
-		this.#umbreld.externalAccess.reconcile(appRoutes)
 	}
 
 	private async loadSecureContext() {
@@ -909,7 +872,6 @@ export default class LanIngress {
 	) {
 		const middleware = this.createProxyMiddleware(upstreamPort, originalProtocol, options)
 		const server = http.createServer((request, response) => {
-			if (upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.handleRequest(request, response)) return
 			middleware(request as any, response as any, (error?: unknown) => {
 				// Reset instead of an error response for the same reason as onError above.
 				this.logger.verbose(`LAN ingress proxy error to ${upstreamPort}: ${error}`)
@@ -919,7 +881,7 @@ export default class LanIngress {
 		// Let umbreld and upstream apps enforce their own upload deadlines.
 		// Keep the separate timeout for receiving request headers.
 		server.requestTimeout = 0
-		this.attachProxyUpgradeHandler(server, middleware, upstreamPort === this.#umbreld.port)
+		this.attachProxyUpgradeHandler(server, middleware)
 		return server
 	}
 
@@ -932,7 +894,6 @@ export default class LanIngress {
 				key: await fse.readFile(this.serverKeyPath),
 			},
 			(request, response) => {
-				if (upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.handleRequest(request, response)) return
 				middleware(request as any, response as any, (error?: unknown) => {
 					// Reset instead of an error response for the same reason as onError above.
 					this.logger.verbose(`LAN ingress proxy error to ${upstreamPort}: ${error}`)
@@ -943,7 +904,7 @@ export default class LanIngress {
 		// Let umbreld and upstream apps enforce their own upload deadlines.
 		// Keep the separate timeout for receiving request headers.
 		server.requestTimeout = 0
-		this.attachProxyUpgradeHandler(server, middleware, upstreamPort === this.#umbreld.port)
+		this.attachProxyUpgradeHandler(server, middleware)
 		return server
 	}
 
@@ -955,7 +916,7 @@ export default class LanIngress {
 		return createProxyMiddleware({
 			target: `http://127.0.0.1:${upstreamPort}`,
 			changeOrigin: false,
-			// Upgrade events are dispatched explicitly after routing/authentication.
+			// Upgrade events are dispatched explicitly after routing.
 			// Automatic subscription would bypass that boundary on subsequent requests.
 			ws: false,
 			// Umbrel-owned upstreams (dashboard) get X-Forwarded-For since they
@@ -973,23 +934,13 @@ export default class LanIngress {
 			onProxyReq: (proxyRequest, request) => {
 				// The upstream target is always HTTP. Tell umbreld/app gateways
 				// whether the original browser request used HTTP or HTTPS.
-				proxyRequest.setHeader(
-					'x-forwarded-proto',
-					upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.isExternalRequest(request)
-						? 'https'
-						: originalProtocol,
-				)
+				proxyRequest.setHeader('x-forwarded-proto', originalProtocol)
 				if (request.headers.host) proxyRequest.setHeader('x-forwarded-host', request.headers.host)
 			},
 			onProxyReqWs: (proxyRequest, request) => {
 				// WebSocket upgrade requests bypass onProxyReq, so mirror the same
 				// forwarded headers for ws:// and wss:// traffic.
-				proxyRequest.setHeader(
-					'x-forwarded-proto',
-					upstreamPort === this.#umbreld.port && this.#umbreld.externalAccess.isExternalRequest(request)
-						? 'https'
-						: originalProtocol,
-				)
+				proxyRequest.setHeader('x-forwarded-proto', originalProtocol)
 				if (request.headers.host) proxyRequest.setHeader('x-forwarded-host', request.headers.host)
 			},
 			onProxyRes: (proxyResponse) => {
@@ -1012,9 +963,8 @@ export default class LanIngress {
 		})
 	}
 
-	private attachProxyUpgradeHandler(server: http.Server, middleware: RequestHandler, dashboard: boolean) {
+	private attachProxyUpgradeHandler(server: http.Server, middleware: RequestHandler) {
 		server.on('upgrade', (request, socket, head) => {
-			if (dashboard && this.#umbreld.externalAccess.handleUpgrade(request, socket as net.Socket, head)) return
 			middleware.upgrade?.(request as any, socket as net.Socket, head)
 		})
 	}
@@ -1162,16 +1112,9 @@ export default class LanIngress {
 		await $({input: nftRuleset})`${NFT_BIN} -f -`
 	}
 
-	// Generate public-port redirects plus hidden-port guard rules.
+	// Replace our table atomically, including its chains, so obsolete hooks disappear.
+	// The initial add makes deletion safe on the first refresh.
 	private buildNftRuleset(redirectRoutes: IngressPortMapping[], hiddenPortRoutes: IngressPortMapping[]) {
-		const external = this.#umbreld.externalAccess.settings
-		// A designated external proxy may only reach the shared web ingress. Run
-		// before Docker DNAT so published container ports cannot bypass app auth.
-		// Reply traffic for connections initiated by this host remains unaffected.
-		const proxyGuardRules = external.trustedProxies.map(
-			(ip) =>
-				`add rule inet ${NFT_TABLE_NAME} external_proxy fib daddr type local iifname != "lo" ${net.isIP(ip) === 6 ? 'ip6' : 'ip'} saddr ${ip} ct direction original tcp dport != { 80, 443 } drop`,
-		)
 		const redirectRules = redirectRoutes.map(
 			(route) =>
 				`add rule inet ${NFT_TABLE_NAME} prerouting fib daddr type local iifname != "lo" tcp dport ${route.publicPort} redirect to :${route.hiddenPort}`,
@@ -1185,11 +1128,10 @@ export default class LanIngress {
 		// hidden-port drops run just before the standard filter priority.
 		return [
 			`add table inet ${NFT_TABLE_NAME}`,
-			`flush table inet ${NFT_TABLE_NAME}`,
+			`delete table inet ${NFT_TABLE_NAME}`,
+			`add table inet ${NFT_TABLE_NAME}`,
 			`add chain inet ${NFT_TABLE_NAME} prerouting { type nat hook prerouting priority dstnat - 1; policy accept; }`,
 			`add chain inet ${NFT_TABLE_NAME} input { type filter hook input priority filter - 1; policy accept; }`,
-			`add chain inet ${NFT_TABLE_NAME} external_proxy { type filter hook prerouting priority dstnat - 2; policy accept; }`,
-			...proxyGuardRules,
 			...redirectRules,
 			...hiddenPortDropRules,
 			'',

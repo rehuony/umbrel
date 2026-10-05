@@ -19,7 +19,7 @@ describe.sequential('LAN ingress', () => {
 	let failed = false
 	let httpsPort: number
 	let appProxyPort: number
-	let authenticatedAppPort: number
+	let serviceAppPort: number
 	let bridgeAppPort: number
 	let hostNetworkAppPort: number
 	let recreatedAppPort: number
@@ -33,7 +33,7 @@ describe.sequential('LAN ingress', () => {
 		const forwardedPorts = {
 			https: {guestPort: 443},
 			appProxy: {guestPort: 9091},
-			authenticatedApp: {guestPort: 9094},
+			serviceApp: {guestPort: 9094},
 			bridgeApp: {guestPort: 9092},
 			hostNetworkApp: {guestPort: 9093},
 			recreatedApp: {guestPort: 9095},
@@ -65,7 +65,7 @@ describe.sequential('LAN ingress', () => {
 		await umbreld.vm.powerOn()
 		httpsPort = umbreld.vm.getHostPort(443)
 		appProxyPort = umbreld.vm.getHostPort(9091)
-		authenticatedAppPort = umbreld.vm.getHostPort(9094)
+		serviceAppPort = umbreld.vm.getHostPort(9094)
 		bridgeAppPort = umbreld.vm.getHostPort(9092)
 		hostNetworkAppPort = umbreld.vm.getHostPort(9093)
 		recreatedAppPort = umbreld.vm.getHostPort(9095)
@@ -213,45 +213,44 @@ describe.sequential('LAN ingress', () => {
 		await umbreld.vm.sshAsRoot('docker rm -f lan-ingress-ip-blocker >/dev/null 2>&1 || true')
 	})
 
-	test('completes app login in a real browser over HTTP and HTTPS', async () => {
-		// Reload the disk-backed fixtures through the Apps module so application login sees
-		// the authenticated fixture as a normal installed app.
+	test('opens applications directly in a real browser over HTTP and HTTPS', async () => {
+		// Reload the disk-backed fixtures as normal installed applications.
 		await umbreld.vm.sshAsRoot('systemctl restart umbrel')
 		await umbreld.login()
 		await pRetry(
 			async () => {
-				const response = await got(`http://127.0.0.1:${authenticatedAppPort}/private`, {
+				const response = await got(`http://127.0.0.1:${serviceAppPort}/private`, {
 					headers: {accept: 'text/html'},
 					followRedirect: false,
 					retry: {limit: 0},
 					throwHttpErrors: false,
 				})
-				expect(response.statusCode).toBe(302)
+				expect(response.statusCode).toBe(200)
 			},
 			{retries: 30, factor: 1, minTimeout: 1000, maxTimeout: 1000},
 		)
 
 		// Keep the real guest ports in browser URLs while routing them through
-		// QEMU's random host forwards. This preserves the app -> panel -> app
-		// redirect chain and sends traffic through the guest's LAN ingress path.
+		// QEMU's random host forwards. This preserves the actual service ports and
+		// sends traffic through the guest's LAN ingress path.
 		vmBrowser = await createVmBrowser({
 			forwardPorts: [
-				{hostPort: authenticatedAppPort, guestPort: 9094},
+				{hostPort: serviceAppPort, guestPort: 9094},
 				{hostPort: umbreld.vm.httpPort, guestPort: 80},
 				{hostPort: httpsPort, guestPort: 443},
 			],
 		})
 
 		try {
-			await expectBrowserLoginFlow(vmBrowser.browser, 'http')
-			await expectBrowserLoginFlow(vmBrowser.browser, 'https')
+			await expectBrowserDirectAccess(vmBrowser.browser, 'http')
+			await expectBrowserDirectAccess(vmBrowser.browser, 'https')
 		} catch (error) {
 			console.error(await umbreld.vm.sshAsRoot('journalctl -u umbrel --no-pager -n 200'))
 			throw error
 		}
 	})
 
-	test('unified panel login preserves 2FA and creates a browser-bound Tor handoff', async () => {
+	test('panel login retains 2FA while Tor application access remains direct', async () => {
 		const totpUri =
 			'otpauth://totp/Umbrel?secret=63AU7PMWJX6EQJR6G3KTQFG5RDZ2UE3WVUMP3VFJWHSWJ7MMHTIQ&period=30&digits=6&algorithm=SHA1&issuer=umbrel.local'
 		await umbreld.client.apps.setTorEnabled.mutate(true)
@@ -267,112 +266,50 @@ describe.sequential('LAN ingress', () => {
 			const login = await umbreld.unauthenticatedApi.post('../trpc/user.login', {
 				responseType: 'json',
 				json: {password: 'moneyprintergobrrr', totpToken: totp.generateToken(totpUri)},
-				headers: {'user-agent': 'UmbrelPanelHandoffVm/1.0'},
+				headers: {'user-agent': 'UmbrelPanelVm/1.0'},
 			})
-			const token = (login.body as TrpcResponse<string>).result.data
-			const cookies = (login.headers['set-cookie'] ?? []).map((value) => value.split(';')[0]).join('; ')
+			expect(login.statusCode).toBe(200)
 			const appHost = await pRetry(
 				async () => {
-					const app = (await umbreld.client.apps.list.query()).find((app) => app.id === 'lan-ingress-auth')!
+					const app = (await umbreld.client.apps.list.query()).find((app) => app.id === 'lan-ingress-service')!
 					if ('error' in app || !app.hiddenService) throw new Error('Waiting for app hidden service')
 					return app.hiddenService
 				},
 				{retries: 30, factor: 1, minTimeout: 1000, maxTimeout: 1000},
 			)
-			const initial = await got(`http://127.0.0.1:${authenticatedAppPort}/private`, {
-				headers: {host: appHost, accept: 'text/html'},
-				followRedirect: false,
-				retry: {limit: 0},
-			})
-			const panelUrl = new URL(initial.headers.location!)
-			expect(panelUrl.hostname).toMatch(/^[a-z2-7]{56}\.onion$/)
-			const authorized = await umbreld.unauthenticatedApi.post('../trpc/apps.authorizeAccess', {
-				responseType: 'json',
-				json: {request: panelUrl.searchParams.get('request')},
-				headers: {host: panelUrl.host, cookie: cookies, authorization: `Bearer ${token}`},
-			})
-			const handoff = (authorized.body as TrpcResponse<{url: string; params: Record<string, string>}>).result.data
-			expect(handoff.url).toBe(`http://${appHost}/umbrel_/api/v1/auth/handoff`)
-			expect(handoff.params).not.toHaveProperty('token')
-			const completed = await got(`http://127.0.0.1:${authenticatedAppPort}/umbrel_/api/v1/auth/handoff`, {
-				searchParams: handoff.params,
-				headers: {host: appHost, cookie: initial.headers['set-cookie']![0].split(';')[0]},
-				followRedirect: false,
-				retry: {limit: 0},
-			})
-			expect(completed.statusCode).toBe(303)
-			expect(completed.headers.location).toBe('/private')
+			const response = await requestAppEcho(`http://127.0.0.1:${serviceAppPort}/private`, undefined, {host: appHost})
+			expect(response.app).toBe('service')
+			expect(response.url).toBe('/private')
 		} finally {
 			await umbreld.client.user.disable2fa.mutate({totpToken: totp.generateToken(totpUri)})
 			await umbreld.client.apps.setTorEnabled.mutate(false)
 		}
 	})
 
-	test('enforces app auth in umbreld and never forwards auth cookies upstream', async () => {
-		const privateUrl = `http://127.0.0.1:${authenticatedAppPort}/private`
-		const unauthorized = await got(privateUrl, {
-			headers: {accept: 'text/html'},
-			followRedirect: false,
-			retry: {limit: 0},
-			throwHttpErrors: false,
-		})
-		expect(unauthorized.statusCode).toBe(302)
-		expect(unauthorized.headers.location).toContain('http://127.0.0.1/app-access?request=')
-
-		const publicResponse = await requestAppEcho(`http://127.0.0.1:${authenticatedAppPort}/public/status`)
-		expect(publicResponse.app).toBe('authenticated')
-		const blacklisted = await got(`http://127.0.0.1:${authenticatedAppPort}/public/private/status`, {
-			headers: {accept: 'text/html'},
-			followRedirect: false,
-			retry: {limit: 0},
-			throwHttpErrors: false,
-		})
-		expect(blacklisted.statusCode).toBe(302)
-
-		const login = await umbreld.unauthenticatedApi.post('../trpc/user.login', {json: {password: 'moneyprintergobrrr'}})
-		const appSession = (login.headers['set-cookie'] ?? [])
-			.find((cookie) => cookie.startsWith('UMBREL_APP_SESSION='))
-			?.split(';')[0]
-		expect(appSession).toMatch(/^UMBREL_APP_SESSION=umbrel_[0-9a-f]{32}_[0-9a-f]{64}$/)
-
-		const authenticated = await requestAppEcho(privateUrl, undefined, {
-			cookie: `${appSession}; UMBREL_BROWSER_SESSION=browser-secret; app-cookie=preserved; UMBREL_PROXY_TOKEN=retired-secret`,
-		})
-		expect(authenticated.app).toBe('authenticated')
-		expect(authenticated.headers.cookie).toBe('app-cookie=preserved')
-
-		await expectWebSocketRejected(`ws://127.0.0.1:${authenticatedAppPort}/socket`)
-		const websocket = await connectWebSocket(`ws://127.0.0.1:${authenticatedAppPort}/socket`, {
-			Cookie: `${appSession}; UMBREL_BROWSER_SESSION=browser-secret; app-cookie=preserved`,
-		})
-		expect(websocket.headers.cookie).toBe('app-cookie=preserved')
-		const closed = new Promise<void>((resolve) => websocket.socket.once('close', () => resolve()))
-
-		const httpsLogin = await got.post(`https://127.0.0.1:${httpsPort}/trpc/user.login`, {
-			json: {password: 'moneyprintergobrrr'},
-			https: {certificateAuthority: caCertificate},
-		})
-		const httpsAppSession = (httpsLogin.headers['set-cookie'] ?? [])
-			.find((cookie) => cookie.startsWith('__Host-UMBREL_APP_SESSION_HTTPS='))
-			?.split(';')[0]
-		expect(httpsAppSession).toBeTypeOf('string')
-		const secureWebsocket = await connectWebSocket(
-			`wss://127.0.0.1:${authenticatedAppPort}/socket`,
-			{Cookie: `${httpsAppSession}; __Host-UMBREL_BROWSER_SESSION_HTTPS=browser-secret; app-cookie=preserved`},
-			caCertificate,
-		)
-		expect(secureWebsocket.headers.cookie).toBe('app-cookie=preserved')
-		const secureClosed = new Promise<void>((resolve) => secureWebsocket.socket.once('close', () => resolve()))
-
-		// The app sessions belong to other logins, so revoking other sessions closes both sockets
-		await umbreld.client.user.revokeOtherSessions.mutate()
-		await expect(
-			Promise.all([
-				Promise.race([closed, rejectAfter(5000, 'HTTP app WebSocket remained open')]),
-				Promise.race([secureClosed, rejectAfter(5000, 'HTTPS app WebSocket remained open')]),
-			]),
-		).resolves.toEqual([undefined, undefined])
-		await umbreld.login()
+	test('forwards native app credentials and WebSockets without a panel session', async () => {
+		for (const protocol of ['http', 'https'] as const) {
+			const ca = protocol === 'https' ? caCertificate : undefined
+			const headers = {
+				cookie: 'UMBREL_BROWSER_SESSION=panel; __Host-UMBREL_BROWSER_SESSION_HTTPS=panel; app-cookie=preserved',
+				authorization: 'Bearer native-app-token',
+			}
+			const response = await requestAppEcho(`${protocol}://127.0.0.1:${serviceAppPort}/private`, ca, headers)
+			expect(response.headers.cookie).toBe('app-cookie=preserved')
+			expect(response.headers.authorization).toBe('Bearer native-app-token')
+			const websocket = await connectWebSocket(
+				`${protocol === 'https' ? 'wss' : 'ws'}://127.0.0.1:${serviceAppPort}/socket`,
+				headers,
+				ca,
+			)
+			try {
+				expect(websocket.headers.cookie).toBe('app-cookie=preserved')
+				expect(websocket.headers.authorization).toBe('Bearer native-app-token')
+				await umbreld.client.user.revokeOtherSessions.mutate()
+				expect(websocket.socket.readyState).toBe(WebSocket.OPEN)
+			} finally {
+				websocket.socket.terminate()
+			}
+		}
 	})
 
 	test('does not run the removed auth or app-proxy sidecars', async () => {
@@ -408,75 +345,17 @@ async function expectIngressResponds(url: string, caCertificate?: string) {
 	)
 }
 
-async function expectBrowserLoginFlow(browser: Browser, protocol: 'http' | 'https') {
+async function expectBrowserDirectAccess(browser: Browser, protocol: 'http' | 'https') {
 	const context = await browser.newContext({ignoreHTTPSErrors: true})
 	try {
 		const page = await context.newPage()
-		const pageErrors: Error[] = []
-		const consoleErrors: string[] = []
-		const uiAssets: Array<{url: string; status: number; contentType: string; type: string}> = []
-		page.on('pageerror', (error) => pageErrors.push(error))
-		page.on('console', (message) => {
-			if (message.type() === 'error') consoleErrors.push(message.text())
-		})
-		page.on('response', (response) => {
-			const type = response.request().resourceType()
-			if (!['script', 'stylesheet'].includes(type)) return
-			const url = new URL(response.url())
-			if (url.hostname !== '127.0.0.1' || url.port !== '') return
-			uiAssets.push({
-				url: response.url(),
-				status: response.status(),
-				contentType: response.headers()['content-type'] ?? '',
-				type,
-			})
-		})
-
 		const appUrl = `${protocol}://127.0.0.1:9094/private`
-		const authNavigation = await page.goto(appUrl)
-		await page.getByRole('heading', {name: 'Welcome back, satoshi'}).waitFor()
-
-		const authUrl = new URL(page.url())
-		expect(authUrl.protocol).toBe(`${protocol}:`)
-		expect(authUrl.hostname).toBe('127.0.0.1')
-		expect(authUrl.port).toBe('')
-		expect(authUrl.pathname).toBe('/login')
-		expect(authUrl.searchParams.get('redirect')).toMatch(/^\/app-access\?request=[0-9a-f]{64}$/)
-		expect(authNavigation?.headers()['content-security-policy']).toContain("form-action 'self'")
-		expect(pageErrors).toEqual([])
-		expect(uiAssets.length).toBeGreaterThan(0)
-		for (const asset of uiAssets) {
-			expect(asset.status, asset.url).toBe(200)
-			if (asset.type === 'script') expect(asset.contentType, asset.url).toMatch(/javascript/)
-			if (asset.type === 'stylesheet') expect(asset.contentType, asset.url).toMatch(/text\/css/)
-		}
-
-		await page.locator('input[type="password"]').fill('moneyprintergobrrr')
-		const [loginResponse] = await Promise.all([
-			page.waitForResponse(
-				(response) =>
-					new URL(response.url()).pathname.includes('/trpc/user.login') && response.request().method() === 'POST',
-			),
-			page.getByRole('button', {name: 'Log in', exact: true}).click(),
-		])
-		if (loginResponse.status() !== 200) {
-			throw new Error(`App login returned ${loginResponse.status()}: ${await loginResponse.text()}`)
-		}
-		try {
-			await page.waitForURL(appUrl)
-		} catch (error) {
-			throw new Error(`${String(error)}\nBrowser console errors:\n${consoleErrors.join('\n')}`)
-		}
-
-		const response = JSON.parse(await page.locator('body').innerText()) as {
-			app: string
-			url: string
-			headers: Record<string, string | undefined>
-		}
-		expect(response.app).toBe('authenticated')
-		expect(response.url).toBe('/private')
-		expect(response.headers.cookie).toBeUndefined()
-		expect(consoleErrors.filter((message) => message.includes('Content Security Policy'))).toEqual([])
+		const response = await page.goto(appUrl)
+		expect(response?.status()).toBe(200)
+		expect(page.url()).toBe(appUrl)
+		const body = JSON.parse(await page.locator('body').innerText())
+		expect(body).toMatchObject({app: 'service', url: '/private'})
+		expect(body.headers.cookie).toBeUndefined()
 	} finally {
 		await context.close()
 	}
@@ -516,7 +395,7 @@ async function expectAppPortSupportsHttpAndHttps({
 	expect(httpsResponse.app).toBe(app)
 	expect(httpsResponse.url).toBe(`/${app}/https`)
 	expect(httpsResponse.headers['x-forwarded-proto']).toBe('https')
-	// Direct apps retain their original behavior. Apps using the compatibility
+	// Direct apps retain their original behavior. Apps using the transport
 	// gateway retain app-proxy's forwarded request metadata.
 	expect(httpsResponse.headers['x-forwarded-for'] === undefined).toBe(!gateway)
 }
@@ -536,20 +415,6 @@ async function expectTextAppPortSupportsHttpAndHttps(port: number, caCertificate
 	expect(httpsResponse.body).toBe(expectedBody)
 }
 
-async function expectWebSocketRejected(url: string) {
-	await expect(
-		new Promise<void>((resolve, reject) => {
-			const socket = new WebSocket(url)
-			socket.once('unexpected-response', (_request, response) => {
-				response.resume()
-				response.once('end', () => (response.statusCode === 401 ? resolve() : reject(new Error('Expected 401'))))
-			})
-			socket.once('open', () => reject(new Error('Unauthorized WebSocket opened')))
-			socket.once('error', () => {})
-		}),
-	).resolves.toBeUndefined()
-}
-
 async function connectWebSocket(url: string, headers: Record<string, string>, ca?: string) {
 	return new Promise<{headers: Record<string, string | undefined>; socket: WebSocket}>((resolve, reject) => {
 		const socket = new WebSocket(url, {headers, ca})
@@ -557,13 +422,6 @@ async function connectWebSocket(url: string, headers: Record<string, string>, ca
 			resolve({headers: JSON.parse(String(data)).headers, socket})
 		})
 		socket.once('error', reject)
-	})
-}
-
-function rejectAfter(milliseconds: number, message: string) {
-	return new Promise<never>((_resolve, reject) => {
-		const timeout = setTimeout(() => reject(new Error(message)), milliseconds)
-		timeout.unref()
 	})
 }
 
@@ -622,7 +480,6 @@ services:
     environment:
       APP_HOST: 10.21.0.1
       APP_PORT: $target_port
-      PROXY_AUTH_ADD: "false"
 YAML
 			;;
 		recreated)
@@ -633,7 +490,6 @@ services:
     environment:
       APP_HOST: lan-ingress-recreated_web_1
       APP_PORT: 18080
-      PROXY_AUTH_ADD: "false"
   web:
     image: ghcr.io/getumbrel/tor:0.4.9.11
     container_name: lan-ingress-recreated_web_1
@@ -653,16 +509,13 @@ networks:
     external: true
 YAML
 			;;
-		authenticated)
+		service)
 			cat > "$app_dir/docker-compose.yml" <<YAML
 services:
   app_proxy:
     environment:
       APP_HOST: 10.21.0.1
       APP_PORT: $target_port
-      PROXY_AUTH_ADD: "true"
-      PROXY_AUTH_WHITELIST: /public/*
-      PROXY_AUTH_BLACKLIST: /public/private/*
   keepalive:
     image: ghcr.io/getumbrel/tor:0.4.9.11
     command: ["sleep", "infinity"]
@@ -689,12 +542,12 @@ YAML
 write_app lan-ingress-app-proxy "LAN Ingress App Proxy" 9091 app_proxy 19091
 write_app lan-ingress-bridge "LAN Ingress Bridge" 9092 bridge
 write_app lan-ingress-host "LAN Ingress Host" 9093 host
-write_app lan-ingress-auth "LAN Ingress Auth" 9094 authenticated 19094
+write_app lan-ingress-service "LAN Ingress Service" 9094 service 19094
 write_app lan-ingress-recreated "LAN Ingress Recreated" 9095 recreated
 
 docker compose --project-name lan-ingress-recreated --file /home/umbrel/umbrel/app-data/lan-ingress-recreated/docker-compose.yml up --detach web >/dev/null
 
-# The authenticated and recreated fixtures need to start when umbreld is
+# The service and recreated fixtures need to start when umbreld is
 # restarted. The other fixtures use a host-side echo server and have already
 # exercised their ingress routes by that point.
 for app_id in lan-ingress-app-proxy lan-ingress-bridge lan-ingress-host; do
@@ -729,7 +582,7 @@ function listen(app, port) {
 }
 
 listen('app-proxy', 19091)
-listen('authenticated', 19094)
+listen('service', 19094)
 listen('bridge', 9092)
 listen('host-network', 9093)
 JS
@@ -740,7 +593,7 @@ const yaml = require('/opt/umbreld/node_modules/js-yaml')
 
 const storePath = '/home/umbrel/umbrel/umbrel.yaml'
 const store = yaml.load(fs.readFileSync(storePath, 'utf8')) || {}
-store.apps = ['lan-ingress-app-proxy', 'lan-ingress-bridge', 'lan-ingress-host', 'lan-ingress-auth', 'lan-ingress-recreated']
+store.apps = ['lan-ingress-app-proxy', 'lan-ingress-bridge', 'lan-ingress-host', 'lan-ingress-service', 'lan-ingress-recreated']
 fs.writeFileSync(storePath, yaml.dump(store))
 NODE
 
@@ -786,7 +639,7 @@ NODE
 rm -rf /home/umbrel/umbrel/app-data/lan-ingress-app-proxy
 rm -rf /home/umbrel/umbrel/app-data/lan-ingress-bridge
 rm -rf /home/umbrel/umbrel/app-data/lan-ingress-host
-rm -rf /home/umbrel/umbrel/app-data/lan-ingress-auth
+rm -rf /home/umbrel/umbrel/app-data/lan-ingress-service
 docker compose --project-name lan-ingress-recreated --file /home/umbrel/umbrel/app-data/lan-ingress-recreated/docker-compose.yml down >/dev/null 2>&1 || true
 docker rm -f lan-ingress-ip-blocker >/dev/null 2>&1 || true
 rm -rf /home/umbrel/umbrel/app-data/lan-ingress-recreated

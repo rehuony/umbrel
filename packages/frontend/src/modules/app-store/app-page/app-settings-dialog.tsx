@@ -2,16 +2,7 @@ import {AnimatePresence, motion} from 'motion/react'
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
 import {useTranslation} from 'react-i18next'
-import {
-	TbAdjustmentsHorizontal,
-	TbAlertTriangle,
-	TbDatabase,
-	TbInfoCircle,
-	TbKey,
-	TbLock,
-	TbPlugConnected,
-	TbWorld,
-} from 'react-icons/tb'
+import {TbAdjustmentsHorizontal, TbAlertTriangle, TbDatabase, TbKey, TbPlugConnected, TbWorld} from 'react-icons/tb'
 import {useLocation, useNavigate, type To} from 'react-router-dom'
 import {arrayIncludes} from 'ts-extras'
 
@@ -33,7 +24,6 @@ import {ImmersiveDialog, ImmersiveDialogOverlay} from '@/components/ui/immersive
 import {ScrollArea} from '@/components/ui/scroll-area'
 import {preventDialogDismissForToasts} from '@/components/ui/shared/dialog'
 import {SheetContent} from '@/components/ui/sheet'
-import {Switch} from '@/components/ui/switch'
 import {toast} from '@/components/ui/toast'
 import {registryAppPath} from '@/constants/app-store'
 import {useQueryParams} from '@/hooks/use-query-params'
@@ -48,12 +38,7 @@ import {getDialogParamKey, useDialogOpenProps} from '@/utils/dialog'
 
 import {getDependencyAlternatives} from '../dependency-alternatives'
 import {SelectDependencies, type InstallDependency} from '../select-dependencies-dialog'
-import {
-	AdvancedSettingsView,
-	EnvironmentSettingsView,
-	ExternalAccessSettingsView,
-	ExternalAccessSetupRow,
-} from './app-settings-advanced'
+import {AdvancedSettingsView, EnvironmentSettingsView, ExternalUrlSettingsView} from './app-settings-advanced'
 import {appHasDefaultCredentials, CredentialsSettingsView} from './app-settings-credentials'
 import {
 	areCustomEnvironmentVariablesEqual,
@@ -73,22 +58,9 @@ import {
 	type AppCustomMount,
 	type AppFolderAccessSelection,
 } from './app-settings-storage'
-import {
-	BackButton,
-	SettingsControlRow,
-	SettingsNavigationRow,
-	SettingsViewHeader,
-	SettingsViewTransition,
-} from './shared'
+import {BackButton, SettingsNavigationRow, SettingsViewHeader, SettingsViewTransition} from './shared'
 
-type AppSettingsView =
-	| 'home'
-	| 'storage'
-	| 'connections'
-	| 'credentials'
-	| 'advanced'
-	| 'environment'
-	| 'external-access'
+type AppSettingsView = 'home' | 'storage' | 'connections' | 'credentials' | 'advanced' | 'environment' | 'external-url'
 
 export function AppSettingsDialog({
 	onInstallDependency,
@@ -212,10 +184,6 @@ function areSelectionsEqual(a?: Record<string, string>, b?: Record<string, strin
 	return true
 }
 
-function getAppProxyAuthEnabled(app: UserApp) {
-	return app.appProxyAuth?.enabled !== false
-}
-
 function getAppStorageSnapshot(app: UserApp) {
 	const customMounts = app.storage?.customMounts ?? []
 	const folderAccess = getSelectedFolderAccess(app)
@@ -278,10 +246,7 @@ function AppSettingsDialogForApp({
 	const [customEnvironmentVariables, setCustomEnvironmentVariables] = useState<AppCustomEnvironmentVariable[]>(
 		getCustomEnvironmentVariables(app),
 	)
-	const externalAccessEnabled = app.externalAccess?.enabled === true
-	const [externalOrigin, setExternalOrigin] = useState(app.externalAccess?.origin ?? '')
-	const [authEnableConfirmOpen, setAuthEnableConfirmOpen] = useState(false)
-	const [authDisableConfirmOpen, setAuthDisableConfirmOpen] = useState(false)
+	const [externalUrl, setExternalUrl] = useState(app.externalUrl ?? '')
 	// A discard confirmation holding the action to run once the user lets go of
 	// their unsaved changes (closing the dialog, or navigating elsewhere)
 	const [pendingDiscardAction, setPendingDiscardAction] = useState<(() => void) | null>(null)
@@ -311,16 +276,9 @@ function AppSettingsDialogForApp({
 	const setSettingsMut = trpcReact.apps.setSettings.useMutation({
 		onSuccess: invalidateApp,
 	})
-	const setExternalOriginMut = trpcReact.apps.setExternalOrigin.useMutation({onSuccess: invalidateApp})
-	// Umbrel login applies instantly through the app gateway (no restart), so it
-	// gets its own mutation instead of joining the batched save
-	const setAuthMut = trpcReact.apps.setSettings.useMutation({
-		onSuccess: invalidateApp,
-		onError: onMutationError,
-	})
 
 	// A backend settings event updates the persisted storage snapshot. Reconcile
-	// only the storage draft; environment, dependency, and auth edits, and the
+	// only the storage draft; environment, dependency, and launch URL edits, and the
 	// current view remain untouched.
 	useEffect(() => {
 		if (previousStorageRevisionRef.current === storageRevision) return
@@ -346,18 +304,17 @@ function AppSettingsDialogForApp({
 	)
 
 	async function onSubmit() {
-		if (hasExternalChanges && !externalAccessEnabled) return
 		const saveDependencies = hasDependencyChanges && areAllDependenciesInstalled
 		const settings = {
 			appId: app.id,
+			...(hasExternalChanges && {externalUrl: externalUrl.trim()}),
 			...(saveDependencies && {dependencies: selectedDependencies}),
 			...(hasStorageSettingsChanges && {customMounts, folderAccess}),
 			...(hasEnvironmentVariableChanges && {environment: environmentVariables}),
 			...(hasCustomEnvironmentVariableChanges && {customEnvironment: customEnvironmentVariables}),
 		}
 		try {
-			if (hasAppChanges) await setSettingsMut.mutateAsync(settings)
-			if (hasExternalChanges) await setExternalOriginMut.mutateAsync({appId: app.id, origin: externalOrigin.trim()})
+			await setSettingsMut.mutateAsync(settings)
 		} catch (error) {
 			// The settings mutation has no hook-level onError (see above)
 			onMutationError(error as {message: string})
@@ -384,7 +341,7 @@ function AppSettingsDialogForApp({
 	)
 	const hasEnvironmentChanges = hasEnvironmentVariableChanges || hasCustomEnvironmentVariableChanges
 	const hasAppChanges = hasDependencyChanges || hasStorageSettingsChanges || hasEnvironmentChanges
-	const hasExternalChanges = externalOrigin.trim() !== (app.externalAccess?.origin ?? '')
+	const hasExternalChanges = externalUrl.trim() !== (app.externalUrl ?? '')
 	const hasChanges = hasAppChanges || hasExternalChanges
 	const changedSectionCount = [
 		hasDependencyChanges,
@@ -392,16 +349,9 @@ function AppSettingsDialogForApp({
 		hasEnvironmentChanges,
 		hasExternalChanges,
 	].filter(Boolean).length
-	const mutationInProgress = setSettingsMut.isPending || setExternalOriginMut.isPending
+	const mutationInProgress = setSettingsMut.isPending
 	const saveDisabled =
-		!hasChanges ||
-		(hasExternalChanges && !externalAccessEnabled) ||
-		inProgress ||
-		mutationInProgress ||
-		// The instant auth toggle holds the same backend settings lock, so a
-		// batched save fired alongside it would be rejected as concurrent
-		setAuthMut.isPending ||
-		(hasDependencyChanges && !areAllDependenciesInstalled)
+		!hasChanges || inProgress || mutationInProgress || (hasDependencyChanges && !areAllDependenciesInstalled)
 	// Stopped apps keep their manual stop, and unknown auto-start apps retry
 	// after saving because the setting change may be fixing why they failed to
 	// start
@@ -410,7 +360,7 @@ function AppSettingsDialogForApp({
 	const saveLabel = willRestartOnSave ? t('app-settings.save-and-restart') : t('app-settings.save-changes')
 
 	const resetChanges = () => {
-		setExternalOrigin(app.externalAccess?.origin ?? '')
+		setExternalUrl(app.externalUrl ?? '')
 		setSelectedDependencies(app.selectedDependencies)
 		setCustomMounts(app.storage?.customMounts ?? [])
 		setFolderAccess(getSelectedFolderAccess(app))
@@ -441,27 +391,6 @@ function AppSettingsDialogForApp({
 			closeRequestRef.current = null
 		}
 	}, [closeRequestRef])
-
-	// Umbrel login is applied instantly after any required confirmation. Turning
-	// it off always warns about exposing the app; turning it on also warns when
-	// the developer ships it off because login may break clients or integrations.
-	const appProxyAuthSupported = app.appProxyAuth?.supported === true
-	const appProxyAuthDefaultEnabled = app.appProxyAuth?.defaultEnabled === true
-	const savedAuthEnabled = getAppProxyAuthEnabled(app)
-	const pendingAuthValue = setAuthMut.isPending ? setAuthMut.variables?.appProxyAuthEnabled : undefined
-	const authEnabled =
-		pendingAuthValue === undefined ? savedAuthEnabled : (pendingAuthValue ?? appProxyAuthDefaultEnabled)
-	const setAuthEnabled = (enabled: boolean) =>
-		setAuthMut.mutate({
-			appId: app.id,
-			// null clears the override so the app follows its default
-			appProxyAuthEnabled: appProxyAuthDefaultEnabled === enabled ? null : enabled,
-		})
-	const onAuthToggle = (enabled: boolean) => {
-		if (!enabled) setAuthDisableConfirmOpen(true)
-		else if (!appProxyAuthDefaultEnabled) setAuthEnableConfirmOpen(true)
-		else setAuthEnabled(true)
-	}
 
 	// Home rows explain what each section contains. Actionable states replace
 	// that description so problems remain visible before opening the section.
@@ -513,21 +442,6 @@ function AppSettingsDialogForApp({
 			<SettingsViewHeader title={t('app-settings.title')} description={t('app-settings.description')} />
 
 			<div className='flex flex-col gap-3'>
-				<SettingsControlRow
-					title={t('app-settings.auth.row-title')}
-					description={appProxyAuthSupported ? t('app-settings.auth.description') : t('app-settings.auth.unsupported')}
-					icon={TbLock}
-					tone={1}
-					control={
-						appProxyAuthSupported ? (
-							<Switch
-								checked={authEnabled}
-								disabled={setAuthMut.isPending || mutationInProgress}
-								onCheckedChange={onAuthToggle}
-							/>
-						) : undefined
-					}
-				/>
 				<SettingsNavigationRow
 					title={t('app-settings.connections.title')}
 					description={connectionsDescription}
@@ -544,18 +458,14 @@ function AppSettingsDialogForApp({
 					tone={4}
 				/>
 				{app.port ? (
-					externalAccessEnabled ? (
-						<SettingsNavigationRow
-							title={t('external-access.title')}
-							description={app.externalAccess?.origin || t('external-access.app-unavailable')}
-							onClick={() => setView('external-access')}
-							modified={hasExternalChanges}
-							icon={TbWorld}
-							tone={2}
-						/>
-					) : (
-						<ExternalAccessSetupRow onConfigure={() => navigateAway('/settings/advanced/external-access')} />
-					)
+					<SettingsNavigationRow
+						title={t('app-settings.external-url.title')}
+						description={app.externalUrl || t('app-settings.external-url.unavailable')}
+						onClick={() => setView('external-url')}
+						modified={hasExternalChanges}
+						icon={TbWorld}
+						tone={2}
+					/>
 				) : null}
 				<SettingsNavigationRow
 					title={t('app-settings.storage.title')}
@@ -622,12 +532,11 @@ function AppSettingsDialogForApp({
 			connections
 		) : view === 'credentials' ? (
 			<CredentialsSettingsView app={app} onBack={() => setView('home')} />
-		) : view === 'external-access' ? (
-			<ExternalAccessSettingsView
+		) : view === 'external-url' ? (
+			<ExternalUrlSettingsView
 				app={app}
-				origin={externalOrigin}
-				onConfigure={() => navigateAway('/settings/advanced/external-access')}
-				onOriginChange={setExternalOrigin}
+				url={externalUrl}
+				onUrlChange={setExternalUrl}
 				onBack={() => setView('home')}
 			/>
 		) : view === 'advanced' ? (
@@ -689,50 +598,6 @@ function AppSettingsDialogForApp({
 			</div>
 			{sideSlot ? createPortal(<AppSettingsSidebar app={app} onNavigate={navigateAway} />, sideSlot) : null}
 			{footerSlot ? createPortal(pendingChangesBar, footerSlot) : null}
-
-			<AlertDialog open={authEnableConfirmOpen} onOpenChange={setAuthEnableConfirmOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader icon={TbInfoCircle}>
-						<AlertDialogTitle>{t('app-settings.auth.confirm-enable-title', {app: app.name})}</AlertDialogTitle>
-						<AlertDialogDescription>{t('app-settings.auth.confirm-enable-description')}</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
-						<AlertDialogAction
-							variant='primary'
-							onClick={() => {
-								setAuthEnableConfirmOpen(false)
-								setAuthEnabled(true)
-							}}
-						>
-							{t('app-settings.auth.confirm-enable-action')}
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-
-			<AlertDialog open={authDisableConfirmOpen} onOpenChange={setAuthDisableConfirmOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader icon={TbAlertTriangle}>
-						<AlertDialogTitle>{t('app-settings.auth.confirm-disable-title', {app: app.name})}</AlertDialogTitle>
-						<AlertDialogDescription>
-							{t('app-settings.auth.confirm-disable-description', {app: app.name})}
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
-						<AlertDialogAction
-							variant='destructive'
-							onClick={() => {
-								setAuthDisableConfirmOpen(false)
-								setAuthEnabled(false)
-							}}
-						>
-							{t('app-settings.auth.confirm-disable-action')}
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
 
 			<AlertDialog
 				open={pendingDiscardAction !== null}

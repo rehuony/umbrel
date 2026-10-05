@@ -21,9 +21,9 @@ Each application has a directory containing at least two files:
 - `umbrel-app.yml`: application ID, name, icon, description, category, version, Web port, and related metadata.
 - `docker-compose.yml`: services, images, mounts, environment variables, and service dependencies.
 
-Community repositories describe their store in a root `umbrel-app-store.yml`. Official repositories retain their original discovery behavior. Application dependencies, environment variables, directory access, data-directory moves, gateway authentication, and member grants use the existing implementation.
+Community repositories describe their store in a root `umbrel-app-store.yml`. Official repositories retain their original discovery behavior. Application dependencies, environment variables, directory access, data-directory moves, external launch URLs, and dashboard member grants use the existing implementation.
 
-The runtime in `packages/backend/source/modules/apps/runtime/` merges Compose configuration. `app_proxy` declares the application's Web entry; the server gateway handles it without starting a separate proxy container. The application ID is the Compose project name. Generated container names match the original store convention.
+The runtime in `packages/backend/source/modules/apps/runtime/` merges Compose configuration. Store applications can use `app_proxy` to declare the application's Web upstream; the server forwards to it without authentication or a separate proxy container. Custom imports declare published ports directly. The application ID is the Compose project name. Generated container names match the original store convention.
 
 Relative bind paths resolve from the application directory: `./data` maps to `app-data/<id>/data`. Existing runtime variables such as `$APP_DATA_DIR` remain available. The system manages generated files including `docker-compose.umbreld.yml` and `docker-compose.umbrel-user-settings.yml`.
 
@@ -33,12 +33,12 @@ Administrators can open **Import Compose** from the app-store menu, paste or upl
 
 - Required: application ID, name, HTTP(S) icon URL, description, version, and category.
 - Optional: tagline and project website.
-- Web applications: service name, container port, panel entry port, and path. The form generates the original `app_proxy` declaration. If the Compose file already supplies that declaration, enter the corresponding entry port.
-- Background applications: leave the Web service and ports empty.
+- Web applications: choose a fixed TCP host port already published by Compose, HTTP or HTTPS, a path, and an optional external launch URL. Host-network applications use an explicit port. All other Compose port mappings are preserved.
+- Background applications: leave the web entry empty. Compose may still publish API or other service ports.
 
 The importer saves form metadata as `umbrel-app.yml` and Compose as `docker-compose.yml`, then invokes the same installation pipeline used by store applications. `custom-apps/<id>` in the system data directory holds the local installation source; installed configuration and application data live in `app-data/<id>`. Custom applications appear as a local store in the registry. Importing does not create a remote repository.
 
-Single-file imports require prebuilt images. They reject `build`, external `env_file`, `include`, `extends`, and configuration requiring external files. An imported application cannot reuse an existing store application's ID. Members cannot import, update, or uninstall applications. Web access retains panel authentication and member authorization.
+Single-file imports require prebuilt images. They reject `build`, external `env_file`, `include`, `extends`, and configuration requiring external files. An imported application cannot reuse an existing store application's ID. Members cannot import, update, or uninstall applications. Applications use their own authentication. Panel login and member permissions still protect app management. See [direct service access](external-access.md) for launch URL selection and VPS routing.
 
 Importing the same custom application ID again invokes the existing update workflow. Updates preserve application data. Failures return errors; container-internal database changes are not guaranteed to be reversible. Published ports, host networking, and mount permissions follow Compose and the existing runtime.
 

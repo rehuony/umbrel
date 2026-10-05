@@ -21,7 +21,6 @@ import Backups from './modules/backups/backups.js'
 import SystemNg from './modules/system-ng/system-ng.js'
 import Machines from './modules/machines/machines.js'
 import LanIngress from './modules/lan-ingress/lan-ingress.js'
-import ExternalAccess, {type ExternalAccessSettings} from './modules/app-gateway/external-access.js'
 import Auth from './modules/auth/auth.js'
 import Mcp, {type McpStoreSettings} from './modules/mcp/mcp.js'
 import Photos from './modules/photos/photos.js'
@@ -39,7 +38,6 @@ import {
 import {cleanupFactoryResetBackups} from './modules/system/factory-reset.js'
 
 type StoreSchema = {
-	externalAccess?: ExternalAccessSettings
 	version: string
 	previousVersion?: string
 	discoveryId?: string
@@ -171,7 +169,6 @@ export default class Umbreld {
 	systemNg: SystemNg
 	machines: Machines
 	lanIngress: LanIngress
-	externalAccess: ExternalAccess
 	auth: Auth
 	mcp: Mcp
 	photos: Photos
@@ -205,7 +202,6 @@ export default class Umbreld {
 		this.systemNg = new SystemNg(this)
 		this.machines = new Machines(this)
 		this.lanIngress = new LanIngress(this)
-		this.externalAccess = new ExternalAccess(this)
 		this.auth = new Auth(this)
 		this.mcp = new Mcp(this)
 		this.photos = new Photos(this)
@@ -232,7 +228,6 @@ export default class Umbreld {
 		// Detect first boot after activating a supported backup.
 		await this.setBackupRestoreFirstStartFlag()
 		await this.auth.start()
-		await this.externalAccess.start()
 
 		// Start restoring remembered Thunderbolt authorization alongside the
 		// other early boot work. Its result is handled here so a later timeout

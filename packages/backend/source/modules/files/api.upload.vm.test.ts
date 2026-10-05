@@ -81,7 +81,7 @@ test('POST /api/files/upload does not accept the app-session cookie', async () =
 		json: {password: 'moneyprintergobrrr'},
 	})
 	const appSession = (login.headers['set-cookie'] ?? [])
-		.find((cookie) => cookie.startsWith('UMBREL_APP_SESSION='))
+		.find((cookie) => cookie.startsWith('UMBREL_BROWSER_SESSION='))
 		?.split(';')[0]
 	expect(appSession).toBeDefined()
 

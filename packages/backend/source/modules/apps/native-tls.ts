@@ -19,7 +19,7 @@ export const NativeTlsHostnameSuffixesSchema = z
 export type NativeTlsPolicy = {hostnameSuffixes: string[]; reservedHostnames: string[]}
 
 export function getNativeTlsPolicy(metadata: unknown, services: unknown, reservedHostnames: string[]) {
-	// Keep the gateway path even when its packaged config is invalid or auth is disabled.
+	// Keep the gateway path even when its packaged config is invalid.
 	if (!services || typeof services !== 'object' || Array.isArray(services)) return
 	if (Object.hasOwn(services, 'app_proxy')) return
 	const result = NativeTlsHostnameSuffixesSchema.safeParse(metadata)

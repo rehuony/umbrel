@@ -1,114 +1,39 @@
-# External application access
+# Direct service access
 
-## Architecture
+The panel and application services are separate endpoints. The panel retains its own login, two-factor authentication, session revocation and management API permissions. Each application authenticates its own users and API clients. Application requests do not acquire or require an Umbrel session.
 
-The existing backend owns both panel traffic and authenticated application forwarding. The VPS terminates public HTTPS and forwards registered hostnames through Tailscale to the same system ingress port. No additional authentication server or gateway process is required.
+## Reverse proxy configuration
 
-The implementation has these boundaries:
+Configure public DNS, TLS and the private connection on the VPS. Point each upstream at the system's private IP and the service's published host port. A Compose mapping such as `18080:8080` uses port `18080` on the VPS upstream. Separate domains may point at different ports of the same application, for example its web UI and API server. Use the application's native credentials and proxy settings where required.
 
-1. Add owner-managed HTTPS origins and exact trusted proxy addresses. Keep configuration separate from application manifests. Reject duplicate origins and unknown applications.
-2. Dispatch registered application hosts to the existing streaming application gateway. Reject untrusted forwarding and unknown hosts received from trusted proxies. External access always requires authentication, independently of LAN application settings.
-3. Replace the separate application login page, APIs, listener, and build entry with the regular panel login and a bounded, browser-bound handoff. Preserve member authorization, session expiry, revocation, and original application paths.
-4. Expose panel/proxy configuration through Advanced Settings and application URLs through each application's settings. Use external application origins when launching from the external panel. Never silently construct an unreachable domain-and-port URL for an unconfigured external application.
-5. Remove redundant authentication/configuration reads without retaining stale permission grants. Keep request and response bodies streaming; do not add a second proxy process or buffer complete uploads.
-6. Verify malformed configuration, forwarded-header forgery, unknown domains, missing sessions, denied members, cross-application use, replay, expiry, revoked sessions, WebSockets, configuration changes, and ordinary LAN access. Verify the UI and production build separately from real-device acceptance.
+The panel can be forwarded through its normal HTTP or HTTPS listener. For HTTPS upstreams, trust the system's local CA and verify the upstream name. Ingress derives the panel cookie transport from the actual upstream connection; client-supplied forwarded protocol headers do not override it. Keep the panel and applications on their respective domains and ports.
 
-## Authentication boundary
+There is no system-wide public panel URL, proxy-IP registry, host-based application dispatcher or source-IP restriction to ports 80/443. Existing ingress rules still protect internal listeners and keep HTTP/HTTPS routing working. Network reachability and service publication follow Compose and the operator's network configuration.
 
-An unauthenticated browser is redirected to the configured panel origin. The regular panel login retains an internal return URL. An authenticated HTTP procedure checks both panel credentials and app access before issuing a short-lived, single-use handoff. The callback destination comes from server-owned state, not an arbitrary browser URL.
+## Application launch URL
 
-The application callback requires the initiating browser's HttpOnly cookie, the pending request, and the exact ticket issued for that request. Requests expire after five minutes; issued tickets expire after thirty seconds and can be consumed only once. External application sessions are host-only, Secure, HttpOnly, and scoped to a specific app and origin. Application containers never receive panel, handoff-binding, or gateway session cookies. Session and member-access revocation continue to be enforced by the central authentication module; registered WebSockets close on revocation. Already admitted HTTP transfers may finish.
+An application's `settings.yml` may contain `externalUrl`, an HTTP or HTTPS URL without embedded credentials. `apps.setSettings` saves or clears it; `apps.list` returns it. An empty value clears the URL. This setting does not modify Compose, restart the app, configure a reverse proxy or change authentication.
 
-Unauthenticated API requests and WebSocket upgrades fail without redirecting to HTML. Authenticated members without access receive a denial rather than a login loop. Application-native accounts are not replaced by gateway authentication.
+The dashboard chooses the icon destination from the address currently used to open the panel:
 
-## Operational boundary
+- Private IPv4, loopback, IPv6 local/link-local addresses, single-label hosts, `.local`, `.localhost`, `.home.arpa` and `.ts.net` use the panel host and the application's primary service port.
+- Other hostnames and public IPs use the application's external URL. A public panel opened from inside the LAN still uses the external URL. A private DNS zone outside the local suffixes listed above also uses this URL.
+- Tor uses the application's hidden service. Apps without a hidden service show an unavailable message; direct Compose imports do not create one automatically.
 
-Only explicitly registered applications are exposed. A wildcard DNS record does not publish other applications. The VPS must preserve the registered Host header and overwrite forwarding headers; the system trusts only configured TCP peer addresses. DNS, certificates, the VPS configuration, and Tailscale policy remain operator-managed.
+A public launch without an external URL shows an unavailable message instead of constructing a public hostname with an internal port. A URL with an explicit path, query or fragment is used as configured. A bare origin uses the manifest path. Explicit application subpage links remain on the selected origin.
 
-Application container ports must not be publicly published by a separate router or proxy. Configure Tailscale policy to permit the VPS to reach only the intended gateway port before enabling access. This restriction also protects startup periods before backend-managed firewall rules are installed. Audit other tailnet peers separately: their access remains governed by their LAN/Tailscale policy.
+This URL is launcher metadata, not an access rule. Dashboard app sharing controls which icons and management information a member can see; it does not authorize or revoke native application connections.
 
-Once applied, the ingress firewall restricts configured proxy source IPs to TCP 80/443 before Docker DNAT. Other TCP ports, including SSH and raw application ports, are blocked for those IPs. This guard remains while the proxy IPs are configured, including when the external-access toggle is off. Disabling access denies configured external hosts instead of falling through to the LAN panel. Removing a proxy IP deliberately removes its restriction; update Tailscale policy first. Local app access from other LAN peers retains its existing policy. UDP and non-web services are outside this gateway's scope.
+## Compose imports and store applications
 
-Backend restart briefly interrupts application forwarding. External browser sessions may need a new automatic handoff after restart; existing panel sessions remain the source of identity. No persistent user or application data is discarded.
+Custom imports preserve the submitted Compose definition, including multiple service port mappings. Choose one fixed published TCP host port, a protocol and a path for the icon's web entry. Host-network applications require an explicit port. A background app may have no icon web entry while retaining its published ports. Dynamic mappings and ranges remain in Compose but cannot be selected as a fixed icon endpoint. The external launch URL can be supplied during import or edited later in app settings.
 
-## Configuration
+The imported manifest records the native web-entry protocol as `portProtocol`, defaulting to HTTP. Direct endpoints bypass the HTTP/TLS ingress mux so Compose bind addresses and application-owned TLS remain intact. Local icons use this protocol independently of the panel's protocol; public icons use the external URL's protocol. Store apps without an explicit `portProtocol` retain their existing HTTP/TLS ingress behavior.
 
-1. Create HTTPS DNS names for the panel and each exposed application. They must be different origins on port 443; wildcard host routing and subpath applications are not supported.
-2. Restrict the VPS in Tailscale policy to the Raspberry Pi's TCP port 80. Keep a separate trusted LAN administration path while changing ingress settings.
-3. In **Settings → Advanced Settings → External access**, enter the panel origin and the VPS's exact Tailscale source IP. Enable and save external access here before configuring application URLs. This form only edits global ingress settings.
-4. When global access is disabled, the application row is inactive and its **Configure** button opens the global settings directly. Open an application's **Settings → External access** and enter its HTTPS origin. The application settings dialog retains unsaved URL edits while switching sections and warns before discarding them. A URL-only save does not restart the application. Empty origins remain LAN-only; saved origins are retained when global external access is disabled. Only the owner can change either scope, and concurrent saves preserve other applications' mappings. Nothing is exposed by default.
-5. Configure the VPS as below, with valid certificates and the real Raspberry Pi Tailscale address. Test and reload Nginx using its normal administrative workflow.
-6. Set each application's public URL/trusted-proxy options when that application requires them. Gateway authentication does not replace application-native accounts. External clients without browser sessions, webhooks, and cross-origin API calls are deliberately denied; there is no implicit bypass allowlist.
+Imports accept direct service declarations rather than `app_proxy`. Store applications may still declare `app_proxy` as their upstream transport target. The in-process transport preserves streaming HTTP, WebSockets, native application credentials, upstream errors and target recovery. It has no Umbrel login checks, authentication overrides, callback tickets or application session cookies. It removes panel browser-session cookies before forwarding to an upstream application.
 
-All domains use the same upstream. The following directives belong in Nginx's `http` context; certificate paths and names are placeholders. Keep unknown-host rejection in the VPS's default server as well. The log format excludes query strings because callbacks contain short-lived credentials.
-
-```nginx
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    '' ''; # Keep ordinary HTTP connections reusable.
-}
-
-log_format panel_gateway '$remote_addr $host $request_method $uri $status';
-
-upstream panel_ingress {
-    server 100.64.0.20:80;
-    keepalive 32;
-}
-
-server {
-    listen 443 ssl;
-    server_name panel.example.com photos.example.com app.example.com;
-    ssl_certificate /etc/nginx/certificates/example.fullchain.pem;
-    ssl_certificate_key /etc/nginx/certificates/example.key;
-    access_log /var/log/nginx/panel-gateway.log panel_gateway;
-
-    # Adjust to the largest upload you intend to allow.
-    client_max_body_size 20g;
-
-    location / {
-        proxy_pass http://panel_ingress;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header Forwarded "";
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_request_buffering off;
-        proxy_buffering off;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-    }
-}
-```
-
-Do not rewrite cookies to a parent domain, cache authenticated responses, or create additional VPS locations pointing directly at application ports. Keep callback query strings out of debug/access logs too. The backend overwrites forwarding metadata from the configured TCP peer; forwarded client-IP headers cannot establish trust.
-
-Applications with an existing `app_proxy` target use that target directly. A directly published HTTP application uses its local published port. For an upstream that speaks only HTTPS, declare an HTTPS application gateway target; the gateway verifies its certificate and does not silently disable TLS verification. Browser-based apps that require special origins, streaming timeouts, or WebSocket settings still need application-specific acceptance tests.
-
-## Runtime and maintenance
-
-External routing, transient login attempts, and app sessions are indexed in memory. HTTP bodies and responses remain streaming, and the application proxy reuses upstream connections. Authentication performs one account validation per request and checks current member grants; concurrent file-store reads share in-flight I/O only, with independent results for callers. No permission cache survives a completed read or hides a later write.
-
-The separate App Auth frontend, backend APIs, port-2000 listener, and Tor authentication port are removed. LAN and Tor application login also return through the normal panel login. The existing app manifest/Compose format and LAN app-auth settings remain supported because the application catalog still uses them. External policy ignores LAN auth exemptions.
-
-Saving configuration invalidates old external sessions and pending requests. Failed application of ingress settings restores the prior configuration and reports failure. Uninstalling an application removes its public mapping, so reinstalling the same app ID does not silently republish it. Transient login/session tables are bounded; public deployments should also apply appropriate request-rate controls at the VPS.
-
-The proxy configuration follows [Nginx's WebSocket guidance](https://nginx.org/en/docs/http/websocket.html) and [streaming proxy directives](https://nginx.org/en/docs/http/ngx_http_proxy_module.html). Cookie isolation follows the [host-prefixed cookie requirements](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
+All explicitly published ports, including secondary and background-service ports, are reserved against hidden ingress listener allocation. Published ports must also respect the existing Machines port reservation. These allocation rules do not create a VPS source-IP whitelist.
 
 ## Verification
 
-The gateway tests exercise local HTTP and WebSocket connections, central
-authentication and RPC handlers. They cover browser/app/request binding, expired
-and reused tickets, concurrent callbacks, member denial, session revocation,
-cross-origin requests, spoofed forwarding headers, unknown hosts, configuration
-rollback and application removal. UI tests cover callback navigation, external
-URL selection, draft retention, save failures and disabled global access.
-
-Use the [verification guide](validation.md) for test commands and environment
-requirements. Deployment acceptance also needs the actual VPS/Nginx/Tailscale
-path, a current image and application-specific browser/client checks. Verify
-firewall restrictions in an isolated environment before applying them to the
-intended proxy. Synthetic gateway tests do not establish physical Raspberry Pi
-throughput or successful provider/application access.
+Focused tests cover launch address selection, Compose binding preservation, external URL validation and persistence, transparent application credentials and WebSockets, long uploads, upstream failures, and panel session boundaries. VM scenarios cover HTTP/HTTPS ingress, Tor endpoints, loopback forwarding, panel login and member isolation. Run VM scenarios against an image built from the changed revision; an older image cannot validate these source changes. Validate the actual VPS routes, native app authentication and each published service port after the operator deploys the update.

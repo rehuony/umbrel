@@ -285,7 +285,11 @@ export function createSettingsCatalog(
 			title: t('app-settings-list.title'),
 			description: t('app-settings-list.description'),
 			to: '/settings/apps',
-			keywords: [t('app-settings.storage.title'), t('app-settings.advanced.title'), t('app-settings.auth.row-title')],
+			keywords: [
+				t('app-settings.storage.title'),
+				t('app-settings.advanced.title'),
+				t('app-settings.external-url.title'),
+			],
 		},
 		{
 			kind: 'page',

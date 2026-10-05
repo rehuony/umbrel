@@ -1,5 +1,4 @@
 import {createHash, createHmac, timingSafeEqual} from 'node:crypto'
-import type {Socket} from 'node:net'
 import nodePath from 'node:path'
 
 import fse from 'fs-extra'
@@ -19,9 +18,8 @@ const ONE_HOUR = 60 * ONE_MINUTE
 const ONE_DAY = 24 * ONE_HOUR
 export const SESSION_DURATION = 7 * ONE_DAY
 const WEBSOCKET_TICKET_DURATION = 30 * ONE_SECOND
-const APP_HANDOFF_DURATION = 30 * ONE_SECOND
 
-export type CredentialAudience = 'dashboard' | 'app-gateway' | 'browser-session' | 'http-api-token'
+export type CredentialAudience = 'dashboard' | 'browser-session' | 'http-api-token'
 export type HttpApiScope = 'file-download' | 'file-view' | 'file-thumbnail' | 'logs-download' | 'ca-download'
 export type WebSocketTarget = 'trpc' | 'terminal' | 'machines'
 
@@ -68,18 +66,6 @@ type WebSocketTicket = {
 	expiresAt: number
 }
 
-type AppHandoff = {
-	appId: string
-	appGatewayToken: string
-	expiresAt: number
-}
-
-type AppSocket = {
-	principal: Principal
-	appId: string
-	socket: Socket
-}
-
 type SessionIssuanceState = {
 	revision: number
 	credentialChanges: number
@@ -120,12 +106,6 @@ const secretsMatch = (actual: string, expected: string) => {
 	return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
 }
 
-export class AppAccessDeniedError extends Error {
-	constructor() {
-		super('App access denied')
-	}
-}
-
 export default class Auth {
 	#umbreld: Umbreld
 	#store: FileStore<AuthStore>
@@ -133,10 +113,7 @@ export default class Auth {
 	#systemToken = ''
 	#sessions: Session[] = []
 	#webSocketTickets = new Map<string, WebSocketTicket>()
-	#appHandoffs = new Map<string, AppHandoff>()
 	#webSockets = new Map<string, Set<WebSocket>>()
-	#appSockets = new Map<string, Set<AppSocket>>()
-	#appAccessRevision = 0
 	#sessionExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>()
 	#sessionIssuanceStates = new Map<string, SessionIssuanceState>()
 
@@ -166,16 +143,11 @@ export default class Auth {
 		for (const sockets of this.#webSockets.values()) {
 			for (const socket of sockets) socket.terminate()
 		}
-		for (const sockets of this.#appSockets.values()) {
-			for (const {socket} of sockets) socket.destroy()
-		}
 		this.#webSockets.clear()
-		this.#appSockets.clear()
 		for (const timeout of this.#sessionExpiryTimers.values()) clearTimeout(timeout)
 		this.#sessionExpiryTimers.clear()
 		this.#sessions = []
 		this.#webSocketTickets.clear()
-		this.#appHandoffs.clear()
 		this.#sessionIssuanceStates.clear()
 	}
 
@@ -202,10 +174,9 @@ export default class Auth {
 			credentials: [],
 		}
 		const dashboard = this.#createCredential('dashboard')
-		const appGateway = this.#createCredential('app-gateway')
 		const browserSession = this.#createCredential('browser-session')
 		const httpApiToken = this.#createDerivedCredential(session.id, 'http-api-token')
-		session.credentials = [dashboard.record, appGateway.record, browserSession.record, httpApiToken.record]
+		session.credentials = [dashboard.record, browserSession.record, httpApiToken.record]
 
 		await this.#storeNewSession(session, expectedSessionIssuanceRevision)
 
@@ -213,7 +184,6 @@ export default class Auth {
 			principal: this.#principalForSession(session),
 			expiresAt,
 			dashboardToken: dashboard.token,
-			appGatewayToken: appGateway.token,
 			browserSessionToken: browserSession.token,
 		}
 	}
@@ -316,31 +286,6 @@ export default class Auth {
 		) {
 			throw new Error('Invalid session')
 		}
-		return principal
-	}
-
-	// The owner and local system credential can reach every installed app.
-	// Members can only reach apps explicitly shared with their account.
-	async authorizeApp(principal: Principal, appId: string) {
-		await this.validatePrincipal(principal)
-		if (principal.actor === 'system' || principal.accountId === OWNER_ACCOUNT_ID) return principal
-
-		const sharedAppIds = await this.#umbreld.apps.sharedAppIdsForUser(principal.accountId)
-		if (!sharedAppIds.includes(appId)) throw new AppAccessDeniedError()
-		return principal
-	}
-
-	// Authenticate once per request. Do not re-read the account while checking
-	// app access, or cache a grant beyond a permission/session change.
-	async authenticateApp(token: string, appId: string) {
-		const revision = this.appAccessRevision
-		const principal = await this.authenticate(token, 'app-gateway')
-		if (principal.accountId !== OWNER_ACCOUNT_ID) {
-			const shared = await this.#umbreld.apps.sharedAppIdsForUser(principal.accountId)
-			if (!shared.includes(appId)) throw new AppAccessDeniedError()
-		}
-		if (!this.#isPrincipalActive(principal)) throw new Error('Invalid credential')
-		if (revision !== this.appAccessRevision) throw new AppAccessDeniedError()
 		return principal
 	}
 
@@ -450,33 +395,6 @@ export default class Auth {
 		})
 	}
 
-	async issueAppHandoff(appId: string, appGatewayToken: string) {
-		this.#removeExpiredAppHandoffs()
-		await this.authenticateApp(appGatewayToken, appId)
-
-		const token = randomToken(256)
-		this.#appHandoffs.set(hash(token), {
-			appId,
-			appGatewayToken,
-			expiresAt: Date.now() + APP_HANDOFF_DURATION,
-		})
-		return token
-	}
-
-	async consumeAppHandoff(appId: string, token: string) {
-		const tokenHash = hash(token)
-		const handoff = this.#appHandoffs.get(tokenHash)
-		this.#appHandoffs.delete(tokenHash)
-		if (!handoff || handoff.appId !== appId || handoff.expiresAt <= Date.now()) {
-			throw new Error('Invalid app handoff')
-		}
-
-		const principal = await this.authenticateApp(handoff.appGatewayToken, appId).catch(() => {
-			throw new Error('Invalid app handoff')
-		})
-		return {principal, appGatewayToken: handoff.appGatewayToken}
-	}
-
 	async getHttpApiToken(principal: Principal) {
 		await this.validatePrincipal(principal)
 		if (principal.actor !== 'account') throw new Error('Invalid session')
@@ -543,45 +461,6 @@ export default class Auth {
 			if (sockets.size === 0) this.#webSockets.delete(principal.sessionId)
 		})
 		return true
-	}
-
-	get appAccessRevision() {
-		return this.#appAccessRevision
-	}
-
-	registerAppSocket(principal: Principal, appId: string, socket: Socket, accessRevision: number) {
-		if (accessRevision !== this.#appAccessRevision || !this.#isPrincipalActive(principal)) {
-			socket.destroy()
-			return false
-		}
-		if (principal.actor === 'system') return true
-		const sockets = this.#appSockets.get(principal.sessionId) ?? new Set<AppSocket>()
-		const registration = {principal, appId, socket}
-		sockets.add(registration)
-		this.#appSockets.set(principal.sessionId, sockets)
-		socket.once('close', () => {
-			sockets.delete(registration)
-			if (sockets.size === 0) this.#appSockets.delete(principal.sessionId)
-		})
-		return true
-	}
-
-	// Called after an app share changes. Incrementing the revision synchronously
-	// prevents an upgrade authorized against the old share state from
-	// registering after this sweep. Existing opaque app streams are rechecked
-	// and closed if their account no longer has access.
-	async appAccessChanged(appId: string) {
-		this.#appAccessRevision++
-		const registrations = [...this.#appSockets.values()]
-			.flatMap((sockets) => [...sockets])
-			.filter((registration) => appId === '*' || registration.appId === appId)
-
-		await Promise.all(
-			registrations.map(async (registration) => {
-				if (registration.socket.destroyed) return
-				await this.authorizeApp(registration.principal, registration.appId).catch(() => registration.socket.destroy())
-			}),
-		)
 	}
 
 	get systemTokenPath() {
@@ -779,23 +658,12 @@ export default class Auth {
 		}
 	}
 
-	#removeExpiredAppHandoffs() {
-		const now = Date.now()
-		for (const [token, handoff] of this.#appHandoffs) {
-			if (handoff.expiresAt <= now) this.#appHandoffs.delete(token)
-		}
-	}
-
 	#closeSessionConnections(sessionId: string) {
 		const webSockets = this.#webSockets.get(sessionId)
 		// Revocation is a security boundary. A graceful close lets a hostile peer
 		// ignore the close frame and keep sending messages until ws's 30s timeout.
 		for (const socket of webSockets ?? []) socket.terminate()
 		this.#webSockets.delete(sessionId)
-
-		const appSockets = this.#appSockets.get(sessionId)
-		for (const {socket} of appSockets ?? []) socket.destroy()
-		this.#appSockets.delete(sessionId)
 	}
 
 	#removeSessionRuntimeState(sessionId: string) {

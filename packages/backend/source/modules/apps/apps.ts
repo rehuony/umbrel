@@ -800,7 +800,6 @@ export default class Apps {
 			await set('appMemberShares', [...otherShares, share])
 		})
 		this.#emitMemberSharesChange(previousSharedWith, sharedWith)
-		await this.#umbreld.auth.appAccessChanged(appId)
 
 		this.logger.log(`Shared app ${appId} with ${sharedWith === 'all' ? 'all users' : sharedWith.join(', ')}`)
 		return share
@@ -819,7 +818,6 @@ export default class Apps {
 		})
 		if (removed) {
 			this.#emitMemberSharesChange(removedSharedWith)
-			await this.#umbreld.auth.appAccessChanged(appId)
 			this.logger.log(`Stopped sharing app ${appId}`)
 		}
 		return removed
@@ -842,7 +840,6 @@ export default class Apps {
 			await set('appMemberShares', updatedShares)
 		})
 		this.#emitMemberSharesChange([userId])
-		await this.#umbreld.auth.appAccessChanged('*')
 	}
 
 	// Notify listeners (e.g. member UIs) which accounts an app share change
@@ -991,11 +988,10 @@ export default class Apps {
 
 		const app = this.getApp(appId)
 
-		// Revoke any direct share before uninstalling so access closes immediately
-		// and a crash partway through uninstall cannot leave a stale grant. The '*'
+		// Remove any direct share before uninstalling so the catalog hides it immediately
+		// and a crash partway through uninstall cannot leave a stale share. The '*'
 		// share is intentionally retained because it covers future installations.
 		await this.removeMemberShare(appId)
-		await this.#umbreld.externalAccess.removeApp(appId)
 		// MCP bookkeeping is best effort, a failure here must never abort the uninstall
 		await this.#umbreld.mcp
 			.removeAppGrant(appId)
@@ -1124,7 +1120,7 @@ export default class Apps {
 		return app.setSelectedDependencies(dependencies)
 	}
 
-	// All app settings (proxy auth, storage, environment) save through this one
+	// All app settings (launch URLs, storage, environment) save through this one
 	// method: one write, one restart
 	async setSettings(appId: string, settings: AppSettingsUpdate) {
 		const app = this.getApp(appId)

@@ -194,13 +194,8 @@ describe.sequential('Installed apps with native TLS', () => {
 		await expectEcho(nativeConnection(), true)
 	})
 
-	test('excludes app_proxy packages even when their authentication is disabled', async () => {
+	test('keeps app_proxy packages on the transparent HTTP upstream path', async () => {
 		const connection = umbrelConnection(nativeHostname, gatewayPort)
-		const protectedResponse = await request(connection)
-		expect(protectedResponse.status).toBe(302)
-		expect(protectedResponse.body).not.toContain('Hello world')
-
-		await umbreld.client.apps.setSettings.mutate({appId: gatewayId, appProxyAuthEnabled: false})
 		const publicResponse = await request(connection)
 		expect(publicResponse.status).toBe(200)
 		expect(publicResponse.body).toBe('Hello world')

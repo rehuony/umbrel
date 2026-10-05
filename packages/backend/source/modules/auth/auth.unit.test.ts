@@ -1,5 +1,4 @@
 import {EventEmitter} from 'node:events'
-import type {Socket} from 'node:net'
 
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest'
 import type {WebSocket} from 'ws'
@@ -20,16 +19,6 @@ class TestSocket extends EventEmitter {
 	}
 }
 
-class TestAppSocket extends EventEmitter {
-	destroyed = false
-
-	destroy() {
-		this.destroyed = true
-		this.emit('close')
-		return this
-	}
-}
-
 class NonCooperatingTestSocket extends EventEmitter {
 	close = vi.fn()
 	terminate = vi.fn()
@@ -40,7 +29,6 @@ describe('Auth', () => {
 	let dataDirectory: string
 	let userExists: boolean
 	let memberIds: Set<string>
-	let sharedAppIds: Map<string, string[]>
 	let loggerError: ReturnType<typeof vi.fn>
 	let umbreld: Umbreld
 	let auth: Auth
@@ -51,7 +39,6 @@ describe('Auth', () => {
 		dataDirectory = await directory.create()
 		userExists = true
 		memberIds = new Set()
-		sharedAppIds = new Map()
 		loggerError = vi.fn()
 		umbreld = {
 			dataDirectory,
@@ -61,7 +48,6 @@ describe('Auth', () => {
 				exists: async () => userExists,
 				getMember: async (accountId: string) => (memberIds.has(accountId) ? {id: accountId} : undefined),
 			},
-			apps: {sharedAppIdsForUser: async (accountId: string) => sharedAppIds.get(accountId) ?? []},
 		} as unknown as Umbreld
 		auth = new Auth(umbreld)
 		await auth.start()
@@ -82,15 +68,11 @@ describe('Auth', () => {
 
 		expect(session.principal).toMatchObject({accountId: OWNER_ACCOUNT_ID, actor: 'account'})
 		expect(session.dashboardToken).toMatch(/^umbrel_[0-9a-f]{32}_[0-9a-f]{64}$/)
-		expect(session.appGatewayToken).toMatch(/^umbrel_[0-9a-f]{32}_[0-9a-f]{64}$/)
 		expect(session.browserSessionToken).toMatch(/^umbrel_[0-9a-f]{32}_[0-9a-f]{64}$/)
 		expect(httpApiToken).toMatch(/^umbrel_[0-9a-f]{32}_[0-9a-f]{64}$/)
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).resolves.toEqual(session.principal)
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(httpApiToken, 'http-api-token')).resolves.toEqual(session.principal)
-		await expect(auth.authenticate(session.dashboardToken, 'app-gateway')).rejects.toThrow('Invalid credential')
-		await expect(auth.authenticate(session.appGatewayToken, 'dashboard')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate(session.browserSessionToken, 'http-api-token')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate(httpApiToken, 'browser-session')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate('not-an-umbrel-credential', 'dashboard')).rejects.toThrow('Invalid credential')
@@ -100,7 +82,6 @@ describe('Auth', () => {
 			fs.readFile(`${dataDirectory}/secrets/auth/sessions.yaml`, 'utf8'),
 		)
 		expect(stored).not.toContain(session.dashboardToken)
-		expect(stored).not.toContain(session.appGatewayToken)
 		expect(stored).not.toContain(session.browserSessionToken)
 		expect(stored).not.toContain(httpApiToken)
 	})
@@ -131,70 +112,6 @@ describe('Auth', () => {
 		await fse.writeFile(file, yaml.dump(saved))
 		await auth.start()
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).rejects.toThrow('Invalid credential')
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).rejects.toThrow('Invalid credential')
-	})
-
-	test('authorizes member apps from current shares while the owner retains full access', async () => {
-		memberIds.add('Alice')
-		sharedAppIds.set('Alice', ['transmission'])
-		const memberSession = await auth.createSession({accountId: 'Alice'})
-		const ownerSession = await auth.createSession()
-
-		await expect(auth.authorizeApp(memberSession.principal, 'transmission')).resolves.toEqual(memberSession.principal)
-		await expect(auth.authorizeApp(memberSession.principal, 'bitcoin')).rejects.toThrow('App access denied')
-		await expect(auth.authorizeApp(ownerSession.principal, 'bitcoin')).resolves.toEqual(ownerSession.principal)
-
-		sharedAppIds.set('Alice', [])
-		await expect(auth.authorizeApp(memberSession.principal, 'transmission')).rejects.toThrow('App access denied')
-	})
-
-	test('closes only the app WebSockets that lose access when a share changes', async () => {
-		memberIds.add('Alice')
-		sharedAppIds.set('Alice', ['transmission', 'bitcoin'])
-		const member = await auth.createSession({accountId: 'Alice'})
-		const owner = await auth.createSession()
-		const memberTransmission = new TestAppSocket()
-		const memberBitcoin = new TestAppSocket()
-		const ownerTransmission = new TestAppSocket()
-
-		auth.registerAppSocket(
-			member.principal,
-			'transmission',
-			memberTransmission as unknown as Socket,
-			auth.appAccessRevision,
-		)
-		auth.registerAppSocket(member.principal, 'bitcoin', memberBitcoin as unknown as Socket, auth.appAccessRevision)
-		auth.registerAppSocket(
-			owner.principal,
-			'transmission',
-			ownerTransmission as unknown as Socket,
-			auth.appAccessRevision,
-		)
-
-		sharedAppIds.set('Alice', ['bitcoin'])
-		await auth.appAccessChanged('transmission')
-
-		expect(memberTransmission.destroyed).toBe(true)
-		expect(memberBitcoin.destroyed).toBe(false)
-		expect(ownerTransmission.destroyed).toBe(false)
-		await expect(auth.validatePrincipal(member.principal)).resolves.toEqual(member.principal)
-	})
-
-	test('rejects an app WebSocket authenticated against stale share state', async () => {
-		memberIds.add('Alice')
-		sharedAppIds.set('Alice', ['transmission'])
-		const member = await auth.createSession({accountId: 'Alice'})
-		const staleRevision = auth.appAccessRevision
-
-		sharedAppIds.set('Alice', [])
-		const reconciliation = auth.appAccessChanged('transmission')
-		const lateSocket = new TestAppSocket()
-
-		expect(
-			auth.registerAppSocket(member.principal, 'transmission', lateSocket as unknown as Socket, staleRevision),
-		).toBe(false)
-		expect(lateSocket.destroyed).toBe(true)
-		await reconciliation
 	})
 
 	test('allows member file URLs but keeps device-wide HTTP APIs owner-only', async () => {
@@ -280,21 +197,18 @@ describe('Auth', () => {
 		])
 		expect(httpApiAfter).toBe(httpApiBefore)
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).resolves.toEqual(session.principal)
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(httpApiAfter, 'http-api-token')).resolves.toEqual(session.principal)
 
 		// Renewal must carry every credential past the original session boundary.
 		vi.setSystemTime(new Date('2026-01-08T00:00:01Z'))
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).resolves.toEqual(session.principal)
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(httpApiAfter, 'http-api-token')).resolves.toEqual(session.principal)
 
 		// All credentials expire together at the renewed session boundary.
 		vi.setSystemTime(renewed.expiresAt)
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).rejects.toThrow('Invalid credential')
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).rejects.toThrow(
 			'Invalid credential',
 		)
@@ -309,13 +223,11 @@ describe('Auth', () => {
 
 		vi.advanceTimersByTime(SESSION_DURATION - 1)
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).resolves.toEqual(session.principal)
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).resolves.toEqual(session.principal)
 		await expect(auth.authenticate(httpApiToken, 'http-api-token')).resolves.toEqual(session.principal)
 
 		vi.advanceTimersByTime(1)
 		await expect(auth.authenticate(session.dashboardToken, 'dashboard')).rejects.toThrow('Invalid credential')
-		await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).rejects.toThrow(
 			'Invalid credential',
 		)
@@ -323,14 +235,12 @@ describe('Auth', () => {
 		await expect(auth.validatePrincipal(session.principal)).rejects.toThrow('Invalid session')
 	})
 
-	test('closes live WebSocket and app connections as soon as their session expires', async () => {
+	test('closes live WebSocket connections as soon as their session expires', async () => {
 		vi.useFakeTimers()
 		vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
 		const session = await auth.createSession()
 		const webSocket = new TestSocket()
-		const appSocket = new TestAppSocket()
 		auth.registerWebSocket(session.principal, webSocket as unknown as WebSocket)
-		auth.registerAppSocket(session.principal, 'files', appSocket as unknown as Socket, auth.appAccessRevision)
 		const closed = new Promise<void>((resolve) => webSocket.once('close', () => resolve()))
 
 		expect(vi.getTimerCount()).toBe(1)
@@ -339,7 +249,6 @@ describe('Auth', () => {
 		expect(vi.getTimerCount()).toBe(0)
 
 		expect(webSocket.terminated).toBe(true)
-		expect(appSocket.destroyed).toBe(true)
 		await expect(auth.validatePrincipal(session.principal)).rejects.toThrow('Invalid session')
 		const stored = await import('node:fs/promises').then((fs) =>
 			fs.readFile(`${dataDirectory}/secrets/auth/sessions.yaml`, 'utf8'),
@@ -428,16 +337,13 @@ describe('Auth', () => {
 		const current = await auth.createSession()
 		const target = await auth.createSession()
 		const targetSocket = new TestSocket()
-		const targetAppSocket = new TestAppSocket()
 		auth.registerWebSocket(target.principal, targetSocket as unknown as WebSocket)
-		auth.registerAppSocket(target.principal, 'files', targetAppSocket as unknown as Socket, auth.appAccessRevision)
 
 		await expect(auth.revokeSessionForAccount(current.principal, target.principal.sessionId)).resolves.toEqual({
 			revoked: true,
 			revokedCurrent: false,
 		})
 		expect(targetSocket.terminated).toBe(true)
-		expect(targetAppSocket.destroyed).toBe(true)
 		await expect(auth.authenticate(target.dashboardToken, 'dashboard')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate(current.dashboardToken, 'dashboard')).resolves.toEqual(current.principal)
 		await expect(auth.revokeSessionForAccount(current.principal, target.principal.sessionId)).resolves.toEqual({
@@ -546,14 +452,11 @@ describe('Auth', () => {
 		const firstHttpApiToken = await auth.getHttpApiToken(first.principal)
 		const secondHttpApiToken = await auth.getHttpApiToken(second.principal)
 		const socket = new TestSocket()
-		const appSocket = new TestAppSocket()
 		auth.registerWebSocket(first.principal, socket as unknown as WebSocket)
-		auth.registerAppSocket(first.principal, 'files', appSocket as unknown as Socket, auth.appAccessRevision)
 
 		await expect(auth.revokeAllForAccount(OWNER_ACCOUNT_ID)).resolves.toBe(2)
 		for (const session of [first, second]) {
 			await expect(auth.authenticate(session.dashboardToken, 'dashboard')).rejects.toThrow('Invalid credential')
-			await expect(auth.authenticate(session.appGatewayToken, 'app-gateway')).rejects.toThrow('Invalid credential')
 			await expect(auth.authenticate(session.browserSessionToken, 'browser-session')).rejects.toThrow(
 				'Invalid credential',
 			)
@@ -561,7 +464,6 @@ describe('Auth', () => {
 		await expect(auth.authenticate(firstHttpApiToken, 'http-api-token')).rejects.toThrow('Invalid credential')
 		await expect(auth.authenticate(secondHttpApiToken, 'http-api-token')).rejects.toThrow('Invalid credential')
 		expect(socket.terminated).toBe(true)
-		expect(appSocket.destroyed).toBe(true)
 	})
 
 	test('persists sessions and their display metadata across auth service restarts', async () => {
@@ -632,11 +534,9 @@ describe('Auth', () => {
 	test.each([
 		{connection: 'WebSocket', invalidatedBy: 'revoked'},
 		{connection: 'WebSocket', invalidatedBy: 'expired'},
-		{connection: 'app socket', invalidatedBy: 'revoked'},
-		{connection: 'app socket', invalidatedBy: 'expired'},
 	] as const)(
 		'rejects late $connection registration when a session is $invalidatedBy during asynchronous authentication',
-		async ({connection, invalidatedBy}) => {
+		async ({invalidatedBy}) => {
 			if (invalidatedBy === 'expired') {
 				vi.useFakeTimers()
 				vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
@@ -651,10 +551,7 @@ describe('Auth', () => {
 				return new Promise<boolean>((resolve) => (resumeAccountCheck = resolve))
 			})
 
-			const authentication =
-				connection === 'WebSocket'
-					? auth.consumeWebSocketTicket(auth.issueWebSocketTicket(session.principal, 'trpc'), 'trpc')
-					: auth.authenticate(session.appGatewayToken, 'app-gateway')
+			const authentication = auth.consumeWebSocketTicket(auth.issueWebSocketTicket(session.principal, 'trpc'), 'trpc')
 			await accountCheckStarted
 			if (invalidatedBy === 'revoked') await auth.revokeSession(session.principal.sessionId)
 			else vi.setSystemTime(new Date(Date.now() + SESSION_DURATION))
@@ -664,17 +561,9 @@ describe('Auth', () => {
 			// account check can still return the now-stale principal. Registration is
 			// the final synchronous authorization boundary for long-lived sockets.
 			const stalePrincipal = await authentication
-			if (connection === 'WebSocket') {
-				const socket = new TestSocket()
-				expect(auth.registerWebSocket(stalePrincipal, socket as unknown as WebSocket)).toBe(false)
-				expect(socket.terminated).toBe(true)
-			} else {
-				const socket = new TestAppSocket()
-				expect(
-					auth.registerAppSocket(stalePrincipal, 'files', socket as unknown as Socket, auth.appAccessRevision),
-				).toBe(false)
-				expect(socket.destroyed).toBe(true)
-			}
+			const socket = new TestSocket()
+			expect(auth.registerWebSocket(stalePrincipal, socket as unknown as WebSocket)).toBe(false)
+			expect(socket.terminated).toBe(true)
 		},
 	)
 
@@ -704,30 +593,6 @@ describe('Auth', () => {
 		await expect(auth.consumeWebSocketTicket(ticket, 'trpc')).rejects.toThrow('Invalid WebSocket ticket')
 	})
 
-	test('app handoffs are short-lived, app-bound, single-use, and revocable', async () => {
-		vi.useFakeTimers()
-		const session = await auth.createSession()
-		const handoff = await auth.issueAppHandoff('files', session.appGatewayToken)
-
-		await expect(auth.consumeAppHandoff('other-app', handoff)).rejects.toThrow('Invalid app handoff')
-		await expect(auth.consumeAppHandoff('files', handoff)).rejects.toThrow('Invalid app handoff')
-
-		const validHandoff = await auth.issueAppHandoff('files', session.appGatewayToken)
-		await expect(auth.consumeAppHandoff('files', validHandoff)).resolves.toEqual({
-			principal: session.principal,
-			appGatewayToken: session.appGatewayToken,
-		})
-		await expect(auth.consumeAppHandoff('files', validHandoff)).rejects.toThrow('Invalid app handoff')
-
-		const expiredHandoff = await auth.issueAppHandoff('files', session.appGatewayToken)
-		vi.advanceTimersByTime(30_000)
-		await expect(auth.consumeAppHandoff('files', expiredHandoff)).rejects.toThrow('Invalid app handoff')
-
-		const revokedHandoff = await auth.issueAppHandoff('files', session.appGatewayToken)
-		await auth.revokeSession(session.principal.sessionId)
-		await expect(auth.consumeAppHandoff('files', revokedHandoff)).rejects.toThrow('Invalid app handoff')
-	})
-
 	test('HTTP API access requires cookie and URL credentials from the same active session', async () => {
 		const first = await auth.createSession()
 		const second = await auth.createSession()
@@ -744,7 +609,7 @@ describe('Auth', () => {
 			auth.authorizeHttpApiCredentials(first.dashboardToken, firstHttpApiToken, 'file-view'),
 		).rejects.toThrow('Invalid HTTP API credentials')
 		await expect(
-			auth.authorizeHttpApiCredentials(first.browserSessionToken, first.appGatewayToken, 'file-view'),
+			auth.authorizeHttpApiCredentials(first.browserSessionToken, first.dashboardToken, 'file-view'),
 		).rejects.toThrow('Invalid HTTP API credentials')
 
 		await auth.revokeSession(first.principal.sessionId)
@@ -765,6 +630,6 @@ describe('Auth', () => {
 			accountId: OWNER_ACCOUNT_ID,
 			actor: 'system',
 		})
-		await expect(auth.authenticate(systemToken, 'app-gateway')).rejects.toThrow('Invalid credential')
+		await expect(auth.authenticate(systemToken, 'browser-session')).rejects.toThrow('Invalid credential')
 	})
 })

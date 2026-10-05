@@ -29,3 +29,12 @@ export function clearBrowserSessionCookies(response: express.Response) {
 	response.clearCookie(BROWSER_SESSION_HTTPS_COOKIE_NAME, {path: '/', secure: true})
 	response.clearCookie(BROWSER_SESSION_HTTP_COOKIE_NAME, {path: '/'})
 }
+
+// Panel cookies share a host with LAN application ports. Do not forward them
+// to application containers; application-owned cookies and credentials pass through.
+export function stripBrowserSessionCookies(header?: string) {
+	return (header?.split(';') ?? [])
+		.map((pair) => pair.trim())
+		.filter((pair) => pair && !BROWSER_SESSION_COOKIE_NAMES.includes(pair.split('=')[0].trim()))
+		.join('; ')
+}

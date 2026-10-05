@@ -12,7 +12,6 @@ import {checkUpdate, readBuild} from './updates/release.js'
 import {assertIdle, queueUpdate, updateStatus} from './updates/state.js'
 
 import {performReset} from './factory-reset.js'
-import {ExternalAccessPanelSchema} from '../app-gateway/external-access.js'
 import {OWNER_USER_ID} from '../user/constants.js'
 import type Umbreld from '../../index.js'
 import {
@@ -135,10 +134,6 @@ async function scopeGpuUsageAppsForMember(
 }
 
 export default router({
-	externalAccess: privateProcedure.query(({ctx}) => ctx.umbreld.externalAccess.panelSettings),
-	setExternalAccess: privateProcedure
-		.input(ExternalAccessPanelSchema)
-		.mutation(({ctx, input}) => ctx.umbreld.externalAccess.configure(input)),
 	online: publicProcedure.query(() => true),
 	ready: publicProcedure.query(async ({ctx}) => ({
 		ready: ctx.umbreld.ready,

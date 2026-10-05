@@ -1,9 +1,10 @@
+import {once} from 'node:events'
 import {afterEach, describe, expect, test, vi} from 'vitest'
 import fse from 'fs-extra'
 import {WebSocket} from 'ws'
 
 import temporaryDirectory from '../utilities/temporary-directory.js'
-import AppGateway, {pathMatches, readAppGatewayConfig} from './app-gateway.js'
+import AppGateway, {readAppGatewayConfig} from './app-gateway.js'
 import {appGatewayErrorPage} from './error-page.js'
 
 describe('app gateway configuration', () => {
@@ -23,8 +24,6 @@ describe('app gateway configuration', () => {
 						environment: {
 							APP_HOST: 'files_web_1',
 							APP_PORT: 8080,
-							PROXY_AUTH_WHITELIST: '/public/*, /health',
-							PROXY_AUTH_BLACKLIST: '/public/private/*',
 						},
 					},
 				},
@@ -39,9 +38,6 @@ describe('app gateway configuration', () => {
 			targetProtocol: 'http',
 			targetHost: 'files_web_1',
 			targetPort: 8080,
-			auth: true,
-			authWhitelist: ['/public/*', '/health'],
-			authBlacklist: ['/public/private/*'],
 		})
 	})
 
@@ -49,7 +45,7 @@ describe('app gateway configuration', () => {
 		await expect(readAppGatewayConfig('files', '/does-not-exist', {services: {app_proxy: {}}})).resolves.toBeNull()
 	})
 
-	test('prefers Compose-rendered settings and reads legacy overrides from the app root', async () => {
+	test('prefers Compose-rendered settings and reads upstream overrides from the app root', async () => {
 		const directory = temporaryDirectory()
 		directories.push(directory)
 		await directory.createRoot()
@@ -57,45 +53,14 @@ describe('app gateway configuration', () => {
 		await fse.writeJson(`${appDirectory}/app-gateway.json`, {
 			APP_HOST: '10.21.21.2',
 			APP_PORT: '3000',
-			PROXY_AUTH_ADD: 'true',
 		})
-		await fse.writeFile(`${appDirectory}/.env.app_proxy`, 'APP_PORT=4000\nPROXY_AUTH_ADD=\n')
 
+		await fse.writeFile(`${appDirectory}/.env.app_proxy`, 'APP_PORT=4000\n')
 		const config = await readAppGatewayConfig('files', appDirectory, {
 			services: {app_proxy: {environment: {APP_HOST: '$APP_FILES_IP', APP_PORT: '$APP_FILES_PORT'}}},
 		})
 
-		expect(config).toMatchObject({targetHost: '10.21.21.2', targetPort: 4000, auth: true})
-	})
-
-	test('only disables authentication for an explicit false value', async () => {
-		for (const [value, expected] of [
-			[undefined, true],
-			[null, true],
-			['', true],
-			['true', true],
-			['false', false],
-		] as const) {
-			const config = await readAppGatewayConfig('files', '/does-not-exist', {
-				services: {
-					app_proxy: {
-						environment: {APP_HOST: 'files_web_1', APP_PORT: 8080, PROXY_AUTH_ADD: value} as any,
-					},
-				},
-			})
-			expect(config?.auth).toBe(expected)
-		}
-	})
-})
-
-describe('app gateway path rules', () => {
-	test('preserves exact, child, prefix, and wildcard matching', () => {
-		expect(pathMatches('/admin', ['/admin'])).toBe(true)
-		expect(pathMatches('/admin/user', ['/admin'])).toBe(false)
-		expect(pathMatches('/admin/user', ['/admin/*'])).toBe(true)
-		expect(pathMatches('/administrator', ['/admin/*'])).toBe(false)
-		expect(pathMatches('/administrator', ['/admin*'])).toBe(true)
-		expect(pathMatches('/anything', ['*'])).toBe(true)
+		expect(config).toMatchObject({targetHost: '10.21.21.2', targetPort: 4000})
 	})
 })
 
@@ -104,7 +69,7 @@ describe('app gateway upstream recovery', () => {
 		const logger = {error: vi.fn()}
 		return {
 			gateway: new AppGateway(
-				{logger, auth: {appAccessRevision: 0}} as never,
+				{logger} as never,
 				{
 					appId: 'files',
 					appName: 'Files',
@@ -113,9 +78,6 @@ describe('app gateway upstream recovery', () => {
 					targetHost: 'files_web_1',
 					targetAddress: '127.0.0.1',
 					targetPort: 1,
-					auth: false,
-					authWhitelist: [],
-					authBlacklist: [],
 					trustUpstream: false,
 					timeout: 100,
 				},
@@ -193,5 +155,65 @@ describe('app gateway error page', () => {
 		expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
 		expect(body).toContain('icon.svg&quot; onerror=&quot;alert(1)')
 		expect(body).toContain('Error code: &lt;BAD&gt;')
+	})
+})
+
+describe('transparent application transport', () => {
+	test('preserves native HTTP authentication and WebSockets without a panel session', async () => {
+		const {createServer} = await import('node:http')
+		const {WebSocketServer} = await import('ws')
+		const upstream = createServer((request, response) => {
+			if (request.url === '/native-login') {
+				response.writeHead(401, {'www-authenticate': 'Basic realm="App"'})
+				response.end('Sign in to this app')
+			} else response.end(JSON.stringify({url: request.url, headers: request.headers}))
+		})
+		const ws = new WebSocketServer({server: upstream})
+		ws.on('connection', (socket, request) => socket.send(JSON.stringify(request.headers)))
+		upstream.listen(0, '127.0.0.1')
+		await once(upstream, 'listening')
+		const port = (upstream.address() as import('node:net').AddressInfo).port
+		const gateway = new AppGateway({logger: {error: vi.fn()}} as never, {
+			appId: 'service',
+			appName: 'Service',
+			appIcon: '',
+			targetProtocol: 'http',
+			targetHost: '127.0.0.1',
+			targetPort: port,
+			trustUpstream: false,
+			timeout: 0,
+		})
+		gateway.server.listen(0, '127.0.0.1')
+		await once(gateway.server, 'listening')
+		const origin = `http://127.0.0.1:${(gateway.server.address() as import('node:net').AddressInfo).port}`
+		let socket: WebSocket | undefined
+		try {
+			const denied = await fetch(`${origin}/native-login`)
+			expect(denied.status).toBe(401)
+			expect(denied.headers.get('www-authenticate')).toBe('Basic realm="App"')
+			expect(await denied.text()).toBe('Sign in to this app')
+			const headers = {
+				authorization: 'Bearer native-token',
+				cookie: 'app_session=native; UMBREL_BROWSER_SESSION=panel; __Host-UMBREL_BROWSER_SESSION_HTTPS=panel',
+			}
+			const result = await (await fetch(`${origin}/api/v1?key=value`, {headers})).json()
+			expect(result).toMatchObject({
+				url: '/api/v1?key=value',
+				headers: {authorization: 'Bearer native-token', cookie: 'app_session=native'},
+			})
+			socket = new WebSocket(`${origin.replace('http:', 'ws:')}/events`, {headers})
+			const [message] = await once(socket, 'message', {signal: AbortSignal.timeout(5000)})
+			expect(JSON.parse(message.toString())).toMatchObject({
+				authorization: 'Bearer native-token',
+				cookie: 'app_session=native',
+			})
+		} finally {
+			socket?.terminate()
+			for (const client of ws.clients) client.terminate()
+			ws.close()
+			await Promise.all(
+				[gateway.server, upstream].map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+			)
+		}
 	})
 })

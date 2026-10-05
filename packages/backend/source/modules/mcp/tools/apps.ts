@@ -39,7 +39,7 @@ type InstalledApp = Awaited<ReturnType<McpToolContext['rpc']['apps']['list']>>[n
 function appSettings(app: InstalledApp, installed: InstalledApp[]) {
 	if ('error' in app) throw new Error(app.error)
 	return {
-		appProxyAuth: app.appProxyAuth,
+		externalUrl: app.externalUrl,
 		hideCredentialsBeforeOpen: app.credentials.hideBeforeOpen,
 		storage: app.storage,
 		environment: app.environment,
@@ -145,7 +145,7 @@ export default function registerAppTools(server: McpServer, context: McpToolCont
 			{
 				title: 'Get app details',
 				description:
-					'Get details, launch URL, credentials, resource usage, dependents, and umbrelOS app settings for a granted app. Settings include authentication, folder slots, custom mounts, app-data location, environment variables with defaults and options, dependency choices, and the credentials display preference. Change ordinary settings with set_app_settings; use move_app_data or reset_app_data for app-data operations.',
+					'Get details, local launch URL (null for background apps), credentials, resource usage, dependents, and umbrelOS app settings for a granted app. Settings include the external launch URL, folder slots, custom mounts, app-data location, environment variables with defaults and options, dependency choices, and the credentials display preference. Change ordinary settings with set_app_settings; use move_app_data or reset_app_data for app-data operations.',
 				inputSchema: appInput,
 				annotations: {
 					readOnlyHint: true,
@@ -167,7 +167,7 @@ export default function registerAppTools(server: McpServer, context: McpToolCont
 						context.rpc.apps.list(),
 					])
 					const installedApp = installed.find((app) => app.id === details.id)
-					const protocol = details.requiresHttps ? 'https' : 'http'
+					const protocol = details.portProtocol ?? (details.requiresHttps ? 'https' : 'http')
 					const port = details.port ? `:${details.port}` : ''
 					const path = details.path ? `/${details.path.replace(/^\/+/, '')}` : ''
 					return {
@@ -178,7 +178,7 @@ export default function registerAppTools(server: McpServer, context: McpToolCont
 						description: details.description,
 						state: details.state,
 						progress: details.progress,
-						url: `${protocol}://${hostname}.local${port}${path}`,
+						url: details.port ? `${protocol}://${hostname}.local${port}${path}` : null,
 						credentials: details.credentials,
 						dataDirectory: `/Apps/${details.id}`,
 						dependents: details.dependents,
@@ -276,13 +276,14 @@ export default function registerAppTools(server: McpServer, context: McpToolCont
 			{
 				title: 'Set app settings',
 				description:
-					'Change any combination of umbrelOS settings for a granted app. Read get_app_details.settings first for current values, folder slots, service names, environment options, and dependency choices. Omitted fields stay unchanged. Each supplied list replaces the current editable settings of that kind; include entries you want to retain, or use [] to reset them. appProxyAuthEnabled=null restores the app default. A dependencies object replaces selections, with omitted dependencies reverting to their default app; changed providers require their own app grant. New or changed folder selections and custom mounts require file access to their source paths; unchanged entries may be retained without additional grants. Storage, environment, and dependency changes can restart the app; authentication and credentials-display changes do not. Settings changes are rejected during app lifecycle operations; wait for the operation to finish before retrying. Success means settings were saved, not that the app is ready; check get_app_status.',
+					'Change any combination of umbrelOS settings for a granted app. Read get_app_details.settings first for current values, folder slots, service names, environment options, and dependency choices. Omitted fields stay unchanged. Each supplied list replaces the current editable settings of that kind; include entries you want to retain, or use [] to reset them. externalUrl="" clears the public launch URL. A dependencies object replaces selections, with omitted dependencies reverting to their default app; changed providers require their own app grant. New or changed folder selections and custom mounts require file access to their source paths; unchanged entries may be retained without additional grants. Storage, environment, and dependency changes can restart the app; launch URL and credentials-display changes do not. Settings changes are rejected during app lifecycle operations; wait for the operation to finish before retrying. Success means settings were saved, not that the app is ready; check get_app_status.',
 				inputSchema: appInput.extend({
-					appProxyAuthEnabled: z
-						.boolean()
-						.nullable()
+					externalUrl: z
+						.string()
 						.optional()
-						.describe('Enable Umbrel login, disable it, or use null to restore the app default.'),
+						.describe(
+							'Public HTTP or HTTPS launch URL; use an empty string to clear it. Application authentication and reverse proxy configuration are managed separately.',
+						),
 					hideCredentialsBeforeOpen: z
 						.boolean()
 						.optional()

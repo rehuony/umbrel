@@ -96,7 +96,6 @@ systemd-run --quiet --unit=app-loopback-forwarder /usr/local/bin/node /tmp/app-l
 		await umbreld.client.appStore.addRepository.mutate({url: gitServer.url.replace('localhost', '10.0.2.2')})
 		await expect(umbreld.client.apps.install.mutate({appId})).resolves.toBe(true)
 		await waitForApp()
-		await umbreld.client.apps.setSettings.mutate({appId, appProxyAuthEnabled: false})
 		await umbreld.client.apps.restart.mutate({appId})
 		await waitForApp()
 
@@ -125,24 +124,12 @@ systemd-run --quiet --unit=app-loopback-forwarder /usr/local/bin/node /tmp/app-l
 		).resolves.toBe('Hello world')
 	})
 
-	test('uses the same HTTPS and authentication boundary on loopback', async () => {
-		await expect(loopbackResponse(true)).resolves.toContain('Hello world')
-		await umbreld.client.apps.setSettings.mutate({appId, appProxyAuthEnabled: true})
-
-		// Turning authentication back on must affect both local protocols and
-		// requests relayed by the host forwarder, just as it does on the LAN.
+	test('serves HTTP and HTTPS over loopback without a panel session', async () => {
 		for (const https of [false, true]) {
 			const response = await loopbackResponse(https)
-			expect(response).toContain('HTTP/1.1 302 Found')
-			expect(response).toContain(`${https ? 'https' : 'http'}://127.0.0.1/app-access?request=`)
-			expect(response).not.toContain('Hello world')
+			expect(response).toContain('HTTP/1.1 200 OK')
+			expect(response).toContain('Hello world')
 		}
-		const forwarded = await umbreld.vm.sshAsRoot(
-			'curl --silent --show-error --max-time 5 -i -H "Accept: text/html" http://100.64.0.1:4000/',
-		)
-		expect(forwarded).toContain('HTTP/1.1 302 Found')
-		expect(forwarded).not.toContain('Hello world')
-		await umbreld.client.apps.setSettings.mutate({appId, appProxyAuthEnabled: false})
 	})
 
 	test('releases stopped app ports and recovers from a conflicting local listener', async () => {

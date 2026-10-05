@@ -27,6 +27,7 @@ import FileStore from '../utilities/file-store.js'
 import {fillSelectedDependencies} from '../utilities/dependencies.js'
 import type Umbreld from '../../index.js'
 import {
+	AppExternalUrlSchema,
 	AppCustomMountSchema,
 	AppCustomEnvironmentVariableSchema,
 	AppDataRootLocationSchema,
@@ -47,7 +48,6 @@ import {
 	type AppSettings,
 } from './schema.js'
 import appScript from './runtime/app-script.js'
-import {readAppGatewayConfig} from '../app-gateway/app-gateway.js'
 import {OWNER_USER_ID} from '../user/constants.js'
 
 async function readYaml(path: string) {
@@ -56,25 +56,6 @@ async function readYaml(path: string) {
 
 async function writeYaml(path: string, data: any) {
 	return fse.writeFile(path, yaml.dump(data))
-}
-
-function readEnvironmentValue(environment: unknown, key: string) {
-	if (Array.isArray(environment)) {
-		for (const value of environment) {
-			if (typeof value !== 'string') continue
-
-			const equalsIndex = value.indexOf('=')
-			if (equalsIndex === -1) continue
-
-			const environmentKey = value.slice(0, equalsIndex)
-			if (environmentKey === key) return value.slice(equalsIndex + 1)
-		}
-	}
-
-	if (environment && typeof environment === 'object') {
-		const value = (environment as Record<string, unknown>)[key]
-		if (value !== undefined && value !== null) return String(value)
-	}
 }
 
 type ParsedVolume = {
@@ -114,10 +95,9 @@ type ResolvedFolderAccess = AppFolderAccessSelection & {
 	mounts: ResolvedSettingsMount[]
 }
 
-// A partial settings save: undefined fields are left untouched, and null clears
-// the auth override so the app follows its default
+// A partial settings save: undefined fields are left untouched.
 export type AppSettingsUpdate = {
-	appProxyAuthEnabled?: boolean | null
+	externalUrl?: string
 	hideCredentialsBeforeOpen?: boolean
 	customMounts?: AppCustomMount[]
 	folderAccess?: AppFolderAccessSelection[]
@@ -1328,47 +1308,6 @@ export default class App {
 		await this.writeCompose(compose)
 	}
 
-	async hasAppProxy() {
-		const compose = await this.readCompose()
-		return Boolean(compose.services?.app_proxy)
-	}
-
-	async getAppProxyAuthOverride() {
-		const override = await this.store.get('appProxyAuthEnabled')
-		return typeof override === 'boolean' ? override : undefined
-	}
-
-	async getAppProxyAuth() {
-		const compose = await this.readCompose()
-		const appProxyService = compose.services?.app_proxy
-		if (!appProxyService) {
-			return {
-				supported: false,
-				defaultEnabled: null,
-				override: null,
-				enabled: null,
-			}
-		}
-
-		// Prefer the gateway's rendered config for the default since it resolves
-		// compose interpolation and .env.app_proxy. It's only rendered once a
-		// compose action runs, so for an app left stopped since the update that
-		// introduced it we fall back to the raw compose environment with the
-		// gateway's fail-safe semantics: on unless PROXY_AUTH_ADD is exactly 'false'.
-		const gatewayConfig = await readAppGatewayConfig(this.id, this.dataDirectory, compose)
-		const proxyAuthAdd = readEnvironmentValue(appProxyService.environment, 'PROXY_AUTH_ADD')
-		const defaultEnabled = gatewayConfig?.auth ?? proxyAuthAdd?.trim().toLowerCase() !== 'false'
-
-		const override = await this.getAppProxyAuthOverride()
-
-		return {
-			supported: true,
-			defaultEnabled,
-			override: override ?? null,
-			enabled: override ?? defaultEnabled,
-		}
-	}
-
 	#getConfigurableServiceImages(compose: Compose) {
 		const serviceImages: Record<string, string | null> = {}
 
@@ -1887,9 +1826,6 @@ export default class App {
 		}
 	}
 
-	// The auth override is deliberately absent here: authentication lives in
-	// umbreld's app gateway which reads the override from the settings store
-	// directly, so it never flows through compose
 	async regenerateUserSettingsCompose() {
 		const [
 			compose,
@@ -2068,14 +2004,13 @@ export default class App {
 	// Save any combination of app settings in one operation: one write, one
 	// compose regenerate, at most one restart. Fields left undefined are
 	// untouched (and never re-validated, so e.g. storage settings staled by an
-	// app update don't block an unrelated auth change). For the auth override,
-	// null clears it so the app follows its default.
+	// app update don't block an unrelated launch URL change).
 	async setSettings(settings: AppSettingsUpdate): Promise<boolean> {
 		return this.#umbreld.apps.imageCleanup.runOperation(() => this.#setSettings(settings))
 	}
 
 	async #setSettings({
-		appProxyAuthEnabled,
+		externalUrl,
 		hideCredentialsBeforeOpen,
 		customMounts,
 		folderAccess,
@@ -2096,17 +2031,13 @@ export default class App {
 		let settingsPersisted = false
 		let releaseStorageOperation = () => {}
 		try {
+			if (externalUrl !== undefined) externalUrl = AppExternalUrlSchema.parse(externalUrl)
 			const storageProvided = customMounts !== undefined || folderAccess !== undefined
 			const environmentProvided = environment !== undefined || customEnvironment !== undefined
-
-			if (appProxyAuthEnabled !== undefined && !(await this.hasAppProxy())) {
-				throw new Error(`[apps-settings-auth-unsupported] App ${this.id} does not support app proxy authentication`)
-			}
 
 			const [
 				compose,
 				manifest,
-				previousAuthOverride,
 				previousCustomMounts,
 				previousFolderAccess,
 				previousEnvironment,
@@ -2115,7 +2046,6 @@ export default class App {
 			] = await Promise.all([
 				this.readCompose(),
 				this.readManifest(),
-				this.store.get('appProxyAuthEnabled'),
 				this.getCustomMounts(),
 				this.getFolderAccess(),
 				this.getEnvironmentVariables(),
@@ -2249,11 +2179,11 @@ export default class App {
 
 			// One write for every provided field
 			const success = await this.store.update((settings) => {
-				if (hideCredentialsBeforeOpen !== undefined) settings.hideCredentialsBeforeOpen = hideCredentialsBeforeOpen
-				if (appProxyAuthEnabled !== undefined) {
-					if (appProxyAuthEnabled === null) delete settings.appProxyAuthEnabled
-					else settings.appProxyAuthEnabled = appProxyAuthEnabled
+				if (externalUrl !== undefined) {
+					if (externalUrl) settings.externalUrl = externalUrl
+					else delete settings.externalUrl
 				}
+				if (hideCredentialsBeforeOpen !== undefined) settings.hideCredentialsBeforeOpen = hideCredentialsBeforeOpen
 				if (storageProvided) {
 					if (normalizedCustomMounts.length > 0) settings.customMounts = normalizedCustomMounts
 					else delete settings.customMounts
@@ -2279,7 +2209,7 @@ export default class App {
 				await this.#umbreld.notifications.clear(`app-storage-settings-changed:${this.id}`).catch(() => {})
 			}
 
-			// Auth and the credential prompt do not affect Compose. Applying them
+			// Launch URLs and the credential prompt do not affect Compose. Applying them
 			// must not depend on an existing storage source being available.
 			if (storageProvided || environmentProvided || dependencies !== undefined) {
 				await this.regenerateUserSettingsCompose()
@@ -2290,8 +2220,6 @@ export default class App {
 			this.#settingsInProgress = false
 
 			// Skip the restart if nothing actually changed
-			const authChanged =
-				appProxyAuthEnabled !== undefined && (appProxyAuthEnabled ?? undefined) !== previousAuthOverride
 			const storageChanged =
 				storageProvided &&
 				(JSON.stringify(previousCustomMounts) !== JSON.stringify(normalizedCustomMounts) ||
@@ -2308,10 +2236,6 @@ export default class App {
 					JSON.stringify(resolvedDependencies)
 			if (storageChanged || environmentChanged || dependenciesChanged) {
 				await this.applySettingsChange()
-			} else if (authChanged) {
-				// The app gateway reads the auth override when routes are rebuilt,
-				// so an auth-only change applies instantly without a restart
-				await this.refreshLanIngress()
 			}
 
 			return success

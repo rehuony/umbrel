@@ -18,16 +18,14 @@ import {useTorEnabled} from '@/hooks/use-tor-enabled'
 import {cn} from '@/lib/utils'
 import {useSettingsDialogProps} from '@/routes/settings/_components/shared'
 import {NetworkPanel} from '@/routes/settings/advanced-network'
-import {ExternalAccessPanel} from '@/routes/settings/external-access'
 import {HttpsCertificateSettingsPanel} from '@/routes/settings/https-access'
 import {ThunderboltSettingsPanel} from '@/routes/settings/thunderbolt'
 import {trpcReact} from '@/trpc/trpc'
 import {tw} from '@/utils/tw'
 
-type AdvancedPanel = 'overview' | 'network' | 'https-certificate' | 'thunderbolt' | 'external-access'
+type AdvancedPanel = 'overview' | 'network' | 'https-certificate' | 'thunderbolt'
 
 function panelFromSelection(selection: string | undefined, isThunderboltSupported: boolean): AdvancedPanel {
-	if (selection === 'external-access') return 'external-access'
 	if (selection === 'network') return 'network'
 	if (selection === 'thunderbolt' && isThunderboltSupported) return 'thunderbolt'
 	return 'overview'
@@ -38,7 +36,7 @@ export default function AdvancedSettingsDrawerOrDialog() {
 	const title = t('advanced-settings')
 	const dialogProps = useSettingsDialogProps()
 	const {advancedSelection} = useParams<{
-		advancedSelection?: 'beta-program' | 'network' | 'thunderbolt' | 'tor' | 'external-access'
+		advancedSelection?: 'beta-program' | 'network' | 'thunderbolt' | 'tor'
 	}>()
 	const [searchParams] = useSearchParams()
 
@@ -132,13 +130,6 @@ export default function AdvancedSettingsDrawerOrDialog() {
 	const mainContent = (
 		<div className='flex flex-col gap-y-3'>
 			{networkSettingRow}
-			<button
-				onClick={() => setActivePanel('external-access')}
-				className={cn(cardClass, 'pointer-events-auto cursor-pointer text-left transition-colors hover:bg-white/8')}
-			>
-				<CardText title={t('external-access.title')} description={t('external-access.description')} />
-				<TbChevronRight className='size-4.5 shrink-0 self-center text-white/30' />
-			</button>
 			{thunderboltSettingRow}
 			{remoteTorAccessSettingRow}
 			<label className={cardClass}>
@@ -151,9 +142,7 @@ export default function AdvancedSettingsDrawerOrDialog() {
 	)
 
 	const content =
-		activePanel === 'external-access' ? (
-			<ExternalAccessPanel onBack={() => setActivePanel('overview')} />
-		) : activePanel === 'thunderbolt' && isThunderboltSupported ? (
+		activePanel === 'thunderbolt' && isThunderboltSupported ? (
 			<ThunderboltSettingsPanel onBack={() => setActivePanel('overview')} />
 		) : activePanel === 'https-certificate' ? (
 			<HttpsCertificateSettingsPanel onBack={() => setActivePanel('network')} />

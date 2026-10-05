@@ -157,9 +157,6 @@ class Server {
 			? createProxyMiddleware({
 					target: process.env.UMBREL_UI_PROXY,
 					ws: false,
-					onProxyRes: (response, request) => {
-						if (request.url?.split('?')[0] === '/app-access') response.headers['cache-control'] = 'no-store'
-					},
 					logProvider: () => ({
 						log: this.logger.verbose,
 						debug: this.logger.verbose,
@@ -224,12 +221,6 @@ class Server {
 				this.logger.error(`Error upgrading websocket`, error)
 				socket.destroy()
 			}
-		})
-
-		// Login handoffs carry short-lived codes and must never be cached.
-		this.app.use('/app-access', (_request, response, next) => {
-			response.set('Cache-Control', 'no-store')
-			next()
 		})
 
 		// Handle tRPC routes

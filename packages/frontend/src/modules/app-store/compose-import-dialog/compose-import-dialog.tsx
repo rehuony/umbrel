@@ -1,4 +1,4 @@
-import {lazy, Suspense, useRef, useState, type InputHTMLAttributes} from 'react'
+import {lazy, Suspense, useEffect, useRef, useState, type InputHTMLAttributes} from 'react'
 import {useTranslation} from 'react-i18next'
 import {TbAlertCircle, TbCheck, TbChevronDown, TbCode, TbFileUpload, TbWorld} from 'react-icons/tb'
 
@@ -21,9 +21,9 @@ const initialMetadata = {
 	category: 'Utilities',
 	tagline: '',
 	website: '',
-	service: '',
 	port: '',
-	containerPort: '',
+	protocol: 'http' as 'http' | 'https',
+	externalUrl: '',
 	path: '/',
 }
 const fileSizeLimit = 1024 * 1024
@@ -40,6 +40,27 @@ export function ComposeImportDialog() {
 	const [readingFile, setReadingFile] = useState(false)
 	const [review, setReview] = useState<RouterOutput['apps']['prepareImport'] | null>(null)
 	const [error, setError] = useState('')
+	const [endpoints, setEndpoints] = useState<RouterOutput['apps']['inspectCompose'] | null>(null)
+	const {mutateAsync: inspectCompose} = trpcReact.apps.inspectCompose.useMutation()
+	useEffect(() => {
+		let active = true
+		setEndpoints(null)
+		if (!dialog.open || !definition.trim()) return
+		const timer = setTimeout(() => {
+			void inspectCompose({definition}).then(
+				(result) => {
+					if (active) setEndpoints(result)
+				},
+				() => {
+					if (active) setEndpoints(null)
+				},
+			)
+		}, 400)
+		return () => {
+			active = false
+			clearTimeout(timer)
+		}
+	}, [definition, dialog.open, inspectCompose])
 	const prepare = trpcReact.apps.prepareImport.useMutation()
 	const install = trpcReact.apps.importCompose.useMutation({
 		onSuccess: () => {
@@ -73,7 +94,7 @@ export function ComposeImportDialog() {
 			setReview(
 				await prepare.mutateAsync({
 					definition,
-					metadata: {...metadata, port: Number(metadata.port), containerPort: Number(metadata.containerPort)},
+					metadata: {...metadata, port: Number(metadata.port)},
 				}),
 			)
 		} catch (error) {
@@ -224,19 +245,27 @@ export function ComposeImportDialog() {
 											<dt className='text-white/45'>{t('panel-catalog.app-id')}</dt>
 											<dd className='break-all'>{review.metadata.id}</dd>
 										</div>
-										{review.metadata.service && (
-											<div className='flex justify-between gap-4'>
-												<dt className='text-white/45'>{t('panel-catalog.web-entry')}</dt>
-												<dd className='text-right break-all'>
-													{review.metadata.service}:{review.metadata.containerPort}
-													{review.metadata.path}
-												</dd>
-											</div>
-										)}
 										{!!review.metadata.port && (
 											<div className='flex justify-between gap-4'>
 												<dt className='text-white/45'>{t('panel-catalog.entry-port')}</dt>
 												<dd>{review.metadata.port}</dd>
+											</div>
+										)}
+										{review.ports?.length > 0 && (
+											<div className='space-y-2'>
+												<dt className='text-white/45'>{t('panel-catalog.published-ports')}</dt>
+												{review.ports.map((binding, index) => (
+													<dd key={index} className='break-all'>
+														{binding.service}: {binding.hostIp ? `${binding.hostIp}:` : ''}
+														{binding.published ?? t('panel-catalog.dynamic-port')} → {binding.target}/{binding.protocol}
+													</dd>
+												))}
+											</div>
+										)}
+										{review.metadata.externalUrl && (
+											<div className='space-y-2'>
+												<dt className='text-white/45'>{t('app-settings.external-url.label')}</dt>
+												<dd className='break-all'>{review.metadata.externalUrl}</dd>
 											</div>
 										)}
 									</dl>
@@ -312,22 +341,60 @@ export function ComposeImportDialog() {
 											/>
 										</summary>
 										<div className='space-y-3 pt-4'>
-											{field('service', t('panel-catalog.web-service'), {spellCheck: false})}
-											<div className='grid grid-cols-2 gap-3'>
-												{field('containerPort', t('panel-catalog.container-port'), {
-													required: !!metadata.service,
-													type: 'number',
-													min: 1,
-													max: 65535,
-												})}
-												{field('port', t('panel-catalog.entry-port'), {
-													required: !!metadata.service,
-													type: 'number',
-													min: 1,
-													max: 65535,
-												})}
-											</div>
+											<p className='text-12 text-white/50'>{t('panel-catalog.web-entry-description')}</p>
+											{endpoints?.hostNetwork ? (
+												field('port', t('panel-catalog.entry-port'), {type: 'number', min: 0, max: 65535})
+											) : (
+												<label className='block space-y-1.5 text-12 text-white/60'>
+													<span>{t('panel-catalog.entry-port')}</span>
+													<select
+														name='port'
+														className={textareaClass}
+														value={metadata.port}
+														disabled={busy}
+														onChange={(event) => setMetadata((previous) => ({...previous, port: event.target.value}))}
+													>
+														<option value=''>{t('panel-catalog.no-web-entry')}</option>
+														{Array.from(
+															new Map(
+																(endpoints?.ports ?? [])
+																	.filter(
+																		(binding) =>
+																			binding.protocol === 'tcp' &&
+																			/^\d+$/.test(binding.published ?? '') &&
+																			Number(binding.published) > 0 &&
+																			Number(binding.published) <= 65535,
+																	)
+																	.map((binding) => [binding.published!, binding]),
+															).values(),
+														).map((binding) => (
+															<option key={binding.published} value={binding.published!}>
+																{binding.service}: {binding.published} → {binding.target}
+															</option>
+														))}
+													</select>
+												</label>
+											)}
+											<label className='block space-y-1.5 text-12 text-white/60'>
+												<span>{t('panel-catalog.web-protocol')}</span>
+												<select
+													name='protocol'
+													className={textareaClass}
+													value={metadata.protocol}
+													disabled={busy}
+													onChange={(event) =>
+														setMetadata((previous) => ({...previous, protocol: event.target.value as 'http' | 'https'}))
+													}
+												>
+													<option value='http'>HTTP</option>
+													<option value='https'>HTTPS</option>
+												</select>
+											</label>
 											{field('path', t('panel-catalog.web-path'), {pattern: '/.*', spellCheck: false})}
+											{field('externalUrl', t('app-settings.external-url.label'), {
+												type: 'url',
+												placeholder: 'https://app.example.com',
+											})}
 										</div>
 									</details>
 								</div>

@@ -8,7 +8,7 @@ configuration, with a form for importing custom Docker Compose applications.
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | [Architecture and development](architecture.md)                                  | Component boundaries, toolchain, authentication and translations |
 | [Applications](applications.md)                                                  | Application configuration and custom Compose imports             |
-| [External access](external-access.md)                                            | HTTPS application domains, trusted proxies and login callbacks   |
+| [External access](external-access.md)                                            | Direct service ports, public launch URLs and application login   |
 | [Cloud connections](cloud-connections.md)                                        | Public OAuth clients, copy-code callbacks and token refresh      |
 | [System updates](system-updates.md)                                              | Release source, verified bundles, boot health and rollback       |
 | [Verification](validation.md)                                                    | Test commands, environments and release acceptance boundaries    |

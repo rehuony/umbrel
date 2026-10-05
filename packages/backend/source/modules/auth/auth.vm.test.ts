@@ -10,9 +10,7 @@ type TestVm = Awaited<ReturnType<typeof createTestVm>>
 
 type BrowserSession = {
 	dashboardToken: string
-	appCookie: string
 	browserCookie: string
-	appSetCookie: string
 	browserSetCookie: string
 	fileToken?: string
 }
@@ -51,17 +49,14 @@ describe.sequential('Browser authentication', () => {
 		if (failed) skip()
 	})
 
-	test('login creates separate host-only app and browser credentials', async () => {
+	test('login creates paired dashboard and host-only browser credentials', async () => {
 		primary = await login('UmbrelPrimary/1.0')
 
 		expect(primary.dashboardToken).toMatch(credentialPattern)
-		expect(cookieToken(primary.appCookie)).toMatch(credentialPattern)
 		expect(cookieToken(primary.browserCookie)).toMatch(credentialPattern)
-		expect(cookieToken(primary.appCookie)).not.toBe(primary.dashboardToken)
 		expect(cookieToken(primary.browserCookie)).not.toBe(primary.dashboardToken)
-		expect(cookieToken(primary.browserCookie)).not.toBe(cookieToken(primary.appCookie))
 
-		for (const cookie of [primary.appSetCookie, primary.browserSetCookie]) {
+		for (const cookie of [primary.browserSetCookie]) {
 			expect(cookie).toContain('; Path=/')
 			expect(cookie).toContain('; HttpOnly')
 			expect(cookie).toContain('; SameSite=Lax')
@@ -78,7 +73,6 @@ describe.sequential('Browser authentication', () => {
 		await expectTrpcStatus('user.get', 401, {...primary, browserCookie: ''})
 		await expectTrpcStatus('user.get', 401, {...primary, dashboardToken: ''})
 		await expectTrpcStatus('user.get', 401, {...primary, browserCookie: secondary.browserCookie})
-		await expectTrpcStatus('user.get', 401, {...primary, browserCookie: primary.appCookie})
 
 		const uploadPath = '/Home/auth-vm-paired-upload.txt'
 		const pairedUpload = await request(`/api/files/upload?path=${encodeURIComponent(uploadPath)}`, {
@@ -213,21 +207,17 @@ describe.sequential('Browser authentication', () => {
 	})
 
 	test('renewal keeps every credential stable and extends only matching cookies', async () => {
-		const originalAppExpiry = cookieExpiry(primary.appSetCookie)
 		const originalBrowserExpiry = cookieExpiry(primary.browserSetCookie)
 		const lastSeenBefore = trpcData<Array<{current: boolean; lastSeenAt: number}>>(
 			await trpc('user.listSessions', {session: primary}),
 		).find((session) => session.current)?.lastSeenAt
 		await new Promise((resolve) => setTimeout(resolve, 1100))
 
-		const renewal = await trpc('user.renewToken', {method: 'POST', session: primary, includeAppCookie: true})
+		const renewal = await trpc('user.renewToken', {method: 'POST', session: primary})
 		expect(trpcData<string>(renewal)).toBe(primary.dashboardToken)
 		const renewedCookies = renewal.headers['set-cookie'] ?? []
-		const renewedApp = requiredCookie(renewedCookies, 'UMBREL_APP_SESSION')
 		const renewedBrowser = requiredCookie(renewedCookies, 'UMBREL_BROWSER_SESSION')
-		expect(serializedCookie(renewedApp)).toBe(primary.appCookie)
 		expect(serializedCookie(renewedBrowser)).toBe(primary.browserCookie)
-		expect(cookieExpiry(renewedApp).getTime()).toBeGreaterThan(originalAppExpiry.getTime())
 		expect(cookieExpiry(renewedBrowser).getTime()).toBeGreaterThan(originalBrowserExpiry.getTime())
 		const lastSeenAfter = trpcData<Array<{current: boolean; lastSeenAt: number}>>(
 			await trpc('user.listSessions', {session: primary}),
@@ -238,8 +228,8 @@ describe.sequential('Browser authentication', () => {
 		expect(fileTokenAfter).toBe(primary.fileToken)
 
 		const concurrent = await Promise.all([
-			trpc('user.renewToken', {method: 'POST', session: primary, includeAppCookie: true}),
-			trpc('user.renewToken', {method: 'POST', session: primary, includeAppCookie: true}),
+			trpc('user.renewToken', {method: 'POST', session: primary}),
+			trpc('user.renewToken', {method: 'POST', session: primary}),
 		])
 		expect(concurrent.map((response) => trpcData<string>(response))).toEqual([
 			primary.dashboardToken,
@@ -252,19 +242,6 @@ describe.sequential('Browser authentication', () => {
 			throwHttpErrors: false,
 		})
 		expect(mismatchedBrowser.statusCode).toBe(401)
-
-		const mismatchedApp = await trpc('user.renewToken', {
-			method: 'POST',
-			session: primary,
-			cookie: `${primary.browserCookie}; ${secondary.appCookie}`,
-		})
-		expect(mismatchedApp.statusCode).toBe(200)
-		expect((mismatchedApp.headers['set-cookie'] ?? []).some((cookie) => cookie.startsWith('UMBREL_APP_SESSION='))).toBe(
-			false,
-		)
-		expect(
-			(mismatchedApp.headers['set-cookie'] ?? []).some((cookie) => cookie.startsWith('UMBREL_BROWSER_SESSION=')),
-		).toBe(true)
 	})
 
 	test('all session credentials survive an umbreld restart', async () => {
@@ -382,7 +359,6 @@ describe.sequential('Browser authentication', () => {
 		const response = await trpc('user.revokeSession', {
 			method: 'POST',
 			session: self,
-			includeAppCookie: true,
 			input: {sessionId: selfId},
 		})
 		expect(trpcData<{revoked: boolean; revokedCurrent: boolean}>(response)).toEqual({
@@ -410,7 +386,6 @@ describe.sequential('Browser authentication', () => {
 		const logout = await trpc('user.revokeSession', {
 			method: 'POST',
 			session: primary,
-			includeAppCookie: true,
 			input: {sessionId: primaryId},
 		})
 		await Promise.all([trpcClosed, terminalClosed])
@@ -427,15 +402,6 @@ describe.sequential('Browser authentication', () => {
 			).statusCode,
 		).toBe(401)
 
-		const appSession = await request('/trpc/apps.authorizeAccess', {
-			method: 'POST',
-			json: {request: 'a'.repeat(64)},
-			authorization: primary.dashboardToken,
-			cookie: `${primary.appCookie}; ${primary.browserCookie}`,
-			throwHttpErrors: false,
-		})
-		expect(appSession.statusCode).toBe(401)
-
 		const systemToken = (await umbreld.vm.sshAsRoot('cat /home/umbrel/umbrel/secrets/auth/system-token')).trim()
 		const systemRequest = await request('/trpc/user.get', {authorization: systemToken, responseType: 'json'})
 		expect(trpcData<{name: string}>(systemRequest).name).toBe('satoshi')
@@ -449,13 +415,10 @@ describe.sequential('Browser authentication', () => {
 			responseType: 'json',
 		})
 		const cookies = response.headers['set-cookie'] ?? []
-		const appSetCookie = requiredCookie(cookies, 'UMBREL_APP_SESSION')
 		const browserSetCookie = requiredCookie(cookies, 'UMBREL_BROWSER_SESSION')
 		return {
 			dashboardToken: trpcData<string>(response),
-			appCookie: serializedCookie(appSetCookie),
 			browserCookie: serializedCookie(browserSetCookie),
-			appSetCookie,
 			browserSetCookie,
 		}
 	}
@@ -470,14 +433,12 @@ describe.sequential('Browser authentication', () => {
 		{
 			method = 'GET',
 			session,
-			includeAppCookie = false,
 			cookie,
 			input,
 			throwHttpErrors = true,
 		}: {
 			method?: 'GET' | 'POST'
 			session: BrowserSession
-			includeAppCookie?: boolean
 			cookie?: string
 			input?: unknown
 			throwHttpErrors?: boolean
@@ -487,9 +448,7 @@ describe.sequential('Browser authentication', () => {
 			method,
 			session,
 			json: method === 'POST' ? (input ?? null) : undefined,
-			cookie:
-				cookie ??
-				[session.browserCookie, includeAppCookie ? session.appCookie : ''].filter((value) => value).join('; '),
+			cookie: cookie ?? session.browserCookie,
 			responseType: 'json',
 			throwHttpErrors,
 		})
@@ -536,12 +495,7 @@ describe.sequential('Browser authentication', () => {
 
 	function expectClearedSessionCookies(response: Response<unknown>) {
 		const clearedCookies = response.headers['set-cookie'] ?? []
-		for (const name of [
-			'UMBREL_APP_SESSION',
-			'__Host-UMBREL_APP_SESSION_HTTPS',
-			'UMBREL_BROWSER_SESSION',
-			'__Host-UMBREL_BROWSER_SESSION_HTTPS',
-		]) {
+		for (const name of ['UMBREL_BROWSER_SESSION', '__Host-UMBREL_BROWSER_SESSION_HTTPS']) {
 			const cookie = requiredCookie(clearedCookies, name)
 			expect(serializedCookie(cookie)).toBe(`${name}=`)
 			expect(cookie).toContain('Expires=Thu, 01 Jan 1970 00:00:00 GMT')

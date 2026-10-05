@@ -91,17 +91,19 @@ describe('app settings', () => {
 		})
 	})
 
-	test('auth and credential preferences remain editable when a saved folder is unavailable', async () => {
+	test('launch URL and credential preferences remain editable when a saved folder is unavailable', async () => {
 		const {app, restart} = await createApp()
 		const mount = {serviceName: 'server', sourcePath: '/External/Offline/Media', targetPath: '/media', readOnly: true}
 		await app.store.set('customMounts', [mount])
 		await expect(app.regenerateUserSettingsCompose()).rejects.toThrow('[apps-settings-source-missing]')
 
-		await expect(app.setSettings({hideCredentialsBeforeOpen: true, appProxyAuthEnabled: false})).resolves.toBe(true)
+		await expect(
+			app.setSettings({hideCredentialsBeforeOpen: true, externalUrl: 'https://app.example.com'}),
+		).resolves.toBe(true)
 		await expect(app.store.get()).resolves.toMatchObject({
 			customMounts: [mount],
 			hideCredentialsBeforeOpen: true,
-			appProxyAuthEnabled: false,
+			externalUrl: 'https://app.example.com',
 		})
 		expect(restart).not.toHaveBeenCalled()
 	})
@@ -112,18 +114,18 @@ describe('app settings', () => {
 
 		await expect(app.setSettings({hideCredentialsBeforeOpen: true})).resolves.toBe(true)
 		await expect(app.store.get('hideCredentialsBeforeOpen')).resolves.toBe(true)
-		await expect(app.setSettings({appProxyAuthEnabled: false})).resolves.toBe(true)
+		await expect(app.setSettings({externalUrl: 'https://app.example.com'})).resolves.toBe(true)
 		await expect(app.store.get()).resolves.toMatchObject({
 			hideCredentialsBeforeOpen: true,
-			appProxyAuthEnabled: false,
+			externalUrl: 'https://app.example.com',
 			dependencies: {bitcoin: 'missing-provider'},
 		})
 
-		await expect(app.setSettings({hideCredentialsBeforeOpen: false, appProxyAuthEnabled: null})).resolves.toBe(true)
+		await expect(app.setSettings({hideCredentialsBeforeOpen: false, externalUrl: ''})).resolves.toBe(true)
 		await expect(app.store.get('hideCredentialsBeforeOpen')).resolves.toBe(false)
-		await expect(app.store.get('appProxyAuthEnabled')).resolves.toBeUndefined()
+		await expect(app.store.get('externalUrl')).resolves.toBeUndefined()
 		expect(restart).not.toHaveBeenCalled()
-		expect(umbreld.lanIngress.refresh).toHaveBeenCalledTimes(2)
+		expect(umbreld.lanIngress.refresh).not.toHaveBeenCalled()
 	})
 
 	test('saves preference, compatible dependency, and environment in one write and restart', async () => {

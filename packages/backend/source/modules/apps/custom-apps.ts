@@ -4,28 +4,31 @@ import yaml from 'js-yaml'
 import {z} from 'zod'
 
 import type Umbreld from '../../index.js'
-import {type AppManifest, validateManifest} from './schema.js'
+import {AppExternalUrlSchema, type AppManifest, validateManifest} from './schema.js'
+import {fixedPublishedPort, getPublishedPorts, publishedHostPorts} from './compose-ports.js'
 
 const appId = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/)
 const httpUrl = z
 	.string()
 	.url()
 	.refine((value) => /^https?:\/\//i.test(value), {message: 'Use an HTTP or HTTPS URL'})
-export const CustomAppMetadataSchema = z.object({
-	id: appId,
-	name: z.string().trim().min(1).max(100),
-	icon: httpUrl,
-	description: z.string().trim().min(1).max(10000),
-	version: z.string().trim().min(1).max(100),
-	category: z.string().trim().min(1).max(100),
-	tagline: z.string().trim().max(200).default(''),
-	website: z.union([httpUrl, z.literal('')]).default(''),
-	service: z.string().default(''),
-	port: z.number().int().min(0).max(65535).default(0),
-	containerPort: z.number().int().min(0).max(65535).default(0),
-	path: z.string().startsWith('/').default('/'),
-	backupIgnore: z.array(z.string()).optional(),
-})
+export const CustomAppMetadataSchema = z
+	.object({
+		id: appId,
+		name: z.string().trim().min(1).max(100),
+		icon: httpUrl,
+		description: z.string().trim().min(1).max(10000),
+		version: z.string().trim().min(1).max(100),
+		category: z.string().trim().min(1).max(100),
+		tagline: z.string().trim().max(200).default(''),
+		website: z.union([httpUrl, z.literal('')]).default(''),
+		port: z.number().int().min(0).max(65535).default(0),
+		protocol: z.enum(['http', 'https']).default('http'),
+		externalUrl: AppExternalUrlSchema.optional(),
+		path: z.string().startsWith('/').default('/'),
+		backupIgnore: z.array(z.string()).optional(),
+	})
+	.strict()
 export type CustomAppMetadata = z.infer<typeof CustomAppMetadataSchema>
 export const CustomAppInputSchema = z.object({
 	definition: z
@@ -37,17 +40,16 @@ export const CustomAppInputSchema = z.object({
 
 const object = z.record(z.unknown())
 
-/** Produces the same pair of files that an app-store repository supplies. */
-export function prepareCustomApp(definition: string, input: CustomAppMetadata) {
-	const metadata = CustomAppMetadataSchema.parse(input)
+/** Validate a standalone Compose definition without adding transport services. */
+export function inspectCustomCompose(definition: string) {
 	const compose = object.parse(yaml.load(definition))
 	if (['include', 'name', 'x-panel'].some((key) => key in compose))
 		throw new Error('Use a standalone Docker Compose file without include, name or x-panel')
 	const services = z.record(object).parse(compose.services)
-	const runnable = Object.entries(services).filter(([name]) => name !== 'app_proxy')
-	if (!runnable.length) throw new Error('At least one application service is required')
-	for (const [name, service] of runnable) {
+	if (!Object.keys(services).length) throw new Error('At least one application service is required')
+	for (const [name, service] of Object.entries(services)) {
 		if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name)) throw new Error(`Invalid service name: ${name}`)
+		if (name === 'app_proxy') throw new Error('Declare service ports directly in Compose instead of app_proxy')
 		if (typeof service.image !== 'string' || !service.image.trim()) throw new Error(`${name} requires an image`)
 		if (['build', 'extends', 'env_file', 'profiles'].some((key) => key in service))
 			throw new Error(`${name} must use a prebuilt image and inline configuration`)
@@ -60,19 +62,22 @@ export function prepareCustomApp(definition: string, input: CustomAppMetadata) {
 				throw new Error(`${kind} must be self-contained and scoped to this application`)
 		}
 	}
-	if (metadata.service) {
-		if (!services[metadata.service] || metadata.service === 'app_proxy') throw new Error('Unknown web service')
-		if (!metadata.port || !metadata.containerPort) throw new Error('Web entry and container ports are required')
-		services.app_proxy = {
-			environment: {
-				APP_HOST: `${metadata.id}_${metadata.service}_1`,
-				APP_PORT: metadata.containerPort,
-			},
-		}
-	} else if (services.app_proxy && !metadata.port) {
-		throw new Error('An app_proxy entry requires a web entry port')
-	}
-	compose.services = services
+	const ports = getPublishedPorts({services})
+	const hostNetwork = Object.values(services).some((service) => service.network_mode === 'host')
+	return {compose, ports, hostNetwork}
+}
+
+/** Application metadata chooses a launch endpoint; Compose owns all service bindings. */
+export function prepareCustomApp(definition: string, input: CustomAppMetadata) {
+	const metadata = CustomAppMetadataSchema.parse(input)
+	const {compose, ports, hostNetwork} = inspectCustomCompose(definition)
+	if (
+		metadata.port &&
+		!hostNetwork &&
+		!ports.some((binding) => binding.protocol === 'tcp' && fixedPublishedPort(binding) === metadata.port)
+	)
+		throw new Error('Choose a fixed TCP host port published in Compose for the web entry')
+	if (metadata.externalUrl && !metadata.port) throw new Error('An external URL requires a web entry')
 	const manifest: AppManifest = {
 		manifestVersion: '1.1.0',
 		id: metadata.id,
@@ -84,6 +89,7 @@ export function prepareCustomApp(definition: string, input: CustomAppMetadata) {
 		tagline: metadata.tagline,
 		website: metadata.website,
 		port: metadata.port,
+		portProtocol: metadata.protocol,
 		path: metadata.path,
 		support: '',
 		gallery: [],
@@ -91,7 +97,7 @@ export function prepareCustomApp(definition: string, input: CustomAppMetadata) {
 		backupIgnore: metadata.backupIgnore,
 		storage: {dataRoot: 'data'},
 	}
-	return {manifest, compose, definition: yaml.dump(compose), metadata}
+	return {manifest, compose, definition, metadata, ports, hostNetwork}
 }
 
 export default class CustomApps {
@@ -124,6 +130,9 @@ export default class CustomApps {
 	async install(definition: string, metadata: CustomAppMetadata) {
 		const prepared = prepareCustomApp(definition, metadata)
 		const id = prepared.manifest.id
+		for (const port of new Set([prepared.manifest.port, ...publishedHostPorts(prepared.ports)])) {
+			await this.host.machines.assertAppPortAvailable(port)
+		}
 		if (this.#pending.has(id)) throw new Error('This application is already being imported')
 		this.#pending.add(id)
 		const directory = this.directory(id)
@@ -131,6 +140,7 @@ export default class CustomApps {
 		const composePath = path.join(directory, 'docker-compose.yml')
 		let previous: {manifest: string; compose: string} | undefined
 		let written = false
+		let lifecycleCompleted = false
 		try {
 			if (await this.has(id)) {
 				previous = {
@@ -144,10 +154,18 @@ export default class CustomApps {
 			written = true
 			await fse.writeFile(manifestPath, yaml.dump(prepared.manifest))
 			await fse.writeFile(composePath, prepared.definition, {mode: 0o600})
-			if (await this.host.apps.isInstalled(id)) return await this.host.apps.update(id)
-			return await this.host.apps.install(id)
+			const result = (await this.host.apps.isInstalled(id))
+				? await this.host.apps.update(id)
+				: await this.host.apps.install(id)
+			lifecycleCompleted = true
+			if (metadata.externalUrl !== undefined) {
+				await this.host.apps.getApp(id).setSettings({externalUrl: metadata.externalUrl})
+			}
+			return result
 		} catch (error) {
-			if (written) {
+			// Once installed, keep the source consistent with the running application,
+			// even if saving its launch metadata fails.
+			if (written && !lifecycleCompleted) {
 				if (previous) {
 					await fse.writeFile(manifestPath, previous.manifest)
 					await fse.writeFile(composePath, previous.compose)

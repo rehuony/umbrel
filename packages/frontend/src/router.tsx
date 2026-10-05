@@ -54,11 +54,6 @@ const ConfirmStaticIp = React.lazy(() => import('./routes/confirm-static-ip'))
 
 // NOTE: consider extracting certain providers into react-router loaders
 export const router = createBrowserRouter([
-	{
-		path: '/app-access',
-		lazy: async () => ({Component: (await import('./routes/app-access')).default}),
-		ErrorBoundary: ErrorBoundaryPageFallback,
-	},
 	// desktop
 	{
 		path: '/',

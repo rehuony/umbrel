@@ -1,7 +1,6 @@
 import {TRPCError} from '@trpc/server'
 import {z} from 'zod'
 
-import {appGatewayTokenFromRequest, clearAppGatewayCookies, setAppGatewayCookie} from '../auth/app-gateway-cookie.js'
 import {BrowserSessionRequiredError, OWNER_ACCOUNT_ID, SessionIssuanceInvalidatedError} from '../auth/auth.js'
 import {
 	browserSessionTokenFromRequest,
@@ -123,7 +122,6 @@ export default router({
 					}
 					throw error
 				})
-			setAppGatewayCookie(ctx.response!, ctx.request!, session.appGatewayToken, new Date(session.expiresAt))
 			setBrowserSessionCookie(ctx.response!, ctx.request!, session.browserSessionToken, new Date(session.expiresAt))
 			return session.dashboardToken
 		}),
@@ -161,14 +159,6 @@ export default router({
 			}
 			throw error
 		})
-
-		const appGatewayToken = appGatewayTokenFromRequest(ctx.request!)
-		if (appGatewayToken) {
-			const appPrincipal = await ctx.umbreld.auth.authenticate(appGatewayToken, 'app-gateway').catch(() => null)
-			if (appPrincipal?.sessionId === session.principal.sessionId) {
-				setAppGatewayCookie(ctx.response!, ctx.request!, appGatewayToken, new Date(session.expiresAt))
-			}
-		}
 
 		const browserSessionToken = browserSessionTokenFromRequest(ctx.request!)
 		if (!browserSessionToken) throw new TRPCError({code: 'UNAUTHORIZED', message: 'Invalid token'})
@@ -217,7 +207,6 @@ export default router({
 		.mutation(async ({ctx, input}) => {
 			const result = await ctx.umbreld.auth.revokeSessionForAccount(ctx.principal!, input.sessionId)
 			if (result.revokedCurrent) {
-				clearAppGatewayCookies(ctx.response!)
 				clearBrowserSessionCookies(ctx.response!)
 			}
 			return result
@@ -237,7 +226,6 @@ export default router({
 		.mutation(async ({ctx, input}) => {
 			const result = await ctx.umbreld.auth.revokeSessionForOwner(ctx.principal!, input.userId, input.sessionId)
 			if (result.revokedCurrent) {
-				clearAppGatewayCookies(ctx.response!)
 				clearBrowserSessionCookies(ctx.response!)
 			}
 			return result
@@ -246,7 +234,6 @@ export default router({
 	revokeAllAccountSessions: privateProcedure.input(z.object({userId: z.string()})).mutation(async ({ctx, input}) => {
 		const result = await ctx.umbreld.auth.revokeAllSessionsForOwner(ctx.principal!, input.userId)
 		if (result.revokedCurrent) {
-			clearAppGatewayCookies(ctx.response!)
 			clearBrowserSessionCookies(ctx.response!)
 		}
 		return result
@@ -254,7 +241,6 @@ export default router({
 
 	logout: privateProcedureWithMembers.mutation(async ({ctx}) => {
 		await ctx.umbreld.auth.revokeSession(ctx.principal!.sessionId)
-		clearAppGatewayCookies(ctx.response!)
 		clearBrowserSessionCookies(ctx.response!)
 		return true
 	}),

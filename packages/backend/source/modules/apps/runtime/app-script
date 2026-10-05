@@ -285,7 +285,7 @@ source_app() {
   export APP_MANIFEST_FILE="${APP_DATA_DIR}/umbrel-app.yml"
   export APP_VERSION=$(cat "${APP_MANIFEST_FILE}" | yq '.version')
   
-  # The manifest port remains the browser-facing port owned by umbreld's app gateway.
+  # Store app_proxy declarations use the manifest port for their browser-facing listener.
   export APP_PROXY_PORT=$(cat "${APP_MANIFEST_FILE}" | yq '.port')
   
   export APP_DOMAIN="${app_domain}"
@@ -449,9 +449,6 @@ compose() {
             APP_HOST: .APP_HOST,
             APP_PORT: .APP_PORT,
             APP_PROTOCOL: .APP_PROTOCOL,
-            PROXY_AUTH_ADD: .PROXY_AUTH_ADD,
-            PROXY_AUTH_WHITELIST: .PROXY_AUTH_WHITELIST,
-            PROXY_AUTH_BLACKLIST: .PROXY_AUTH_BLACKLIST,
             PROXY_TRUST_UPSTREAM: .PROXY_TRUST_UPSTREAM,
             PROXY_TIMEOUT: .PROXY_TIMEOUT
           } | with_entries(select(.value != null))' > "${app_gateway_config_temp_file}"

@@ -132,12 +132,11 @@ test.sequential('dashboard tRPC rejects either half of the browser credential pa
 	expect(cookieOnly.response.statusCode).toBe(401)
 })
 
-test.sequential('login() sets only the HTTP app and browser session cookies on HTTP requests', async () => {
+test.sequential('login() sets only the HTTP browser session cookie on HTTP requests', async () => {
 	const response = await umbreld.unauthenticatedApi.post('../trpc/user.login', {json: testUserCredentials})
 	const setCookies = response.headers['set-cookie'] ?? []
-	const appCookie = setCookies.find((cookie) => /^UMBREL_APP_SESSION=[^;]/.test(cookie))
 	const browserCookie = setCookies.find((cookie) => /^UMBREL_BROWSER_SESSION=[^;]/.test(cookie))
-	for (const cookie of [appCookie, browserCookie]) {
+	for (const cookie of [browserCookie]) {
 		expect(cookie).toContain('; Path=/')
 		expect(cookie).toContain('; Expires=')
 		expect(cookie).toContain('; HttpOnly')
@@ -145,11 +144,10 @@ test.sequential('login() sets only the HTTP app and browser session cookies on H
 		expect(cookie).not.toContain('; Secure')
 		expect(cookie).not.toContain('Domain=')
 	}
-	expect(setCookies.some((cookie) => /^__Host-UMBREL_APP_SESSION_HTTPS=[^;]/.test(cookie))).toBe(false)
 	expect(setCookies.some((cookie) => /^__Host-UMBREL_BROWSER_SESSION_HTTPS=[^;]/.test(cookie))).toBe(false)
 })
 
-test.sequential('login() sets only the HTTPS app and browser session cookies on HTTPS requests', async () => {
+test.sequential('login() sets only the HTTPS browser session cookie on HTTPS requests', async () => {
 	// A real TLS request through LAN ingress. Client-supplied forwarded headers are
 	// overwritten at the ingress boundary, so the scheme cannot be spoofed here the
 	// way the previous non-VM version of this test did.
@@ -160,45 +158,34 @@ test.sequential('login() sets only the HTTPS app and browser session cookies on 
 		responseType: 'json',
 	})
 	const setCookies = response.headers['set-cookie'] ?? []
-	const httpsProxyCookie = setCookies.find((cookie) => /^__Host-UMBREL_APP_SESSION_HTTPS=[^;]/.test(cookie))
 	const httpsBrowserCookie = setCookies.find((cookie) => /^__Host-UMBREL_BROWSER_SESSION_HTTPS=[^;]/.test(cookie))
-	expect(httpsProxyCookie).toContain('; Path=/')
-	expect(httpsProxyCookie).toContain('; Secure')
-	expect(httpsProxyCookie).toContain('; HttpOnly')
-	expect(httpsProxyCookie).toContain('; SameSite=Lax')
-	expect(httpsProxyCookie).toContain('; Expires=')
-	expect(httpsProxyCookie).not.toContain('Domain=')
 	expect(httpsBrowserCookie).toContain('; Path=/')
 	expect(httpsBrowserCookie).toContain('; Secure')
 	expect(httpsBrowserCookie).toContain('; HttpOnly')
 	expect(httpsBrowserCookie).toContain('; SameSite=Lax')
 	expect(httpsBrowserCookie).toContain('; Expires=')
 	expect(httpsBrowserCookie).not.toContain('Domain=')
-	expect(setCookies.some((cookie) => /^UMBREL_APP_SESSION=[^;]/.test(cookie))).toBe(false)
 	expect(setCookies.some((cookie) => /^UMBREL_BROWSER_SESSION=[^;]/.test(cookie))).toBe(false)
 
 	const dashboardToken = (response.body as {result?: {data?: unknown}}).result?.data
-	if (typeof dashboardToken !== 'string' || !httpsProxyCookie || !httpsBrowserCookie) {
+	if (typeof dashboardToken !== 'string' || !httpsBrowserCookie) {
 		throw new Error('HTTPS login did not return all credentials')
 	}
 	const renewed = await got.post(`https://127.0.0.1:${httpsPort}/trpc/user.renewToken`, {
 		json: null,
 		headers: {
 			authorization: `Bearer ${dashboardToken}`,
-			cookie: `${httpsProxyCookie.split(';')[0]}; ${httpsBrowserCookie.split(';')[0]}`,
+			cookie: httpsBrowserCookie.split(';')[0],
 		},
 		https: {certificateAuthority: caCertificate},
 		responseType: 'json',
 	})
 	expect((renewed.body as {result?: {data?: unknown}}).result?.data).toBe(dashboardToken)
 	const renewedCookies = renewed.headers['set-cookie'] ?? []
-	expect(renewedCookies.find((cookie) => cookie.startsWith('__Host-UMBREL_APP_SESSION_HTTPS='))?.split(';')[0]).toBe(
-		httpsProxyCookie.split(';')[0],
-	)
+
 	expect(
 		renewedCookies.find((cookie) => cookie.startsWith('__Host-UMBREL_BROWSER_SESSION_HTTPS='))?.split(';')[0],
 	).toBe(httpsBrowserCookie.split(';')[0])
-	expect(renewedCookies.some((cookie) => cookie.startsWith('UMBREL_APP_SESSION='))).toBe(false)
 	expect(renewedCookies.some((cookie) => cookie.startsWith('UMBREL_BROWSER_SESSION='))).toBe(false)
 })
 

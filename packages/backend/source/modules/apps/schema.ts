@@ -97,6 +97,8 @@ export const AppManifestSchema = z.object({
 	// TODO (apps refactor): switch to semantic versions?
 	version: z.string(),
 	port: z.number().int(),
+	// An explicit protocol keeps a directly published endpoint outside the HTTP/TLS mux.
+	portProtocol: z.enum(['http', 'https']).optional(),
 	description: z.string(),
 	website: z.string().url(),
 	// TODO: one developer/submitter is an integer
@@ -216,12 +218,26 @@ export const AppCustomEnvironmentVariableSchema = z.object({
 	value: z.string(),
 })
 
+// A launch address only: this does not configure networking or authentication.
+export const AppExternalUrlSchema = z
+	.string()
+	.trim()
+	.refine((value) => {
+		if (!value) return true
+		try {
+			const url = new URL(value)
+			return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+		} catch {
+			return false
+		}
+	}, 'Enter an HTTP or HTTPS application URL without credentials')
+
 export const AppSettingsSchema = z.object({
 	hideCredentialsBeforeOpen: z.boolean().optional(),
 	dependencies: z.record(z.string()).optional(),
 	backupIgnore: z.boolean().optional(),
 	autoStart: z.boolean().optional(),
-	appProxyAuthEnabled: z.boolean().optional(),
+	externalUrl: AppExternalUrlSchema.optional(),
 	dataRootLocation: AppDataRootLocationSchema.optional(),
 	dataRootMove: AppDataRootMoveSchema.optional(),
 	dataRootResetPending: z.boolean().optional(),

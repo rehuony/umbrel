@@ -103,7 +103,7 @@ specific acceptance checks:
 
 - Boot and recover on each claimed hardware target, including networking and storage.
 - Exercise updates and rollback against the intended release source while retaining user data.
-- Verify [external access](external-access.md) through the actual reverse proxy, including login callbacks, WebSockets and denied access.
+- Verify [external access](external-access.md) through the actual reverse proxy, including panel login, native app authentication, WebSockets and every published service port.
 - Verify [cloud authorization](cloud-connections.md) with registered clients and the deployed callback page. Test cancellation, token refresh, expiry and account isolation. Empty registration fields deliberately keep new connections unavailable.
 - Check desktop and narrow-screen interactions; terminal soft keyboards require a real mobile browser.
 - Measure large-file and many-small-file transfers on the target disk and network, checking file contents and bounded memory. Local benchmarks do not prove Raspberry Pi throughput.

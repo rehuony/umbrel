@@ -5,7 +5,7 @@ import {toast} from '@/components/ui/toast'
 import {useApps} from '@/providers/apps'
 import {trpcReact} from '@/trpc/trpc'
 import {useLinkToDialog} from '@/utils/dialog'
-import {appToUrlWithAppPath, getAlwaysOpenHttpsRequiredApps, isOnionPage} from '@/utils/misc'
+import {appToUrlWithAppPath, getAlwaysOpenHttpsRequiredApps, isLocalPanelHost, isOnionPage} from '@/utils/misc'
 
 /**
  * There's a strong temptation to make launching an app just a link to the app's URL:
@@ -66,16 +66,22 @@ export function useLaunchApp() {
 			return
 		}
 
-		if (
-			app.externalAccess?.enabled &&
-			location.origin === app.externalAccess.panelOrigin &&
-			!app.externalAccess.origin
-		) {
-			toast.warning(t('external-access.app-unavailable'), {area: 'app-store'})
+		if (isOnionPage() && !app.hiddenService) {
+			toast.warning(t('app-unavailable-over-tor'), {area: 'app-store'})
 			return
 		}
 
-		const needsHttps = app.requiresHttps && !isOnionPage() && window.location.protocol !== 'https:'
+		if (!isOnionPage() && !isLocalPanelHost() && !app.externalUrl) {
+			toast.warning(t('app-settings.external-url.unavailable'), {area: 'app-store'})
+			return
+		}
+
+		const needsHttps =
+			app.requiresHttps &&
+			!app.portProtocol &&
+			!isOnionPage() &&
+			isLocalPanelHost() &&
+			window.location.protocol !== 'https:'
 		const protocol = needsHttps ? 'https:' : options?.protocol
 		const showCredentials = app.credentials?.showBeforeOpen && !options?.direct
 		const showHttps = needsHttps && options?.protocol !== 'https:' && !getAlwaysOpenHttpsRequiredApps()

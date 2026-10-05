@@ -62,6 +62,8 @@ require('node:https').createServer({cert: fs.readFileSync('/cert.pem'), key: fs.
 			description: 'VM fixture',
 			version: '1',
 			category: 'Utilities',
+			port: 4002,
+			protocol: 'https',
 		},
 		definition: yaml.dump({
 			services: {

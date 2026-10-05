@@ -47,7 +47,6 @@ describe('native TLS installed-app discovery', () => {
 	let ingress: IngressInternals
 	let installedAppIds: string[]
 	let instances: Array<{id: string; state: string; appGatewayEnabled?: boolean}>
-	let authOverrides: Map<string, boolean>
 	const clients: net.Socket[] = []
 
 	beforeEach(async () => {
@@ -55,7 +54,6 @@ describe('native TLS installed-app discovery', () => {
 		dataDirectory = await directory.create()
 		installedAppIds = []
 		instances = []
-		authOverrides = new Map()
 		const logger = {createChildLogger: () => logger, log: vi.fn(), error: vi.fn(), verbose: vi.fn()}
 		ingress = new LanIngress({
 			dataDirectory,
@@ -63,7 +61,6 @@ describe('native TLS installed-app discovery', () => {
 			store: {get: async () => installedAppIds},
 			apps: {
 				instances,
-				getApp: (id: string) => ({getAppProxyAuthOverride: async () => authOverrides.get(id)}),
 			},
 		} as never) as unknown as IngressInternals
 	})
@@ -120,6 +117,27 @@ describe('native TLS installed-app discovery', () => {
 		expect(candidates.reservedPorts).not.toContain(routes[0].hiddenPort)
 	})
 
+	test('reserves all published ports even for a background app without a web entry', async () => {
+		await writeApp({port: 0, compose: {services: {api: {ports: ['18080:80', '18081:81']}}}})
+		const candidates = await ingress.getAppIngressCandidates(reservedHostnames)
+		expect(candidates.routes).toEqual([])
+		expect(candidates.reservedPorts).toEqual(expect.arrayContaining([18080, 18081]))
+	})
+
+	test.each(['http', 'https'])(
+		'leaves direct %s bindings untouched while reserving all ports',
+		async (portProtocol) => {
+			await writeApp({
+				port: 18080,
+				metadata: {portProtocol},
+				compose: {services: {web: {ports: ['127.0.0.1:18080:8080', '18081:8081']}}},
+			})
+			const candidates = await ingress.getAppIngressCandidates(reservedHostnames)
+			expect(candidates.routes).toEqual([])
+			expect(candidates.reservedPorts).toEqual(expect.arrayContaining([18080, 18081]))
+		},
+	)
+
 	test('waits before opening the proxy on start and restart without changing app state', async () => {
 		const createMux = useEphemeralListeners()
 		const instance = {id: 'native-app', state: 'ready', appGatewayEnabled: true}
@@ -128,7 +146,7 @@ describe('native TLS installed-app discovery', () => {
 		const onRequest = vi.fn((_request, response) => response.end('upstream ready'))
 		const upstream = http.createServer(onRequest)
 		await writeApp({
-			compose: {services: {app_proxy: {environment: {APP_HOST: '127.0.0.1', APP_PORT: port, PROXY_AUTH_ADD: 'false'}}}},
+			compose: {services: {app_proxy: {environment: {APP_HOST: '127.0.0.1', APP_PORT: port}}}},
 		})
 		const reconcile = async () => ingress.updateAppMuxServers(await ingress.getAppRoutes(reservedHostnames))
 		const closeUpstream = () => new Promise<void>((resolve) => upstream.close(() => resolve()))
@@ -179,7 +197,7 @@ describe('native TLS installed-app discovery', () => {
 				const {port} = upstream.address() as net.AddressInfo
 				await writeApp({
 					compose: {
-						services: {app_proxy: {environment: {APP_HOST: '127.0.0.1', APP_PORT: port, PROXY_AUTH_ADD: 'false'}}},
+						services: {app_proxy: {environment: {APP_HOST: '127.0.0.1', APP_PORT: port}}},
 					},
 				})
 				await vi.waitFor(async () => expect(await ingress.getAppRoutes(reservedHostnames)).toHaveLength(1))
@@ -277,7 +295,7 @@ describe('native TLS installed-app discovery', () => {
 		expect(await ingress.getAppIngressCandidates(reservedHostnames)).toEqual(before)
 	})
 
-	test('invalid native metadata preserves the gateway authentication override', async () => {
+	test('invalid native metadata preserves the gateway upstream', async () => {
 		vi.spyOn(ingress, 'appGatewayCanListen').mockReturnValue(true)
 		const compose = {
 			services: {
@@ -285,10 +303,9 @@ describe('native TLS installed-app discovery', () => {
 				server: {ports: ['23000:8080']},
 			},
 		}
-		authOverrides.set('native-app', false)
 		await writeApp({compose})
 		const before = await ingress.getAppIngressCandidates(reservedHostnames)
-		expect(before.routes[0].gateway?.auth).toBe(false)
+		expect(before.routes[0].gateway?.targetHost).toBe('127.0.0.1')
 		await writeApp({compose, metadata: {nativeTlsHostnameSuffixes: ['plex.direct', 'invalid']}})
 		expect(await ingress.getAppIngressCandidates(reservedHostnames)).toEqual(before)
 	})
@@ -300,8 +317,8 @@ describe('native TLS installed-app discovery', () => {
 		{name: 'a scalar', value: 'invalid'},
 		{name: 'a missing target port', value: {environment: {APP_HOST: '127.0.0.1'}}},
 		{
-			name: 'disabled gateway authentication',
-			value: {environment: {APP_HOST: '127.0.0.1', APP_PORT: 8080, PROXY_AUTH_ADD: 'false'}},
+			name: 'a valid transport gateway',
+			value: {environment: {APP_HOST: '127.0.0.1', APP_PORT: 8080}},
 		},
 	])('a raw app_proxy key excludes native TLS with $name', async ({value}) => {
 		vi.spyOn(ingress, 'appGatewayCanListen').mockReturnValue(true)
@@ -407,7 +424,7 @@ describe('native TLS installed-app discovery', () => {
 		})
 		const routes = await ingress.getAppRoutes(reservedHostnames)
 		expect(routes[0].nativeTls).toBeUndefined()
-		expect(routes[0].gateway?.auth).toBe(true)
+		expect(routes[0].gateway?.targetPort).toBe(8080)
 		await ingress.updateAppMuxServers(routes)
 		await closed
 		expect(nativeServer.listening).toBe(false)

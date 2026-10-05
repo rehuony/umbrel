@@ -19,7 +19,6 @@ import {resolveWallpaperAppearance} from './wallpapers.js'
 type BrowserSession = {
 	dashboardToken: string
 	browserCookie: string
-	appCookie: string
 	setCookies: string[]
 }
 
@@ -187,7 +186,6 @@ describe('Multi-user accounts', () => {
 		const session = {
 			dashboardToken: trpcData<string>(response.body),
 			browserCookie: serializedCookie('UMBREL_BROWSER_SESSION'),
-			appCookie: serializedCookie('UMBREL_APP_SESSION'),
 			setCookies,
 		}
 		browserSessions.set(session.dashboardToken, session)
@@ -229,13 +227,11 @@ describe('Multi-user accounts', () => {
 		await umbreld.setBrowserSession(token, session.setCookies)
 	}
 
-	async function requestApp(token?: string) {
-		const session = token ? browserSessions.get(token) : undefined
+	async function requestApp() {
 		return got.get(`http://127.0.0.1:${appHostPort}/`, {
 			headers: {
 				host: 'umbrel.local:4000',
 				accept: 'text/html',
-				...(session ? {cookie: session.appCookie} : {}),
 			},
 			followRedirect: false,
 			throwHttpErrors: false,
@@ -243,15 +239,12 @@ describe('Multi-user accounts', () => {
 		})
 	}
 
-	async function openAppWebSocket(token: string) {
-		const session = browserSessions.get(token)
-		if (!session) throw new Error('Unknown browser session')
+	async function openAppWebSocket() {
 		return new Promise<WebSocket>((resolve, reject) => {
 			const socket = new WebSocket(`ws://127.0.0.1:${appHostPort}/socket`, {
 				headers: {
 					host: 'umbrel.local:4000',
 					accept: 'text/html',
-					cookie: session.appCookie,
 				},
 			})
 			const timeout = setTimeout(() => {
@@ -1401,20 +1394,10 @@ rm -rf '${home}/Photos/holiday-private'
 		await expect(umbreld.client.apps.list.query()).resolves.toStrictEqual([])
 	})
 
-	test('app authentication and proxying run in umbreld without an app-proxy container', async () => {
+	test('applications respond directly without an app-proxy container or panel session', async () => {
 		const containers = await umbreld.vm.sshAsRoot("docker ps -a --format '{{.Names}}'")
 		expect(containers).not.toContain('sparkles-hello-world_app_proxy_1')
-
-		// The owner can reach every installed app through the in-process gateway.
-		const ownerResponse = await requestApp(ownerToken)
-		expect(ownerResponse.statusCode).toBe(200)
-
-		// An unauthenticated browser is sent to the regular panel login.
-		const unauthenticatedResponse = await requestApp()
-		expect(unauthenticatedResponse.statusCode).toBe(302)
-		expect(unauthenticatedResponse.headers.location).toMatch(
-			/^http:\/\/umbrel\.local\/app-access\?request=[0-9a-f]{64}$/,
-		)
+		await expect(requestApp()).resolves.toMatchObject({statusCode: 200})
 	})
 
 	test('app share changes are streamed to affected members in realtime', async () => {
@@ -1523,57 +1506,18 @@ rm -rf '${home}/Photos/holiday-private'
 		}
 	})
 
-	test('the app gateway enforces member app shares in realtime', async () => {
-		// Both direct cookie access and the unified panel handoff enforce member grants.
-		await expect(requestApp(memberToken)).resolves.toMatchObject({statusCode: 403})
-		const authorize = async () => {
-			const initial = await requestApp()
-			const id = new URL(initial.headers.location!).searchParams.get('request')!
-			const session = browserSessions.get(memberToken)!
-			return got.post(`http://127.0.0.1:${umbreld.vm.httpPort}/trpc/apps.authorizeAccess`, {
-				json: {request: id},
-				headers: {
-					host: 'umbrel.local',
-					authorization: `Bearer ${memberToken}`,
-					cookie: `${session.browserCookie}; ${session.appCookie}`,
-				},
-				throwHttpErrors: false,
-				retry: {limit: 0},
-			})
-		}
-		expect((await authorize()).statusCode).toBe(403)
-
-		// Sharing the app grants both flows access immediately.
+	test('app shares control dashboard visibility without intercepting application connections', async () => {
 		await loginAs(ownerToken)
 		await umbreld.client.apps.addMemberShare.mutate({appId: 'sparkles-hello-world', sharedWith: 'all'})
-		await expect(requestApp(memberToken)).resolves.toMatchObject({statusCode: 200})
-		const memberSocket = await openAppWebSocket(memberToken)
-		const ownerSocket = await openAppWebSocket(ownerToken)
-		const memberSocketClosed = new Promise<void>((resolve) => memberSocket.once('close', () => resolve()))
+		const socket = await openAppWebSocket()
 		try {
-			const allowedLogin = await authorize()
-			expect(allowedLogin.statusCode).toBe(200)
-			const handoff = JSON.parse(allowedLogin.body).result.data
-			expect(handoff.url).toBe('http://umbrel.local:4000/umbrel_/api/v1/auth/handoff')
-			expect(handoff.params.handoff).toMatch(/^[0-9a-f]{64}$/)
-
-			// Revoking the share removes gateway access immediately without
-			// revoking the member's overall Umbrel session.
 			await umbreld.client.apps.removeMemberShare.mutate({appId: 'sparkles-hello-world'})
-			await Promise.race([
-				memberSocketClosed,
-				sleep(10_000).then(() => {
-					throw new Error('Member app WebSocket stayed open after share revocation')
-				}),
-			])
-			expect(memberSocket.readyState).toBe(WebSocket.CLOSED)
-			expect(ownerSocket.readyState).toBe(WebSocket.OPEN)
-			await expect(requestApp(memberToken)).resolves.toMatchObject({statusCode: 403})
 			await loginAs(memberToken)
-			await expect(umbreld.client.user.get.query()).resolves.toMatchObject({name: memberCredentials.name})
+			expect(await umbreld.client.apps.list.query()).toEqual([])
+			await expect(requestApp()).resolves.toMatchObject({statusCode: 200})
+			expect(socket.readyState).toBe(WebSocket.OPEN)
 		} finally {
-			if (memberSocket.readyState !== WebSocket.CLOSED) memberSocket.terminate()
-			if (ownerSocket.readyState !== WebSocket.CLOSED) ownerSocket.terminate()
+			socket.terminate()
 		}
 	})
 

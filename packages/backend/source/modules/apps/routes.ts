@@ -1,11 +1,12 @@
 import z from 'zod'
 import {TRPCError} from '@trpc/server'
-import {CustomAppInputSchema, prepareCustomApp} from './custom-apps.js'
+import {CustomAppInputSchema, inspectCustomCompose, prepareCustomApp} from './custom-apps.js'
 import {sanitizeRegistryApp} from './app-store.js'
 
 import {router, privateProcedure, privateProcedureWithMembers} from '../server/trpc/trpc.js'
 import {OWNER_USER_ID} from '../user/constants.js'
 import {
+	AppExternalUrlSchema,
 	AppCustomEnvironmentVariableSchema,
 	AppCustomMountSchema,
 	AppEnvironmentVariableSchema,
@@ -45,22 +46,11 @@ export const appStore = router({
 })
 
 export const apps = router({
-	setExternalOrigin: privateProcedure
-		.input(z.object({appId: z.string(), origin: z.string().trim()}).strict())
-		.mutation(({ctx, input}) => ctx.umbreld.externalAccess.setAppOrigin(input.appId, input.origin)),
-	authorizeAccess: privateProcedureWithMembers
-		.input(z.object({request: z.string().regex(/^[0-9a-f]{64}$/)}))
-		.mutation(async ({ctx, input}) => {
-			if (!ctx.request || !ctx.principal) throw new TRPCError({code: 'BAD_REQUEST', message: 'HTTP is required'})
-			ctx.response?.setHeader('Cache-Control', 'no-store')
-			try {
-				return await ctx.umbreld.externalAccess.authorize(input.request, ctx.principal, ctx.request)
-			} catch (error) {
-				throw new TRPCError({
-					code: 'FORBIDDEN',
-					message: error instanceof Error ? error.message : 'Application access denied',
-				})
-			}
+	inspectCompose: privateProcedure
+		.input(z.object({definition: CustomAppInputSchema.shape.definition}))
+		.mutation(({input}) => {
+			const {ports, hostNetwork} = inspectCustomCompose(input.definition)
+			return {ports, hostNetwork}
 		}),
 	prepareImport: privateProcedure.input(CustomAppInputSchema).mutation(({ctx, input}) => {
 		const prepared = prepareCustomApp(input.definition, input.metadata)
@@ -71,9 +61,8 @@ export const apps = router({
 				{...prepared.manifest, appStoreId: 'custom-apps', icon: prepared.manifest.icon!},
 				ctx.umbreld.version,
 			),
-			hostNetwork: Object.values(prepared.compose.services as Record<string, {network_mode?: string}>).some(
-				(service) => service.network_mode === 'host',
-			),
+			ports: prepared.ports,
+			hostNetwork: prepared.hostNetwork,
 		}
 	}),
 	importCompose: privateProcedure
@@ -121,6 +110,7 @@ export const apps = router({
 							version,
 							icon,
 							port,
+							portProtocol,
 							path,
 							widgets,
 							defaultUsername,
@@ -141,9 +131,9 @@ export const apps = router({
 					// App settings are owner-only: storage sources reveal filesystem
 					// layout, environment values can hold secrets the owner set, and
 					// members can't open app settings anyway.
-					const [appProxyAuth, storage, environment] = isMemberRequest
+					const [storage, environment] = isMemberRequest
 						? []
-						: await Promise.all([app.getAppProxyAuth(), app.getStorageSettings(), app.getEnvironmentSettings()])
+						: await Promise.all([app.getStorageSettings(), app.getEnvironmentSettings()])
 					if (deterministicPassword) {
 						defaultPassword = await app.deriveDeterministicPassword()
 					}
@@ -152,11 +142,12 @@ export const apps = router({
 					const showCredentialsBeforeOpen = hasCredentials && !hideCredentialsBeforeOpen
 					return {
 						id: app.id,
-						externalAccess: ctx.umbreld.externalAccess.launchSettings(app.id),
+						externalUrl: (await app.store.get('externalUrl')) ?? '',
 						name,
 						version,
 						icon: icon ?? `https://getumbrel.github.io/umbrel-apps-gallery/${app.id}/icon.svg`,
 						port,
+						portProtocol,
 						path,
 						state: app.state,
 						progress: app.stateProgress,
@@ -171,7 +162,6 @@ export const apps = router({
 						widgets,
 						dependencies,
 						selectedDependencies,
-						appProxyAuth,
 						storage,
 						environment,
 						implements: implements_,
@@ -266,6 +256,7 @@ export const apps = router({
 			state: app.state,
 			progress: app.stateProgress,
 			port: manifest.port,
+			portProtocol: manifest.portProtocol,
 			path: manifest.path,
 			requiresHttps: manifest.requiresHttps === true,
 			credentials: {username: manifest.defaultUsername, password},
@@ -386,7 +377,7 @@ export const apps = router({
 		.input(
 			z.object({
 				appId: z.string(),
-				appProxyAuthEnabled: z.boolean().nullable().optional(),
+				externalUrl: AppExternalUrlSchema.optional(),
 				hideCredentialsBeforeOpen: z.boolean().optional(),
 				customMounts: z.array(AppCustomMountSchema).optional(),
 				folderAccess: z.array(AppFolderAccessSelectionSchema).optional(),
