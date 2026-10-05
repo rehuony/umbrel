@@ -1,4 +1,3 @@
-import RFB from '@novnc/novnc'
 import {VolumeX} from 'lucide-react'
 import {useEffect, useRef, useState} from 'react'
 import {useTranslation} from 'react-i18next'
@@ -7,6 +6,7 @@ import {MachineAgentOverlay} from '@/features/machines/components/machine-agent-
 import {useMachineAudioPreference} from '@/features/machines/hooks/use-machine-audio-preference'
 import {useMachineAgentControls} from '@/features/machines/hooks/use-machines'
 import {createMachineAudioSink, type MachineAudioSink} from '@/features/machines/machine-audio'
+import {RFB} from '@/features/machines/novnc'
 import {createBrowserUuid} from '@/features/machines/utils'
 import {cn} from '@/lib/utils'
 import {trpcClient} from '@/trpc/trpc'
@@ -63,8 +63,17 @@ export function MachineConsole({machineId, resizeSession}: {machineId: string; r
 		let retry: ReturnType<typeof setTimeout> | undefined
 		let rfb: RFB | undefined
 		let socket: WebSocket | undefined
-		let closeCode: number | undefined
 		let rescaleTimer: ReturnType<typeof setTimeout> | undefined
+
+		const clearConnection = () => {
+			if (rescaleTimer) clearTimeout(rescaleTimer)
+			const previousRfb = rfb
+			rfb = undefined
+			if (rfbRef.current === previousRfb) rfbRef.current = undefined
+			previousRfb?.disconnect()
+			socket?.close()
+			socket = undefined
+		}
 
 		const connect = async () => {
 			if (disposed || !screen.current) return
@@ -72,7 +81,7 @@ export function MachineConsole({machineId, resizeSession}: {machineId: string; r
 				const ticket = await trpcClient.user.createWebSocketTicket.mutate({target: 'machines'})
 				if (disposed || !screen.current) return
 				screen.current.replaceChildren()
-				closeCode = undefined
+				let closeCode: number | undefined
 				socket = new WebSocket(machineSocketUrl('/machines/console', machineId, sessionId, ticket), ['binary'])
 				socket.addEventListener('close', (event) => {
 					closeCode = event.code
@@ -93,24 +102,29 @@ export function MachineConsole({machineId, resizeSession}: {machineId: string; r
 					connectedRfb.resizeSession = resizeSession
 				}, LAYOUT_SETTLE_DELAY_MS)
 				connectedRfb.addEventListener('connect', () => {
+					if (disposed || rfb !== connectedRfb) return
 					setConnectionState('connected')
 					// noVNC only forwards keyboard input while its canvas has DOM focus,
 					// and by default nothing focuses it until the first click. Focus on
 					// every (re)connect so an opened machine is immediately interactive.
-					rfb?.focus()
+					connectedRfb.focus()
 				})
-				connectedRfb.addEventListener('disconnect', (event: CustomEvent<{clean: boolean}>) => {
-					if (disposed) return
-					if (rescaleTimer) clearTimeout(rescaleTimer)
+				connectedRfb.addEventListener('disconnect', () => {
+					if (disposed || rfb !== connectedRfb) return
+					clearConnection()
 					if (closeCode === SUPERSEDED_CLOSE_CODE) {
 						setConnectionState('superseded')
 						return
 					}
-					if (event.detail.clean) return
+					// noVNC also reports a server-initiated close as clean. Reconnect
+					// unless this viewer was disposed or explicitly superseded.
 					setConnectionState('disconnected')
 					retry = setTimeout(() => void connect(), 1_000)
 				})
-			} catch {
+			} catch (error) {
+				clearConnection()
+				if (disposed) return
+				console.error('Failed to initialize machine console', error)
 				setConnectionState('disconnected')
 				retry = setTimeout(() => void connect(), 1_000)
 			}
@@ -120,10 +134,7 @@ export function MachineConsole({machineId, resizeSession}: {machineId: string; r
 		return () => {
 			disposed = true
 			if (retry) clearTimeout(retry)
-			if (rescaleTimer) clearTimeout(rescaleTimer)
-			rfb?.disconnect()
-			socket?.close()
-			if (rfbRef.current === rfb) rfbRef.current = undefined
+			clearConnection()
 		}
 	}, [machineId, resizeSession, sessionId])
 
