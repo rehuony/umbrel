@@ -22,7 +22,7 @@ import {AudioViewer} from '@/features/files/components/file-viewer/audio-viewer'
 // lazy load viewers, except audio viewer since it's a floating ui component
 const ImageViewer = lazy(() => import('@/features/files/components/file-viewer/image-viewer'))
 const PdfViewer = lazy(() => import('@/features/files/components/file-viewer/pdf-viewer'))
-const VideoViewer = lazy(() => import('@/features/files/components/file-viewer/video-viewer'))
+const VideoViewer = lazy(() => import('@/features/files/components/file-viewer/video-viewer/slot'))
 const TextViewer = lazy(() => import('@/features/files/components/file-viewer/text-viewer'))
 
 export const BASE_ROUTE_PATH = '/files' as const

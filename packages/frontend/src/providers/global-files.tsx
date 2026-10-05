@@ -1,5 +1,6 @@
 import React, {createContext, useContext, useState} from 'react'
 
+import {FileVideoSessionProvider} from '@/features/files/components/file-viewer/video-viewer/video-session'
 import {transfers} from '@/features/files/transfers/transfers'
 import {useTransfersEffects} from '@/features/files/transfers/use-transfers'
 import type {RouterOutput} from '@/trpc/trpc'
@@ -114,7 +115,11 @@ export function GlobalFilesProvider({children}: {children: React.ReactNode}) {
 		operations,
 	}
 
-	return <GlobalFilesContext value={value}>{children}</GlobalFilesContext>
+	return (
+		<GlobalFilesContext value={value}>
+			<FileVideoSessionProvider>{children}</FileVideoSessionProvider>
+		</GlobalFilesContext>
+	)
 }
 
 // A simple custom hook to consume it

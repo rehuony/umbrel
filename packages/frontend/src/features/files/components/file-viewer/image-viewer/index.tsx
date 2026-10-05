@@ -11,13 +11,13 @@ export default function ImageViewer({item}: ImageViewerProps) {
 	const previewUrl = useAuthorizedHttpUrlQuery(`/api/files/view?path=${encodeURIComponent(item.path)}`)
 
 	return (
-		<AuthorizedUrlState query={previewUrl}>
+		<AuthorizedUrlState query={previewUrl} showCloseButton>
 			{(url) => (
-				<ViewerWrapper>
+				<ViewerWrapper showCloseButton>
 					<img
 						src={url}
 						alt={item.name}
-						className='absolute top-1/2 left-1/2 max-w-[calc(100vw-40px)] -translate-x-1/2 -translate-y-1/2 object-contain md:max-h-[80%] md:max-w-[90%] md:rounded-lg'
+						className='absolute top-1/2 left-1/2 max-h-[80%] max-w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-lg object-contain'
 					/>
 				</ViewerWrapper>
 			)}

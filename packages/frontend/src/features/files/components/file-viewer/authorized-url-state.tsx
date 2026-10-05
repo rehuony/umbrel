@@ -10,12 +10,14 @@ export function AuthorizedUrlState({
 	query,
 	children,
 	dontCloseOnSpacebar,
+	showCloseButton,
 }: {
 	query: AuthorizedHttpUrlQuery
 	children: (url: string) => ReactNode
 	// Viewers that treat the spacebar as input (the text editor) must opt out of the
 	// close-on-space shortcut here too, or it applies for as long as the token is loading
 	dontCloseOnSpacebar?: boolean
+	showCloseButton?: boolean
 }) {
 	const {t} = useTranslation()
 
@@ -23,7 +25,7 @@ export function AuthorizedUrlState({
 	if (query.status === 'idle') return null
 
 	return (
-		<ViewerWrapper dontCloseOnSpacebar={dontCloseOnSpacebar}>
+		<ViewerWrapper dontCloseOnSpacebar={dontCloseOnSpacebar} showCloseButton={showCloseButton}>
 			{query.status === 'loading' ? (
 				<TbLoader className='size-6 animate-spin text-white/40' />
 			) : (

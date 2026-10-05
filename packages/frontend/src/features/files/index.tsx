@@ -7,6 +7,7 @@ import {Outlet, useLocation} from 'react-router-dom'
 import {ErrorBoundaryCardFallback} from '@/components/ui/error-boundary-card-fallback'
 import {SheetHeader, SheetTitle} from '@/components/ui/sheet'
 import {FileViewer} from '@/features/files/components/file-viewer'
+import {useFileVideoSession} from '@/features/files/components/file-viewer/video-viewer/video-session'
 import {FilesDndWrapper} from '@/features/files/components/files-dnd-wrapper'
 import {ActionsBar} from '@/features/files/components/listing/actions-bar'
 import {ActionsBarProvider} from '@/features/files/components/listing/actions-bar/actions-bar-context'
@@ -33,9 +34,10 @@ const CloudAddDialog = lazy(() => import('@/features/files/components/dialogs/cl
 
 export default function FilesLayout() {
 	const {t} = useTranslation()
-	const {pathname} = useLocation()
+	const {pathname, key: locationKey} = useLocation()
 	const {setSelectedItems} = useFilesStore()
 	const setViewerItem = useFilesStore((state) => state.setViewerItem)
+	const {restoreViewer} = useFileVideoSession()
 	const setIsSelectingOnMobile = useFilesStore((state) => state.setIsSelectingOnMobile)
 
 	const isMobile = useIsMobile()
@@ -57,14 +59,14 @@ export default function FilesLayout() {
 		setSelectedItems([])
 
 		// Close any open file viewer (text editor, image viewer, etc.)
-		setViewerItem(null)
+		if (!restoreViewer(locationKey)) setViewerItem(null)
 
 		// set selecting on mobile to false when navigating to a different path
 		setIsSelectingOnMobile(false)
 
 		// Close mobile sidebar on navigation
 		setIsMobileSidebarOpen(false)
-	}, [pathname, setSelectedItems, setViewerItem, setIsSelectingOnMobile])
+	}, [pathname, locationKey, setSelectedItems, setViewerItem, setIsSelectingOnMobile, restoreViewer])
 
 	return (
 		<MachineFoldersProvider enabled={user?.role === 'owner'}>

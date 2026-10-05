@@ -1,47 +1,37 @@
 // TODO: Investigate pre-existing issue where large video files fail to play in Safari.
-import {useEffect, useRef} from 'react'
-import {Video} from 'react-video-kit'
+import {useEffect, useLayoutEffect} from 'react'
+import {useVideoContext, Video} from 'react-video-kit'
 
 import {AuthorizedUrlState} from '@/features/files/components/file-viewer/authorized-url-state'
 import {ViewerWrapper} from '@/features/files/components/file-viewer/viewer-wrapper'
-import {useFilesStore} from '@/features/files/store/use-files-store'
+import type {ViewerMode} from '@/features/files/store/slices/file-viewer-slice'
 import {FileSystemItem} from '@/features/files/types'
 import {useAuthorizedHttpUrlQuery} from '@/modules/auth/http-auth'
 
 interface VideoViewerProps {
 	item: FileSystemItem
+	viewerMode: ViewerMode
+	visible: boolean
+	onLeavePictureInPicture: () => void
 }
 
-export default function VideoViewer({item}: VideoViewerProps) {
-	const viewerMode = useFilesStore((s) => s.viewerMode)
+export default function VideoViewer({item, viewerMode, visible, onLeavePictureInPicture}: VideoViewerProps) {
 	const previewUrl = useAuthorizedHttpUrlQuery(`/api/files/view?path=${encodeURIComponent(item.path)}`)
-	const containerRef = useRef<HTMLDivElement>(null)
-
-	// Ensure video is fully stopped on unmount to prevent lingering audio
-	useEffect(() => {
-		return () => {
-			const video = containerRef.current?.querySelector('video')
-			if (video) {
-				video.pause()
-				video.removeAttribute('src')
-				video.load()
-			}
-		}
-	}, [])
 
 	return (
-		<AuthorizedUrlState query={previewUrl}>
+		<AuthorizedUrlState query={previewUrl} showCloseButton>
 			{(url) => (
-				<ViewerWrapper dontCloseOnSpacebar={viewerMode !== 'preview'}>
-					<div ref={containerRef} className='bg-black'>
+				<ViewerWrapper enabled={visible} showCloseButton dontCloseOnSpacebar={viewerMode !== 'preview'}>
+					<div className='w-[min(960px,calc(100vw-40px))] max-w-full bg-black'>
 						<Video.Root
 							key={item.path}
 							src={url}
 							title={item.name}
 							autoPlay
-							hotkeys={{scope: 'global', enabled: viewerMode !== 'preview'}}
+							hotkeys={{scope: 'global', enabled: visible && viewerMode !== 'preview'}}
 						>
 							<Video.Media />
+							<VideoLifecycle onLeavePictureInPicture={onLeavePictureInPicture} />
 							<Video.Backdrop />
 							<Video.Header>
 								<div className='rv-w-full rv-flex'>
@@ -73,4 +63,31 @@ export default function VideoViewer({item}: VideoViewerProps) {
 			)}
 		</AuthorizedUrlState>
 	)
+}
+
+function VideoLifecycle({onLeavePictureInPicture}: {onLeavePictureInPicture: () => void}) {
+	const {videoRef} = useVideoContext()
+	useLayoutEffect(() => {
+		const video = videoRef.current
+		if (!video) return
+		// PiP events do not bubble; listen on this media element, not document.
+		video.addEventListener('leavepictureinpicture', onLeavePictureInPicture)
+		return () => video.removeEventListener('leavepictureinpicture', onLeavePictureInPicture)
+	}, [videoRef, onLeavePictureInPicture])
+	useEffect(() => {
+		const video = videoRef.current
+		if (!video) return
+		return () => {
+			// StrictMode replays effects on a connected element. Only release an
+			// actually unmounted player, using the element captured before refs clear.
+			if (video.isConnected) return
+			video.pause()
+			video.removeAttribute('src')
+			// Video.Media uses child <source> elements. Clear those as well before
+			// load(), otherwise cleanup can restart a detached media request.
+			video.querySelectorAll('source').forEach((source) => source.removeAttribute('src'))
+			video.load()
+		}
+	}, [videoRef])
+	return null
 }
